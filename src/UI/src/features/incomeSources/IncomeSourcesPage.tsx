@@ -205,7 +205,13 @@ export function IncomeSourcesPage({
   }
 
   return (
-    <main className={layout === 'embedded' ? 'settings-embedded-shell' : 'app-shell'}>
+    <main
+      className={
+        layout === 'embedded'
+          ? 'settings-embedded-shell settings-8bit'
+          : 'app-shell'
+      }
+    >
       <header className="page-header">
         <div>
           <p className="eyebrow">{headerEyebrow}</p>

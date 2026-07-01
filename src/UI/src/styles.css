@@ -504,7 +504,7 @@ p {
 .landing-background {
   min-height: 100vh;
   display: flex;
-  justify-content: center;
+  justify-content: stretch;
   align-items: flex-start;
   padding: 24px 12px;
   background-color: #08121f;
@@ -516,7 +516,7 @@ p {
 }
 
 .landing-container {
-  width: min(560px, 100%);
+  width: 100%;
 }
 
 .settings-menu {
@@ -584,4 +584,103 @@ p {
 
 .settings-embedded-shell .page-header {
   margin-bottom: 16px;
+}
+
+.settings-8bit {
+  color: #d7fff1;
+}
+
+.settings-8bit .eyebrow {
+  color: #00ff9a;
+}
+
+.settings-8bit h1,
+.settings-8bit h2,
+.settings-8bit h3,
+.settings-8bit p {
+  color: #d7fff1;
+}
+
+.settings-8bit .toolbar {
+  margin-bottom: 12px;
+}
+
+.settings-8bit .filter-tabs {
+  border-color: rgba(0, 255, 154, 0.85);
+  background: rgba(7, 22, 42, 0.6);
+}
+
+.settings-8bit .filter-tab {
+  color: #8fffe3;
+  border-radius: 0;
+}
+
+.settings-8bit .filter-tab[aria-selected='true'] {
+  color: #051019;
+  background: #00ff9a;
+}
+
+.settings-8bit .primary-action {
+  background: #00ff9a;
+  color: #051019;
+  border-radius: 0;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+
+.settings-8bit .primary-action:hover {
+  background: #00d983;
+}
+
+.settings-8bit .secondary-action {
+  border-color: rgba(0, 255, 154, 0.75);
+  color: #d7fff1;
+  background: transparent;
+  border-radius: 0;
+}
+
+.settings-8bit .secondary-action:hover {
+  background: rgba(0, 255, 154, 0.08);
+}
+
+.settings-8bit .alert,
+.settings-8bit .empty-state,
+.settings-8bit .source-row,
+.settings-8bit .source-form,
+.settings-8bit .period-card,
+.settings-8bit .salary-summary,
+.settings-8bit .status-field {
+  background: rgba(7, 22, 42, 0.7);
+  border-color: rgba(0, 255, 154, 0.55);
+  border-radius: 0;
+}
+
+.settings-8bit .source-meta dt,
+.settings-8bit .salary-summary span {
+  color: #8fffe3;
+}
+
+.settings-8bit .source-meta dd,
+.settings-8bit .salary-summary strong,
+.settings-8bit .status-field legend {
+  color: #d7fff1;
+}
+
+.settings-8bit .field input,
+.settings-8bit .field select,
+.settings-8bit .field textarea {
+  border-color: rgba(0, 255, 154, 0.65);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d7fff1;
+  border-radius: 0;
+}
+
+.settings-8bit .read-only-field strong {
+  border-color: rgba(0, 255, 154, 0.55);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 0;
+  color: #d7fff1;
+}
+
+.settings-8bit .form-actions {
+  margin-top: 18px;
 }
