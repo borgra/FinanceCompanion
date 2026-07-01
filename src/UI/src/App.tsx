@@ -1,9 +1,13 @@
 import { createMockIncomeSourceRepository } from './domain/incomeSourceRepository';
-import { IncomeSourcesPage } from './features/incomeSources/IncomeSourcesPage';
+import { LandingPage } from './pages/LandingPage';
 import './styles.css';
 
 const incomeSourceRepository = createMockIncomeSourceRepository();
 
 export function App() {
-  return <IncomeSourcesPage repository={incomeSourceRepository} />;
+  return (
+    <LandingPage
+      repository={incomeSourceRepository}
+    />
+  );
 }

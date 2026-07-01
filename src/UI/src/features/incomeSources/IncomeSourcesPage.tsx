@@ -29,6 +29,8 @@ type ViewState =
 
 type IncomeSourcesPageProps = {
   repository: IncomeSourceRepository;
+  layout?: 'standalone' | 'embedded';
+  headerEyebrow?: string;
 };
 
 const filters: IncomeSourceFilter[] = ['All', 'Active', 'Inactive'];
@@ -56,7 +58,11 @@ const sortSources = (sources: IncomeSource[]) =>
     return left.name.localeCompare(right.name);
   });
 
-export function IncomeSourcesPage({ repository }: IncomeSourcesPageProps) {
+export function IncomeSourcesPage({
+  repository,
+  layout = 'standalone',
+  headerEyebrow = 'Income Management',
+}: IncomeSourcesPageProps) {
   const [sources, setSources] = useState<IncomeSource[]>([]);
   const [filter, setFilter] = useState<IncomeSourceFilter>('Active');
   const [view, setView] = useState<ViewState>({ name: 'list' });
@@ -199,10 +205,10 @@ export function IncomeSourcesPage({ repository }: IncomeSourcesPageProps) {
   }
 
   return (
-    <main className="app-shell">
+    <main className={layout === 'embedded' ? 'settings-embedded-shell' : 'app-shell'}>
       <header className="page-header">
         <div>
-          <p className="eyebrow">Income Management</p>
+          <p className="eyebrow">{headerEyebrow}</p>
           <h1 ref={headingRef} tabIndex={-1}>
             Income Sources
           </h1>
