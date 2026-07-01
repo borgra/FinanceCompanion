@@ -1,44 +1,34 @@
 # Azure Infrastructure
 
-This directory contains Bicep templates, deployment parameters, and helper scripts for provisioning the application's Azure resources.
+This directory contains Bicep templates, deployment parameters, and helper scripts for provisioning the Azure infrastructure used by the web UI.
 
 ## Resource Topology
 
-The deployment creates the following resources:
+The active deployment creates:
 
-- Azure Static Web Apps for the frontend.
-- Azure Container Apps for the API.
-- Azure Cosmos DB configured with the Table API.
-- Optional Azure Blob Storage for file persistence.
+- An Azure resource group.
+- An Azure Static Web App for the frontend.
+
+API, database, and file-storage resources are not part of the active infrastructure deployment.
 
 ## Files
 
 | Path | Purpose |
 | --- | --- |
-| `deploy.bicep` | Subscription-scoped entrypoint. Creates the resource group and deploys application resources. |
-| `main.bicep` | Resource-group-scoped template for application infrastructure. |
+| `deploy.bicep` | Subscription-scoped entrypoint. Creates the resource group and deploys UI resources. |
+| `ui.bicep` | Resource-group-scoped template for Azure Static Web Apps. |
 | `parameters/dev.subscription.bicepparam` | Example subscription-scoped development parameters. |
-| `parameters/dev.bicepparam` | Example resource-group-scoped development parameters. |
 | `scripts/up.ps1` | Local deployment helper. |
 | `scripts/down.ps1` | Local resource group deletion helper. |
 | `SECURITY.md` | OIDC, identity, and least-privilege guidance for GitHub Actions. |
 
 ## Cost Controls
 
-The default configuration is designed to keep baseline cost low:
-
-- Container App minimum replicas are set to `0`.
-- Container App maximum replicas default to `1`.
-- Cosmos DB Table throughput is capped at `1000` RU/s by the template.
-- Cosmos DB free tier is enabled by the template.
-- Blob Storage is disabled by default.
-
-Recommended operational controls:
+The default configuration uses the Azure Static Web Apps Free tier. Recommended operational controls:
 
 - Configure Azure Budget alerts for the subscription or resource group.
 - Review deployed resources after each infrastructure change.
-- Keep optional resources disabled unless required.
-- Avoid increasing Cosmos DB throughput or Container App replica limits without reviewing cost impact.
+- Keep additional resources out of this resource group unless intentionally added to Bicep.
 
 ## Local Deployment
 
@@ -55,7 +45,7 @@ Deploy:
 .\infra\scripts\up.ps1 -SubscriptionId "<subscription-id>"
 ```
 
-The script runs a subscription-scoped Bicep deployment through `deploy.bicep`. The deployment creates the target resource group and then deploys the application resources from `main.bicep`.
+The script runs a subscription-scoped Bicep deployment through `deploy.bicep`. The deployment creates the target resource group and then deploys the Static Web App from `ui.bicep`.
 
 ## Local Tear-Down
 
@@ -89,7 +79,7 @@ Or split client IDs for stronger least-privilege separation:
 | Variable | Example | Purpose |
 | --- | --- | --- |
 | `AZURE_INFRA_CLIENT_ID` | Infrastructure identity client ID | Used by infrastructure workflows. |
-| `AZURE_DEPLOY_CLIENT_ID` | Deployment identity client ID | Used by frontend/backend deployment workflows. |
+| `AZURE_DEPLOY_CLIENT_ID` | Deployment identity client ID | Used by frontend deployment workflows. |
 
 See [SECURITY.md](SECURITY.md) for the recommended OIDC and RBAC setup.
 
@@ -100,32 +90,15 @@ These values are set inside the workflow files:
 | Setting | Default |
 | --- | --- |
 | Application name | `finance-companion` |
- | Resource group | `rg-finance-companion` |
+| Resource group | `rg-finance-companion` |
 | Azure location | `centralus` |
 | Static Web Apps location | `centralus` |
-| Cosmos DB Table name | `finance` |
 
 Change these defaults in the workflow files if a different environment name, resource group, or region is required.
-
-### Optional Repository Secrets
-
-| Secret | Purpose |
-| --- | --- |
-| `GHCR_USERNAME` | Account used by Azure Container Apps to pull images from GitHub Container Registry. |
-| `GHCR_READ_TOKEN` | Token with `read:packages` permission for private GitHub Container Registry images. |
-
-The frontend deployment workflow resolves the Azure Static Web Apps deployment token from Azure at runtime. A stored `AZURE_STATIC_WEB_APPS_API_TOKEN` secret is not required.
-
-The GitHub Container Registry secrets are required only when deploying a private backend container image from GHCR.
 
 ## Deployment Flow
 
 1. Run the `Infra Up` workflow or `scripts/up.ps1`.
-2. Run the frontend deployment workflow to publish the web app.
-3. Run the backend deployment workflow after an API Dockerfile exists at the configured API path.
+2. Run the `Frontend Deploy` workflow to publish the web app.
 
-The infrastructure deployment is idempotent. Re-running `Infra Up` updates the existing resource group and resources to match the Bicep templates.
-
-## Notes
-
-The initial infrastructure deployment uses a placeholder container image for the API Container App. The backend deployment workflow replaces it with an application image after the API container image is built and pushed.
+The infrastructure deployment is idempotent. Re-running `Infra Up` updates the existing resource group and Static Web App to match the Bicep templates.
