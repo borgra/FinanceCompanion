@@ -45,6 +45,7 @@ jobs:
                            resourceGroupName="${AZURE_RESOURCE_GROUP}" \
                            location="${AZURE_LOCATION}" \
                            staticWebAppLocation="${AZURE_STATIC_WEB_APP_LOCATION}" \
+                           deployAppResources=false \
               --query properties.outputs \
               --output json \
               --only-show-errors)"

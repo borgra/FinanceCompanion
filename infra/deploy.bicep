@@ -33,6 +33,9 @@ param tableThroughput int = 400
 @description('Create a low-cost blob storage account for optional file persistence.')
 param enableBlobStorage bool = false
 
+@description('Deploy application resources into the resource group. Set to false to validate only subscription authentication and resource group creation.')
+param deployAppResources bool = true
+
 var tags = {
   app: toLower(appName)
   managedBy: 'bicep'
@@ -45,7 +48,7 @@ resource appResourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   tags: tags
 }
 
-module appResources 'main.bicep' = {
+module appResources 'main.bicep' = if (deployAppResources) {
   name: 'app-resources'
   scope: appResourceGroup
   params: {
@@ -62,12 +65,12 @@ module appResources 'main.bicep' = {
 }
 
 output resourceGroupName string = appResourceGroup.name
-output staticWebAppName string = appResources.outputs.staticWebAppName
-output staticWebAppDefaultHostName string = appResources.outputs.staticWebAppDefaultHostName
-output containerAppName string = appResources.outputs.containerAppName
-output containerAppUrl string = appResources.outputs.containerAppUrl
-output containerEnvironmentName string = appResources.outputs.containerEnvironmentName
-output cosmosAccountName string = appResources.outputs.cosmosAccountName
-output cosmosTableEndpoint string = appResources.outputs.cosmosTableEndpoint
-output cosmosTableName string = appResources.outputs.cosmosTableName
-output storageAccountName string = appResources.outputs.storageAccountName
+output staticWebAppName string = deployAppResources ? appResources.outputs.staticWebAppName : ''
+output staticWebAppDefaultHostName string = deployAppResources ? appResources.outputs.staticWebAppDefaultHostName : ''
+output containerAppName string = deployAppResources ? appResources.outputs.containerAppName : ''
+output containerAppUrl string = deployAppResources ? appResources.outputs.containerAppUrl : ''
+output containerEnvironmentName string = deployAppResources ? appResources.outputs.containerEnvironmentName : ''
+output cosmosAccountName string = deployAppResources ? appResources.outputs.cosmosAccountName : ''
+output cosmosTableEndpoint string = deployAppResources ? appResources.outputs.cosmosTableEndpoint : ''
+output cosmosTableName string = deployAppResources ? appResources.outputs.cosmosTableName : ''
+output storageAccountName string = deployAppResources ? appResources.outputs.storageAccountName : ''
