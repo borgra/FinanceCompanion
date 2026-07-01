@@ -21,6 +21,7 @@ The deployment creates the following resources:
 | `parameters/dev.bicepparam` | Example resource-group-scoped development parameters. |
 | `scripts/up.ps1` | Local deployment helper. |
 | `scripts/down.ps1` | Local resource group deletion helper. |
+| `SECURITY.md` | OIDC, identity, and least-privilege guidance for GitHub Actions. |
 
 ## Cost Controls
 
@@ -74,9 +75,23 @@ The GitHub Actions workflows use OpenID Connect for Azure login. Resource names 
 
 | Variable | Example | Purpose |
 | --- | --- | --- |
-| `AZURE_CLIENT_ID` | App registration or federated identity client ID | Azure login identity. |
 | `AZURE_TENANT_ID` | Azure tenant ID | Azure login tenant. |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID | Target subscription. |
+
+Use either a single client ID:
+
+| Variable | Example | Purpose |
+| --- | --- | --- |
+| `AZURE_CLIENT_ID` | App registration or federated identity client ID | Azure login identity for all workflows. |
+
+Or split client IDs for stronger least-privilege separation:
+
+| Variable | Example | Purpose |
+| --- | --- | --- |
+| `AZURE_INFRA_CLIENT_ID` | Infrastructure identity client ID | Used by infrastructure workflows. |
+| `AZURE_DEPLOY_CLIENT_ID` | Deployment identity client ID | Used by frontend/backend deployment workflows. |
+
+See [SECURITY.md](SECURITY.md) for the recommended OIDC and RBAC setup.
 
 ### Workflow Defaults
 

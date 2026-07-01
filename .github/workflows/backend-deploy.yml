@@ -24,6 +24,10 @@ jobs:
   deploy:
     name: Build and deploy API
     runs-on: ubuntu-latest
+    environment: deployment
+    concurrency:
+      group: backend-deployment
+      cancel-in-progress: true
 
     steps:
       - name: Checkout
@@ -53,7 +57,7 @@ jobs:
       - name: Azure login
         uses: azure/login@v2
         with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          client-id: ${{ vars.AZURE_DEPLOY_CLIENT_ID || vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
