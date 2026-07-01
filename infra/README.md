@@ -100,7 +100,7 @@ These values are set inside the workflow files:
 | Setting | Default |
 | --- | --- |
 | Application name | `finance-companion` |
-| Resource group | `rg-finance-companion-dev` |
+ | Resource group | `rg-finance-companion` |
 | Azure location | `centralus` |
 | Static Web Apps location | `centralus` |
 | Cosmos DB Table name | `finance` |

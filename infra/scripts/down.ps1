@@ -2,7 +2,7 @@ param(
   [Parameter(Mandatory = $true)]
   [string] $SubscriptionId,
 
-  [string] $ResourceGroupName = "rg-finance-companion-dev",
+  [string] $ResourceGroupName = "rg-finance-companion",
 
   [switch] $NoWait
 )

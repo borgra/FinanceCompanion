@@ -7,11 +7,11 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  APP_NAME: finance-companion
-  AZURE_RESOURCE_GROUP: rg-finance-companion-dev
-  AZURE_LOCATION: centralus
-  AZURE_STATIC_WEB_APP_LOCATION: centralus
+  env:
+    APP_NAME: finance-companion
+    AZURE_RESOURCE_GROUP: rg-finance-companion
+    AZURE_LOCATION: centralus
+    AZURE_STATIC_WEB_APP_LOCATION: centralus
 
 jobs:
   deploy:

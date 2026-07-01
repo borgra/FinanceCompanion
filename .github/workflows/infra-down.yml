@@ -11,8 +11,8 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  AZURE_RESOURCE_GROUP: rg-finance-companion-dev
+  env:
+  AZURE_RESOURCE_GROUP: rg-finance-companion
 
 jobs:
   destroy:

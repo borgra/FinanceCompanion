@@ -14,11 +14,11 @@ permissions:
   contents: read
   packages: write
 
-env:
-  APP_NAME: finance-companion
-  AZURE_RESOURCE_GROUP: rg-finance-companion-dev
-  COSMOS_TABLE_NAME: finance
-  API_PATH: src/API
+  env:
+    APP_NAME: finance-companion
+    AZURE_RESOURCE_GROUP: rg-finance-companion
+    COSMOS_TABLE_NAME: finance
+    API_PATH: src/API
 
 jobs:
   deploy:

@@ -65,12 +65,12 @@ module appResources 'main.bicep' = if (deployAppResources) {
 }
 
 output resourceGroupName string = appResourceGroup.name
-output staticWebAppName string = deployAppResources ? appResources.outputs.staticWebAppName : ''
-output staticWebAppDefaultHostName string = deployAppResources ? appResources.outputs.staticWebAppDefaultHostName : ''
-output containerAppName string = deployAppResources ? appResources.outputs.containerAppName : ''
-output containerAppUrl string = deployAppResources ? appResources.outputs.containerAppUrl : ''
-output containerEnvironmentName string = deployAppResources ? appResources.outputs.containerEnvironmentName : ''
-output cosmosAccountName string = deployAppResources ? appResources.outputs.cosmosAccountName : ''
-output cosmosTableEndpoint string = deployAppResources ? appResources.outputs.cosmosTableEndpoint : ''
-output cosmosTableName string = deployAppResources ? appResources.outputs.cosmosTableName : ''
-output storageAccountName string = deployAppResources ? appResources.outputs.storageAccountName : ''
+output staticWebAppName string = deployAppResources ? appResources!.outputs.staticWebAppName : ''
+output staticWebAppDefaultHostName string = deployAppResources ? appResources!.outputs.staticWebAppDefaultHostName : ''
+output containerAppName string = deployAppResources ? appResources!.outputs.containerAppName : ''
+output containerAppUrl string = deployAppResources ? appResources!.outputs.containerAppUrl : ''
+output containerEnvironmentName string = deployAppResources ? appResources!.outputs.containerEnvironmentName : ''
+output cosmosAccountName string = deployAppResources ? appResources!.outputs.cosmosAccountName : ''
+output cosmosTableEndpoint string = deployAppResources ? appResources!.outputs.cosmosTableEndpoint : ''
+output cosmosTableName string = deployAppResources ? appResources!.outputs.cosmosTableName : ''
+output storageAccountName string = deployAppResources ? appResources!.outputs.storageAccountName : ''
