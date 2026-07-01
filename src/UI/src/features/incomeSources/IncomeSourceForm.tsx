@@ -22,6 +22,7 @@ type IncomeSourceFormProps = {
   saveError?: string;
   mode: 'create' | 'edit';
   source?: IncomeSource;
+  layout?: 'standalone' | 'embedded';
   onChange: (draft: IncomeSourceDraft) => void;
   onSubmit: () => void;
   onCancel: () => void;
@@ -36,6 +37,7 @@ export function IncomeSourceForm({
   saveError,
   mode,
   source,
+  layout = 'standalone',
   onChange,
   onSubmit,
   onCancel,
@@ -77,7 +79,13 @@ export function IncomeSourceForm({
   };
 
   return (
-    <main className="app-shell narrow-shell">
+    <main
+      className={
+        layout === 'embedded'
+          ? 'settings-embedded-shell settings-8bit income-form-8bit'
+          : 'app-shell narrow-shell'
+      }
+    >
       <header className="page-header compact-header">
         <div>
           <p className="eyebrow">Income Management</p>

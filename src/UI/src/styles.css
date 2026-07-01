@@ -684,3 +684,7 @@ p {
 .settings-8bit .form-actions {
   margin-top: 18px;
 }
+
+.income-form-8bit {
+  padding: 0;
+}

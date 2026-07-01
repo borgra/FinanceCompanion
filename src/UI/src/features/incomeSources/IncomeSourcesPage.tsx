@@ -197,6 +197,7 @@ export function IncomeSourcesPage({
         periodErrors={validationResult.periodErrors}
         saveError={saveError}
         source={editingSource}
+        layout={layout}
         onCancel={cancelForm}
         onChange={setDraft}
         onSubmit={saveDraft}
