@@ -1,0 +1,36 @@
+name: Infra Down
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type DELETE to delete the configured Azure resource group.'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    name: Delete Azure resource group
+    runs-on: ubuntu-latest
+    if: ${{ inputs.confirm == 'DELETE' }}
+
+    steps:
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Delete resource group
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az group delete \
+              --name "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --yes \
+              --no-wait \
+              --only-show-errors

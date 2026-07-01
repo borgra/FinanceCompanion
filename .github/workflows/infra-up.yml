@@ -1,0 +1,50 @@
+name: Infra Up
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy Azure infrastructure
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Bicep
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            DEPLOYMENT_OUTPUTS="$(az deployment sub create \
+              --name "finance-companion-${{ github.run_id }}" \
+              --location "${{ vars.AZURE_LOCATION }}" \
+              --template-file infra/deploy.bicep \
+              --parameters appName="${{ vars.APP_NAME }}" \
+                           resourceGroupName="${{ vars.AZURE_RESOURCE_GROUP }}" \
+                           location="${{ vars.AZURE_LOCATION }}" \
+                           staticWebAppLocation="${{ vars.AZURE_STATIC_WEB_APP_LOCATION }}" \
+              --query properties.outputs \
+              --output json \
+              --only-show-errors)"
+
+            echo "${DEPLOYMENT_OUTPUTS}" > deployment-outputs.json
+
+            {
+              echo "### Azure deployment outputs"
+              echo ""
+              echo "| Name | Value |"
+              echo "| --- | --- |"
+              jq -r 'to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' deployment-outputs.json
+            } >> "${GITHUB_STEP_SUMMARY}"
