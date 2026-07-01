@@ -10,7 +10,12 @@ on:
   workflow_dispatch:
 
 permissions:
+  id-token: write
   contents: read
+
+env:
+  APP_NAME: finance-companion
+  AZURE_RESOURCE_GROUP: rg-finance-companion-dev
 
 jobs:
   deploy:
@@ -36,10 +41,43 @@ jobs:
         working-directory: src/UI
         run: npm run build
 
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve Static Web App token
+        id: static_web_app
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            STATIC_WEB_APP_NAME="$(az staticwebapp list \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --query "[?tags.app=='${APP_NAME}'].name | [0]" \
+              --output tsv \
+              --only-show-errors)"
+
+            if [ -z "${STATIC_WEB_APP_NAME}" ]; then
+              echo "No Static Web App found in ${AZURE_RESOURCE_GROUP} for app tag ${APP_NAME}." >&2
+              exit 1
+            fi
+
+            DEPLOYMENT_TOKEN="$(az staticwebapp secrets list \
+              --name "${STATIC_WEB_APP_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --query properties.apiKey \
+              --output tsv \
+              --only-show-errors)"
+
+            echo "::add-mask::${DEPLOYMENT_TOKEN}"
+            echo "deployment_token=${DEPLOYMENT_TOKEN}" >> "${GITHUB_OUTPUT}"
+
       - name: Deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          azure_static_web_apps_api_token: ${{ steps.static_web_app.outputs.deployment_token }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
           app_location: src/UI/dist

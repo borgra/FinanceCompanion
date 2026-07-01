@@ -15,6 +15,9 @@ permissions:
   packages: write
 
 env:
+  APP_NAME: finance-companion
+  AZURE_RESOURCE_GROUP: rg-finance-companion-dev
+  COSMOS_TABLE_NAME: finance
   API_PATH: src/API
 
 jobs:
@@ -54,13 +57,42 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Resolve Azure resources
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            API_CONTAINER_APP_NAME="$(az containerapp list \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --query "[?tags.app=='${APP_NAME}' && contains(name, '-api-')].name | [0]" \
+              --output tsv \
+              --only-show-errors)"
+
+            COSMOS_ACCOUNT_NAME="$(az cosmosdb list \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --query "[?tags.app=='${APP_NAME}'].name | [0]" \
+              --output tsv \
+              --only-show-errors)"
+
+            if [ -z "${API_CONTAINER_APP_NAME}" ]; then
+              echo "No API Container App found in ${AZURE_RESOURCE_GROUP} for app tag ${APP_NAME}." >&2
+              exit 1
+            fi
+
+            if [ -z "${COSMOS_ACCOUNT_NAME}" ]; then
+              echo "No Cosmos DB account found in ${AZURE_RESOURCE_GROUP} for app tag ${APP_NAME}." >&2
+              exit 1
+            fi
+
+            echo "API_CONTAINER_APP_NAME=${API_CONTAINER_APP_NAME}" >> "${GITHUB_ENV}"
+            echo "COSMOS_ACCOUNT_NAME=${COSMOS_ACCOUNT_NAME}" >> "${GITHUB_ENV}"
+
       - name: Configure Container App registry
         uses: azure/cli@v2
         with:
           inlineScript: |
             az containerapp registry set \
-              --name "${{ vars.API_CONTAINER_APP_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${API_CONTAINER_APP_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
               --server ghcr.io \
               --username "${{ secrets.GHCR_USERNAME }}" \
               --password "${{ secrets.GHCR_READ_TOKEN }}" \
@@ -71,15 +103,15 @@ jobs:
         with:
           inlineScript: |
             COSMOS_TABLE_CONNECTION_STRING="$(az cosmosdb keys list \
-              --name "${{ vars.COSMOS_ACCOUNT_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${COSMOS_ACCOUNT_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
               --type connection-strings \
               --query 'connectionStrings[0].connectionString' \
               --output tsv)"
 
             az containerapp secret set \
-              --name "${{ vars.API_CONTAINER_APP_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${API_CONTAINER_APP_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
               --secrets cosmos-table-connection-string="${COSMOS_TABLE_CONNECTION_STRING}" \
               --only-show-errors
 
@@ -88,10 +120,10 @@ jobs:
         with:
           inlineScript: |
             az containerapp update \
-              --name "${{ vars.API_CONTAINER_APP_NAME }}" \
-              --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${API_CONTAINER_APP_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
               --image "${IMAGE_NAME}" \
               --set-env-vars \
                 COSMOS_TABLE_CONNECTION_STRING=secretref:cosmos-table-connection-string \
-                COSMOS_TABLE_NAME="${{ vars.COSMOS_TABLE_NAME }}" \
+                COSMOS_TABLE_NAME="${COSMOS_TABLE_NAME}" \
               --only-show-errors

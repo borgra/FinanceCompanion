@@ -68,39 +68,48 @@ The tear-down script deletes the entire configured resource group. This removes 
 
 ## GitHub Actions Configuration
 
-The GitHub Actions workflows use OpenID Connect for Azure login and repository variables/secrets for configuration.
+The GitHub Actions workflows use OpenID Connect for Azure login. Resource names and locations are defined as workflow defaults, and deployed resources are discovered by resource group and tags during later jobs.
 
-### Repository Variables
+### Required Repository Variables
 
 | Variable | Example | Purpose |
 | --- | --- | --- |
 | `AZURE_CLIENT_ID` | App registration or federated identity client ID | Azure login identity. |
 | `AZURE_TENANT_ID` | Azure tenant ID | Azure login tenant. |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID | Target subscription. |
-| `AZURE_RESOURCE_GROUP` | `rg-finance-companion-dev` | Target resource group. |
-| `AZURE_LOCATION` | `centralus` | Region for regional resources. |
-| `AZURE_STATIC_WEB_APP_LOCATION` | `centralus` | Region for Static Web Apps. |
-| `APP_NAME` | `finance-companion` | Base name used for Azure resources. |
-| `API_CONTAINER_APP_NAME` | Output from infrastructure deployment | Container App updated by API deployments. |
-| `COSMOS_ACCOUNT_NAME` | Output from infrastructure deployment | Cosmos DB account used by API deployments. |
-| `COSMOS_TABLE_NAME` | `finance` | Cosmos DB Table name. |
 
-After the infrastructure workflow runs, copy the `containerAppName` output into `API_CONTAINER_APP_NAME` and the `cosmosAccountName` output into `COSMOS_ACCOUNT_NAME`.
+### Workflow Defaults
 
-### Repository Secrets
+These values are set inside the workflow files:
+
+| Setting | Default |
+| --- | --- |
+| Application name | `finance-companion` |
+| Resource group | `rg-finance-companion-dev` |
+| Azure location | `centralus` |
+| Static Web Apps location | `centralus` |
+| Cosmos DB Table name | `finance` |
+
+Change these defaults in the workflow files if a different environment name, resource group, or region is required.
+
+### Optional Repository Secrets
 
 | Secret | Purpose |
 | --- | --- |
-| `AZURE_STATIC_WEB_APPS_API_TOKEN` | Deployment token for Azure Static Web Apps. |
 | `GHCR_USERNAME` | Account used by Azure Container Apps to pull images from GitHub Container Registry. |
 | `GHCR_READ_TOKEN` | Token with `read:packages` permission for private GitHub Container Registry images. |
+
+The frontend deployment workflow resolves the Azure Static Web Apps deployment token from Azure at runtime. A stored `AZURE_STATIC_WEB_APPS_API_TOKEN` secret is not required.
+
+The GitHub Container Registry secrets are required only when deploying a private backend container image from GHCR.
 
 ## Deployment Flow
 
 1. Run the `Infra Up` workflow or `scripts/up.ps1`.
-2. Copy generated resource names from the infrastructure deployment outputs into repository variables.
-3. Run the frontend deployment workflow to publish the web app.
-4. Run the backend deployment workflow after an API Dockerfile exists at the configured API path.
+2. Run the frontend deployment workflow to publish the web app.
+3. Run the backend deployment workflow after an API Dockerfile exists at the configured API path.
+
+The infrastructure deployment is idempotent. Re-running `Infra Up` updates the existing resource group and resources to match the Bicep templates.
 
 ## Notes
 

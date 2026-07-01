@@ -11,6 +11,9 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  AZURE_RESOURCE_GROUP: rg-finance-companion-dev
+
 jobs:
   destroy:
     name: Delete Azure resource group
@@ -30,7 +33,7 @@ jobs:
         with:
           inlineScript: |
             az group delete \
-              --name "${{ vars.AZURE_RESOURCE_GROUP }}" \
+              --name "${AZURE_RESOURCE_GROUP}" \
               --yes \
               --no-wait \
               --only-show-errors

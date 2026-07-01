@@ -7,6 +7,12 @@ permissions:
   id-token: write
   contents: read
 
+env:
+  APP_NAME: finance-companion
+  AZURE_RESOURCE_GROUP: rg-finance-companion-dev
+  AZURE_LOCATION: centralus
+  AZURE_STATIC_WEB_APP_LOCATION: centralus
+
 jobs:
   deploy:
     name: Deploy Azure infrastructure
@@ -29,12 +35,12 @@ jobs:
           inlineScript: |
             DEPLOYMENT_OUTPUTS="$(az deployment sub create \
               --name "finance-companion-${{ github.run_id }}" \
-              --location "${{ vars.AZURE_LOCATION }}" \
+              --location "${AZURE_LOCATION}" \
               --template-file infra/deploy.bicep \
-              --parameters appName="${{ vars.APP_NAME }}" \
-                           resourceGroupName="${{ vars.AZURE_RESOURCE_GROUP }}" \
-                           location="${{ vars.AZURE_LOCATION }}" \
-                           staticWebAppLocation="${{ vars.AZURE_STATIC_WEB_APP_LOCATION }}" \
+              --parameters appName="${APP_NAME}" \
+                           resourceGroupName="${AZURE_RESOURCE_GROUP}" \
+                           location="${AZURE_LOCATION}" \
+                           staticWebAppLocation="${AZURE_STATIC_WEB_APP_LOCATION}" \
               --query properties.outputs \
               --output json \
               --only-show-errors)"
