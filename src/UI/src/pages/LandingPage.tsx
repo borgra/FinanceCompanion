@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
+import type { BudgetRepository } from '../domain/budgetRepository';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { SettingsConfigurationPanel } from './SettingsConfigurationPanel';
 
 export type LandingPageProps = {
   repository: IncomeSourceRepository;
+  budgetRepository: BudgetRepository;
 };
 
-export function LandingPage({ repository }: LandingPageProps) {
+export function LandingPage({ repository, budgetRepository }: LandingPageProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -18,7 +20,12 @@ export function LandingPage({ repository }: LandingPageProps) {
           onOpenChange={setIsOpen}
           tabLabel="Configuration"
         >
-          {isOpen ? <SettingsConfigurationPanel repository={repository} /> : null}
+          {isOpen ? (
+            <SettingsConfigurationPanel
+              repository={repository}
+              budgetRepository={budgetRepository}
+            />
+          ) : null}
         </SettingsMenu>
       </div>
     </div>
