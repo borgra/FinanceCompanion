@@ -535,11 +535,11 @@ p {
   gap: 12px;
   padding: 14px 16px;
   border-radius: 0;
-  background: #07162a;
-  border: 3px solid #00ff9a;
+  background: #0a172b;
+  border: 2px solid rgba(0, 255, 154, 0.65);
   box-shadow:
-    0 0 0 2px rgba(0, 255, 154, 0.35) inset,
-    0 10px 0 rgba(0, 0, 0, 0.35);
+    0 0 0 2px rgba(0, 255, 154, 0.18) inset,
+    0 8px 0 rgba(0, 0, 0, 0.28);
   color: #d7fff1;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
@@ -564,9 +564,9 @@ p {
 .settings-panel {
   margin-top: 12px;
   border-radius: 0;
-  background: rgba(7, 22, 42, 0.92);
-  border: 3px solid #00ff9a;
-  box-shadow: 0 0 0 2px rgba(0, 255, 154, 0.25) inset;
+  background: rgba(7, 22, 42, 0.86);
+  border: 2px solid rgba(0, 255, 154, 0.45);
+  box-shadow: 0 0 0 2px rgba(0, 255, 154, 0.14) inset;
   padding: 12px;
   max-height: calc(100vh - 110px);
   overflow: auto;
@@ -596,8 +596,8 @@ p {
 }
 
 .settings-tab-item[aria-selected='true'] {
-  background: #00ff9a;
-  color: #051019;
+  background: rgba(0, 255, 154, 0.22);
+  color: #d7fff1;
 }
 
 .settings-8bit {
@@ -682,16 +682,16 @@ p {
 .settings-8bit .field input,
 .settings-8bit .field select,
 .settings-8bit .field textarea {
-  border-color: rgba(0, 255, 154, 0.65);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(0, 255, 154, 0.32);
+  background: rgba(255, 255, 255, 0.03);
   color: #d7fff1;
-  border-radius: 0;
+  border-radius: 6px;
 }
 
 .settings-8bit .read-only-field strong {
-  border-color: rgba(0, 255, 154, 0.55);
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 0;
+  border-color: rgba(0, 255, 154, 0.3);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
   color: #d7fff1;
 }
 
@@ -766,7 +766,8 @@ p {
   padding: 12px;
 }
 
-.budget-category-card.selected {
+.budget-category-card.selected,
+.budget-category-card-selected {
   border-color: #1d5f6f;
 }
 
@@ -800,14 +801,52 @@ p {
 
 .budget-add-category {
   margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 12px;
+  align-items: end;
 }
 
 .budget-add-category-actions {
   margin-top: 12px;
+  grid-column: 1 / -1;
 }
 
 .budget-right-header {
   margin-bottom: 12px;
+}
+
+.budget-right-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.budget-right-title-text {
+  margin-bottom: 6px;
+}
+
+.budget-save-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+
+.budget-category-inline-editor {
+  display: grid;
+  grid-template-columns: 1fr 180px;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.budget-color-field input[type='color'] {
+  width: 100%;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  background: transparent;
 }
 
 .budget-subcategory-editor {
@@ -823,9 +862,9 @@ p {
 }
 
 .budget-subcategory-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr auto;
+  align-items: end;
   gap: 12px;
   border: 1px solid #d6dce2;
   border-radius: 8px;
@@ -852,6 +891,7 @@ p {
 .budget-subcategory-actions {
   display: flex;
   gap: 12px;
+  justify-content: flex-end;
 }
 
 .budget-add-subcategory {
@@ -892,24 +932,44 @@ p {
   .budget-add-sub-grid {
     grid-template-columns: 1fr;
   }
+
+  .budget-category-inline-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-add-category {
+    grid-template-columns: 1fr;
+  }
 }
 
 .settings-8bit .budget-summary-card,
-.settings-8bit .budget-category-card,
-.settings-8bit .budget-subcategory-editor,
-.settings-8bit .budget-subcategory-row {
-  background: rgba(7, 22, 42, 0.7);
-  border-color: rgba(0, 255, 154, 0.55);
-  border-radius: 0;
+.settings-8bit .budget-subcategory-editor {
+  background: rgba(0, 0, 0, 0.18);
+  border-color: rgba(0, 255, 154, 0.25);
+  border-radius: 8px;
 }
 
-.settings-8bit .budget-summary-value,
-.settings-8bit .budget-category-name,
-.settings-8bit .budget-subcategory-name {
+.settings-8bit .budget-summary-value {
+  color: #eafff7;
+}
+
+.settings-8bit .budget-category-name {
+  color: #eafff7;
+}
+
+.settings-8bit .budget-category-month {
   color: #d7fff1;
 }
 
-.settings-8bit .budget-category-month,
-.settings-8bit .budget-subcategory-amount {
-  color: #00ff9a;
+.settings-8bit .budget-subcategory-row {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+}
+
+.settings-8bit .budget-right-header-row {
+  color: #eafff7;
+}
+
+.settings-8bit .budget-save-actions .primary-action {
+  border-radius: 8px;
 }

@@ -6,8 +6,8 @@ import type {
 
 export type BudgetRepository = {
   listCategoriesWithSubCategories: () => Promise<BudgetCategoryWithSubCategories[]>;
-  createCategory: (name: string) => Promise<BudgetCategory>;
-  updateCategory: (id: string, name: string) => Promise<BudgetCategory>;
+  createCategory: (name: string, colorHex: string) => Promise<BudgetCategory>;
+  updateCategory: (id: string, name: string, colorHex: string) => Promise<BudgetCategory>;
   deleteCategory: (id: string) => Promise<void>;
 
   createSubCategory: (
@@ -31,36 +31,42 @@ const seedCategories = (): BudgetCategory[] => [
   {
     id: 'cat-housing',
     name: 'Housing',
+    colorHex: '#4de3ff',
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
   {
     id: 'cat-utilities',
     name: 'Utilities',
+    colorHex: '#9d7bff',
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
   {
     id: 'cat-groceries',
     name: 'Groceries',
+    colorHex: '#ffd06a',
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
   {
     id: 'cat-transport',
     name: 'Transportation',
+    colorHex: '#5cff9a',
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
   {
     id: 'cat-health',
     name: 'Healthcare',
+    colorHex: '#ff6db1',
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
   {
     id: 'cat-lifestyle',
     name: 'Lifestyle',
+    colorHex: '#ff8f4d',
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
@@ -197,11 +203,12 @@ export function createMockBudgetRepository(): BudgetRepository {
     return clone(result);
   };
 
-  const createCategory = async (name: string) => {
+  const createCategory = async (name: string, colorHex: string) => {
     const timestamp = nowIso();
     const next: BudgetCategory = {
       id: `cat-${crypto.randomUUID()}`,
       name,
+      colorHex,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -209,13 +216,13 @@ export function createMockBudgetRepository(): BudgetRepository {
     return clone(next);
   };
 
-  const updateCategory = async (id: string, name: string) => {
+  const updateCategory = async (id: string, name: string, colorHex: string) => {
     const timestamp = nowIso();
     const existing = categories.find((c) => c.id === id);
     if (!existing) {
       throw new Error('Category not found.');
     }
-    const updated = { ...existing, name, updatedAt: timestamp };
+    const updated = { ...existing, name, colorHex, updatedAt: timestamp };
     categories = categories.map((c) => (c.id === id ? updated : c));
     return clone(updated);
   };
