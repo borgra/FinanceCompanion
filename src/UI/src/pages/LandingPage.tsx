@@ -3,6 +3,7 @@ import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { SettingsConfigurationPanel } from './SettingsConfigurationPanel';
+import { SettingsBudgetPanel } from './SettingsBudgetPanel';
 
 export type LandingPageProps = {
   repository: IncomeSourceRepository;
@@ -11,6 +12,9 @@ export type LandingPageProps = {
 
 export function LandingPage({ repository, budgetRepository }: LandingPageProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeSectionId, setActiveSectionId] = useState<'income' | 'budget'>(
+    'income',
+  );
 
   return (
     <div className="landing-background">
@@ -18,15 +22,27 @@ export function LandingPage({ repository, budgetRepository }: LandingPageProps) 
         <SettingsMenu
           isOpen={isOpen}
           onOpenChange={setIsOpen}
-          tabLabel="Configuration"
-        >
-          {isOpen ? (
-            <SettingsConfigurationPanel
-              repository={repository}
-              budgetRepository={budgetRepository}
-            />
-          ) : null}
-        </SettingsMenu>
+          sections={[
+            { id: 'income', label: 'Configuration' },
+            { id: 'budget', label: 'Budget' },
+          ]}
+          activeSectionId={activeSectionId}
+          onActiveSectionChange={(nextId) =>
+            setActiveSectionId(nextId === 'budget' ? 'budget' : 'income')
+          }
+          getPanel={(activeId) => {
+            if (activeId === 'budget') {
+              return (
+                <SettingsBudgetPanel
+                  incomeRepository={repository}
+                  budgetRepository={budgetRepository}
+                />
+              );
+            }
+
+            return <SettingsConfigurationPanel repository={repository} />;
+          }}
+        />
       </div>
     </div>
   );

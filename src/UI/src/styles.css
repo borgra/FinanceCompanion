@@ -572,6 +572,10 @@ p {
   overflow: auto;
 }
 
+.settings-panel-content {
+  margin-top: 12px;
+}
+
 .settings-configuration-panel {
   width: 100%;
 }
@@ -584,6 +588,16 @@ p {
 
 .settings-embedded-shell .page-header {
   margin-bottom: 16px;
+}
+
+.settings-tablist-inline {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-tab-item[aria-selected='true'] {
+  background: #00ff9a;
+  color: #051019;
 }
 
 .settings-8bit {

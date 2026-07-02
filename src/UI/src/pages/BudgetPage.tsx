@@ -254,7 +254,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     <main className="settings-embedded-shell settings-8bit budget-shell">
       <header className="page-header compact-header">
         <div>
-          <p className="eyebrow">Configuration</p>
+          <p className="eyebrow">Budget</p>
           <h1>Budget (Net)</h1>
           <p>
             Assign monthly $ values to sub-categories. Totals and % of income are calculated
