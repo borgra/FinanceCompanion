@@ -17,20 +17,15 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 });
 
 const formatMoney = (amount: number) => currencyFormatter.format(amount);
+const formatPercent = (value: number | undefined) =>
+  value === undefined ? 'N/A' : `${value.toFixed(1)}%`;
+
+const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
 
 const parsePositiveUsd = (raw: string) => {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed < 0) return undefined;
   return parsed;
-};
-
-const hexToRgba = (hex: string, alpha: number) => {
-  const normalized = hex.replace('#', '');
-  if (normalized.length !== 6) return `rgba(255,255,255,${alpha})`;
-  const r = parseInt(normalized.slice(0, 2), 16);
-  const g = parseInt(normalized.slice(2, 4), 16);
-  const b = parseInt(normalized.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
 };
 
 type BudgetPageProps = {
@@ -75,7 +70,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
   const [isSaving, setIsSaving] = useState(false);
 
   const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryColorHex, setNewCategoryColorHex] = useState('#00ff9a');
+  const [newCategoryColorHex, setNewCategoryColorHex] = useState('#00e676');
 
   const [newSubName, setNewSubName] = useState('');
   const [newSubMonthlyAmount, setNewSubMonthlyAmount] = useState('');
@@ -104,6 +99,19 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
     return { totalMonth, totalYear, percentGross, percentNet };
   }, [derivedCategoriesForTotals, incomeTotals]);
+
+  const monthlyMargin = incomeTotals.monthlyNet - totals.totalMonth;
+  const yearlyMargin = monthlyMargin * 12;
+  const allocationRate = totals.percentNet ?? 0;
+  const isOverBudget = monthlyMargin < 0;
+  const budgetHealthLabel = isOverBudget
+    ? 'Overplanned'
+    : allocationRate >= 90
+    ? 'Tight'
+    : allocationRate >= 75
+    ? 'Balanced'
+    : 'Flexible';
+  const budgetHealthTone = isOverBudget ? 'critical' : allocationRate >= 90 ? 'caution' : 'healthy';
 
   useEffect(() => {
     let cancelled = false;
@@ -204,7 +212,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     if (!draftCategory) return;
     if (!selectedCategory) return;
 
-    // Validate inputs (only basic checks in V1).
+    // Validate inputs.
     if (!draftCategory.name.trim()) return;
 
     const initial = selectedCategory;
@@ -278,7 +286,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     if (!name) return;
     await budgetRepository.createCategory(name, newCategoryColorHex);
     setNewCategoryName('');
-    setNewCategoryColorHex('#00ff9a');
+    setNewCategoryColorHex('#00e676');
     await refreshCategories();
   };
 
@@ -342,72 +350,145 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     setIsDirty(true);
   };
 
-  const categoryCardStyle = (cat: BudgetCategoryWithSubCategories) => {
-    const bg = hexToRgba(cat.colorHex, 0.12);
-    const border = hexToRgba(cat.colorHex, 0.75);
-    return {
-      background: bg,
-      borderColor: border,
-    } as const;
-  };
-
   const selectedCategoryMonthlyTotal = (cat?: BudgetCategoryWithSubCategories) => {
     if (!cat) return 0;
     return cat.subCategories.reduce((sum, sub) => sum + sub.monthlyAmountUsd, 0);
   };
 
+  const selectedCategoryTotal = selectedCategoryMonthlyTotal(draftCategory);
+  const selectedCategoryShare =
+    totals.totalMonth > 0 ? (selectedCategoryTotal / totals.totalMonth) * 100 : 0;
+
   return (
-    <main className="settings-embedded-shell settings-8bit budget-shell">
+    <main className="app-shell budget-shell">
       <header className="page-header compact-header">
-        <div>
-          <p className="eyebrow">Budget</p>
-          <h1>Budget (Net)</h1>
+        <div className="page-header-text">
+          <p className="eyebrow">Budget Planning</p>
+          <h1>Monthly Plan</h1>
           <p>
-            Edit category colors and sub-category amounts inline. Totals and % of income are
-            calculated automatically.
+            Build a budget from monthly line items, compare it to take-home income, and keep space
+            for the goals and surprises that show up between paychecks.
           </p>
         </div>
       </header>
 
       {loadError ? (
         <div className="alert error-alert" role="alert">
-          {loadError}
+          <span className="material-symbols-outlined" aria-hidden="true">error</span>
+          <span>{loadError}</span>
         </div>
       ) : null}
 
-      <section className="budget-summary" aria-label="Budget summary">
-        <div className="budget-summary-card">
-          <span className="budget-summary-label">Total @ Month</span>
-          <strong className="budget-summary-value">{formatMoney(totals.totalMonth)}</strong>
-        </div>
-        <div className="budget-summary-card">
-          <span className="budget-summary-label">Total @ Year</span>
-          <strong className="budget-summary-value">{formatMoney(totals.totalYear)}</strong>
-        </div>
-        <div className="budget-summary-card">
-          <span className="budget-summary-label">% of Income (Gross)</span>
-          <strong className="budget-summary-value">
-            {incomeLoading ?
-              '—' :
-              totals.percentGross === undefined ? 'N/A' : `${totals.percentGross.toFixed(1)}%`}
-          </strong>
-        </div>
-        <div className="budget-summary-card">
-          <span className="budget-summary-label">% of Income (Net)</span>
-          <strong className="budget-summary-value">
-            {incomeLoading ?
-              '—' :
-              totals.percentNet === undefined ? 'N/A' : `${totals.percentNet.toFixed(1)}%`}
-          </strong>
+      <section className="budget-overview" aria-label="Budget overview">
+        <article className="budget-hero-card">
+          <div className="budget-hero-topline">
+            <span className="budget-section-label">Monthly posture</span>
+            <span
+              className={`budget-health-pill budget-health-pill-${budgetHealthTone}`}
+              aria-label={`Budget health ${budgetHealthLabel}`}
+            >
+              {budgetHealthLabel}
+            </span>
+          </div>
+
+          <div className="budget-hero-main">
+            <div>
+              <span className="budget-summary-label">Left after budget</span>
+              <strong className={`budget-hero-value ${isOverBudget ? 'budget-hero-value-negative' : ''}`}>
+                {formatMoney(monthlyMargin)}
+              </strong>
+              <p>
+                {incomeLoading
+                  ? 'Loading income context...'
+                  : isOverBudget
+                  ? 'Planned spending is above take-home income. Trim categories or raise income assumptions.'
+                  : 'This is the room left for extra saving, debt payoff, and unplanned spending.'}
+              </p>
+            </div>
+
+            <dl className="budget-hero-stats">
+              <div>
+                <dt>Net income</dt>
+                <dd>{incomeLoading ? '—' : formatMoney(incomeTotals.monthlyNet)}</dd>
+              </div>
+              <div>
+                <dt>Planned budget</dt>
+                <dd>{formatMoney(totals.totalMonth)}</dd>
+              </div>
+              <div>
+                <dt>Allocation rate</dt>
+                <dd>{incomeLoading ? '—' : formatPercent(totals.percentNet)}</dd>
+              </div>
+              <div>
+                <dt>Yearly cushion</dt>
+                <dd>{incomeLoading ? '—' : formatMoney(yearlyMargin)}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div className="budget-progress-panel">
+            <div className="budget-progress-header">
+              <span>Take-home budgeted</span>
+              <strong>{incomeLoading ? '—' : formatPercent(totals.percentNet)}</strong>
+            </div>
+            <div className="budget-progress-track" aria-hidden="true">
+              <span
+                className={`budget-progress-fill ${isOverBudget ? 'budget-progress-fill-over' : ''}`}
+                style={{ width: `${clampPercent(allocationRate)}%` }}
+              />
+            </div>
+          </div>
+        </article>
+
+        <div className="budget-summary" aria-label="Budget summary">
+          <div className="budget-summary-card">
+            <span className="budget-summary-label">Monthly budget</span>
+            <strong className="budget-summary-value">{formatMoney(totals.totalMonth)}</strong>
+            <p className="budget-summary-note">All planned category totals combined.</p>
+          </div>
+          <div className="budget-summary-card">
+            <span className="budget-summary-label">Yearly budget</span>
+            <strong className="budget-summary-value">{formatMoney(totals.totalYear)}</strong>
+            <p className="budget-summary-note">Annualized from the current monthly plan.</p>
+          </div>
+          <div className="budget-summary-card">
+            <span className="budget-summary-label">Gross coverage</span>
+            <strong className="budget-summary-value">
+              {incomeLoading ? '—' : formatPercent(totals.percentGross)}
+            </strong>
+            <p className="budget-summary-note">How much of gross income the plan consumes.</p>
+          </div>
+          <div className="budget-summary-card">
+            <span className="budget-summary-label">Net coverage</span>
+            <strong className="budget-summary-value">
+              {incomeLoading ? '—' : formatPercent(totals.percentNet)}
+            </strong>
+            <p className="budget-summary-note">Best single signal for affordability.</p>
+          </div>
         </div>
       </section>
 
       <section className="budget-main-grid" aria-label="Budget categories">
         <div className="budget-left">
+          <section className="budget-left-intro">
+            <div>
+              <span className="budget-section-label">Category groups</span>
+              <h2>What needs money every month?</h2>
+            </div>
+            <p>
+              Start with essentials, then keep flexible spending and future obligations visible so
+              the budget stays realistic.
+            </p>
+          </section>
+
           {isLoading ? (
-            <div className="empty-state">Loading categories...</div>
+            <div className="empty-state">
+              <span className="material-symbols-outlined" aria-hidden="true">sync</span>
+              Loading categories...
+            </div>
           ) : categories.length === 0 ? (
             <div className="empty-state">
+              <span className="material-symbols-outlined" aria-hidden="true">folder_off</span>
               <h2>No categories yet</h2>
               <p>Add a category to start building your net budget.</p>
             </div>
@@ -418,6 +499,9 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                   const isSelected = cat.id === selectedCategoryId;
                   const effectiveCat =
                     isSelected && draftCategory ? draftCategory : cat;
+                  const categoryMonthlyTotal = selectedCategoryMonthlyTotal(effectiveCat);
+                  const categoryShare =
+                    totals.totalMonth > 0 ? (categoryMonthlyTotal / totals.totalMonth) * 100 : 0;
 
                   return (
                     <article
@@ -427,7 +511,11 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                           ? 'budget-category-card budget-category-card-selected'
                           : 'budget-category-card'
                       }
-                      style={categoryCardStyle(effectiveCat)}
+                      style={
+                        {
+                          '--category-color': effectiveCat.colorHex,
+                        } as React.CSSProperties
+                      }
                     >
                       <button
                         className="budget-category-select"
@@ -435,18 +523,30 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                         aria-pressed={isSelected}
                         onClick={() => void ensureSavedBeforeSwitch(cat.id)}
                       >
-                        <span className="budget-category-name">{cat.name}</span>
-                        <span className="budget-category-month">
-                          {formatMoney(selectedCategoryMonthlyTotal(effectiveCat))}
-                        </span>
+                        <div className="budget-category-copy">
+                          <span className="budget-category-name">{cat.name}</span>
+                          <span className="budget-category-meta">
+                            {effectiveCat.subCategories.length} line
+                            {effectiveCat.subCategories.length === 1 ? '' : ' items'}
+                          </span>
+                        </div>
+                        <div className="budget-category-metrics">
+                          <span className="budget-category-month">{formatMoney(categoryMonthlyTotal)}</span>
+                          <span className="budget-category-share">{formatPercent(categoryShare)}</span>
+                        </div>
                       </button>
+
+                      <div className="budget-category-progress" aria-hidden="true">
+                        <span style={{ width: `${clampPercent(categoryShare)}%` }} />
+                      </div>
 
                       <div className="budget-category-row-actions">
                         <button
-                          className="link-button"
+                          className="link-button link-button-danger"
                           type="button"
                           onClick={() => void deleteCategory(cat.id)}
                         >
+                          <span className="material-symbols-outlined" style={{ fontSize: '1rem' }} aria-hidden="true">delete</span>
                           Delete
                         </button>
                       </div>
@@ -456,8 +556,12 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               </div>
 
               <div className="budget-add-category" aria-label="Add category">
+                <div className="budget-add-category-header">
+                  <span className="budget-section-label">New category</span>
+                  <p>Add a group for a major area of spending.</p>
+                </div>
                 <label className="field">
-                  <span>Add category</span>
+                  <span>Category name</span>
                   <input
                     value={newCategoryName}
                     onChange={(e) => setNewCategoryName(e.target.value)}
@@ -479,7 +583,8 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                     onClick={() => void createCategory()}
                     disabled={!newCategoryName.trim()}
                   >
-                    Add
+                    <span className="material-symbols-outlined" aria-hidden="true">add</span>
+                    Add Category
                   </button>
                 </div>
               </div>
@@ -493,8 +598,9 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               <header className="budget-right-header">
                 <div className="budget-right-header-row">
                   <div className="budget-right-title">
+                    <span className="budget-section-label">Category workspace</span>
                     <h2 className="budget-right-title-text">{draftCategory.name || 'Untitled'}</h2>
-                    <p>Save changes to persist edits. Switching categories forces saving.</p>
+                    <p>Adjust the category settings, then tune the monthly line items below.</p>
                   </div>
                   <div className="budget-save-actions">
                     <button
@@ -503,19 +609,43 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                       disabled={!isDirty || isSaving}
                       onClick={() => void saveChanges()}
                     >
+                      <span className="material-symbols-outlined" aria-hidden="true">save</span>
                       {isSaving ? 'Saving...' : 'Save changes'}
                     </button>
                   </div>
+                </div>
+
+                <div className="budget-category-focus">
+                  <article className="budget-focus-card">
+                    <span className="budget-summary-label">Monthly total</span>
+                    <strong className="budget-summary-value">{formatMoney(selectedCategoryTotal)}</strong>
+                  </article>
+                  <article className="budget-focus-card">
+                    <span className="budget-summary-label">Share of budget</span>
+                    <strong className="budget-summary-value">{formatPercent(selectedCategoryShare)}</strong>
+                  </article>
+                  <article className="budget-focus-card">
+                    <span className="budget-summary-label">Line items</span>
+                    <strong className="budget-summary-value">{draftCategory.subCategories.length}</strong>
+                  </article>
                 </div>
               </header>
 
               {saveError ? (
                 <div className="alert error-alert" role="alert">
-                  {saveError}
+                  <span className="material-symbols-outlined" aria-hidden="true">error</span>
+                  <span>{saveError}</span>
                 </div>
               ) : null}
 
               <section className="budget-subcategory-editor" aria-label="Sub-categories">
+                <div className="budget-settings-card">
+                  <div className="budget-settings-copy">
+                    <span className="budget-section-label">Category settings</span>
+                    <p>Keep labels clear and use color only as a quick visual grouping cue.</p>
+                  </div>
+                </div>
+
                 <div className="budget-category-inline-editor">
                   <label className="field">
                     <span>Category name</span>
@@ -548,6 +678,15 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                 </div>
 
                 <div className="budget-subcategory-table" role="list">
+                  {draftCategory.subCategories.length > 0 ? (
+                    <div className="subcategory-header" aria-hidden="true">
+                      <div>Line item</div>
+                      <div>Monthly Budget</div>
+                      <div>Yearly Budget</div>
+                      <div style={{ textAlign: 'right' }}>Actions</div>
+                    </div>
+                  ) : null}
+
                   {draftCategory.subCategories.map((sub) => (
                     <article
                       key={sub.id}
@@ -566,24 +705,33 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
                       <label className="field budget-subcategory-amount-field">
                         <span>Monthly amount ($)</span>
-                        <input
-                          value={String(sub.monthlyAmountUsd)}
-                          onChange={(e) => {
-                            const parsed = parsePositiveUsd(e.target.value);
-                            updateSubInDraft(sub.id, {
-                              monthlyAmountUsd: parsed ?? 0,
-                            });
-                          }}
-                          inputMode="decimal"
-                        />
+                        <div className="input-wrapper">
+                          <span className="input-prefix" aria-hidden="true">$</span>
+                          <input
+                            value={String(sub.monthlyAmountUsd)}
+                            onChange={(e) => {
+                              const parsed = parsePositiveUsd(e.target.value);
+                              updateSubInDraft(sub.id, {
+                                monthlyAmountUsd: parsed ?? 0,
+                              });
+                            }}
+                            data-has-prefix="true"
+                            inputMode="decimal"
+                          />
+                        </div>
                       </label>
+
+                      <div className="budget-subcategory-annual" aria-label={`${sub.name} yearly budget`}>
+                        {formatMoney(sub.monthlyAmountUsd * 12)}
+                      </div>
 
                       <div className="budget-subcategory-actions">
                         <button
-                          className="link-button"
+                          className="link-button link-button-danger"
                           type="button"
                           onClick={() => deleteSubFromDraft(sub.id)}
                         >
+                          <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">delete</span>
                           Delete
                         </button>
                       </div>
@@ -592,6 +740,13 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                 </div>
 
                 <div className="budget-add-subcategory" aria-label="Add sub-category">
+                  <div className="budget-add-subcategory-header">
+                    <div>
+                      <span className="budget-section-label">New line item</span>
+                      <h3>Add new sub-category</h3>
+                    </div>
+                    <p>Break larger categories into amounts you can review and edit confidently.</p>
+                  </div>
                   <div className="budget-add-sub-grid">
                     <label className="field">
                       <span>Name</span>
@@ -603,12 +758,16 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                     </label>
                     <label className="field">
                       <span>Monthly amount ($)</span>
-                      <input
-                        value={newSubMonthlyAmount}
-                        onChange={(e) => setNewSubMonthlyAmount(e.target.value)}
-                        inputMode="decimal"
-                        placeholder="0.00"
-                      />
+                      <div className="input-wrapper">
+                        <span className="input-prefix" aria-hidden="true">$</span>
+                        <input
+                          value={newSubMonthlyAmount}
+                          onChange={(e) => setNewSubMonthlyAmount(e.target.value)}
+                          inputMode="decimal"
+                          data-has-prefix="true"
+                          placeholder="0.00"
+                        />
+                      </div>
                     </label>
                   </div>
                   <div className="budget-add-sub-actions">
@@ -618,6 +777,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                       onClick={addSubCategoryToDraft}
                       disabled={!newSubName.trim() || parsePositiveUsd(newSubMonthlyAmount) === undefined}
                     >
+                      <span className="material-symbols-outlined" aria-hidden="true">add</span>
                       Add sub-category
                     </button>
                   </div>
@@ -626,12 +786,14 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
               {incomeError ? (
                 <div className="alert error-alert" role="alert">
-                  {incomeError}
+                  <span className="material-symbols-outlined" aria-hidden="true">error</span>
+                  <span>{incomeError}</span>
                 </div>
               ) : null}
             </>
           ) : (
             <div className="empty-state">
+              <span className="material-symbols-outlined" aria-hidden="true">ads_click</span>
               <h2>Select a category</h2>
               <p>Choose a category on the left to edit its sub-categories.</p>
             </div>

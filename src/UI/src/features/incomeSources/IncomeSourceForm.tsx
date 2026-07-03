@@ -82,12 +82,12 @@ export function IncomeSourceForm({
     <main
       className={
         layout === 'embedded'
-          ? 'settings-embedded-shell settings-8bit income-form-8bit'
+          ? 'settings-embedded-shell app-shell narrow-shell'
           : 'app-shell narrow-shell'
       }
     >
       <header className="page-header compact-header">
-        <div>
+        <div className="page-header-text">
           <p className="eyebrow">Income Management</p>
           <h1>{title}</h1>
         </div>
@@ -95,7 +95,8 @@ export function IncomeSourceForm({
 
       {saveError ? (
         <div className="alert error-alert" role="alert">
-          {saveError}
+          <span className="material-symbols-outlined" aria-hidden="true">error</span>
+          <span>{saveError}</span>
         </div>
       ) : null}
 
@@ -116,11 +117,13 @@ export function IncomeSourceForm({
             />
             {errors.name ? (
               <span className="field-error" id="name-error">
+                <span className="material-symbols-outlined" style={{ fontSize: '1rem' }} aria-hidden="true">error</span>
                 {errors.name}
               </span>
             ) : null}
             {duplicateNameWarning ? (
               <span className="field-warning" id="name-warning">
+                <span className="material-symbols-outlined" style={{ fontSize: '1rem' }} aria-hidden="true">warning</span>
                 A source with this name already exists. You can still save it.
               </span>
             ) : null}
@@ -140,11 +143,15 @@ export function IncomeSourceForm({
             <div className="period-section-header">
               <h2>Income periods</h2>
               <button className="secondary-action" type="button" onClick={addPeriod}>
+                <span className="material-symbols-outlined" aria-hidden="true">add</span>
                 Add period
               </button>
             </div>
             {errors.periods ? (
-              <span className="field-error">{errors.periods}</span>
+              <span className="field-error" style={{ marginBottom: '8px' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '1rem' }} aria-hidden="true">error</span>
+                {errors.periods}
+              </span>
             ) : null}
             <div className="period-list">
               {draft.periods.map((period, index) => (
@@ -254,7 +261,8 @@ function IncomePeriodEditor({
       <div className="period-card-header">
         <h3>Period {index + 1}</h3>
         {removable ? (
-          <button className="link-button" type="button" onClick={onRemove}>
+          <button className="link-button link-button-danger" type="button" onClick={onRemove}>
+            <span className="material-symbols-outlined" aria-hidden="true">delete</span>
             Remove
           </button>
         ) : null}
@@ -270,7 +278,10 @@ function IncomePeriodEditor({
             onChange={(event) => onUpdate('startDate', event.target.value)}
           />
           {errors.startDate ? (
-            <span className="field-error">{errors.startDate}</span>
+            <span className="field-error">
+              <span className="material-symbols-outlined" style={{ fontSize: '0.95rem' }} aria-hidden="true">error</span>
+              {errors.startDate}
+            </span>
           ) : null}
         </label>
 
@@ -283,42 +294,59 @@ function IncomePeriodEditor({
             onChange={(event) => onUpdate('endDate', event.target.value)}
           />
           {errors.endDate ? (
-            <span className="field-error">{errors.endDate}</span>
+            <span className="field-error">
+              <span className="material-symbols-outlined" style={{ fontSize: '0.95rem' }} aria-hidden="true">error</span>
+              {errors.endDate}
+            </span>
           ) : null}
         </label>
 
         <label className="field">
           <span>Yearly gross pay</span>
-          <input
-            aria-invalid={errors.yearlyGrossAmount ? 'true' : 'false'}
-            inputMode="decimal"
-            min="0"
-            step="0.01"
-            type="number"
-            value={period.yearlyGrossAmount}
-            onChange={(event) =>
-              onUpdate('yearlyGrossAmount', event.target.value)
-            }
-          />
+          <div className="input-wrapper">
+            <span className="input-prefix" aria-hidden="true">$</span>
+            <input
+              aria-invalid={errors.yearlyGrossAmount ? 'true' : 'false'}
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              type="number"
+              data-has-prefix="true"
+              value={period.yearlyGrossAmount}
+              onChange={(event) =>
+                onUpdate('yearlyGrossAmount', event.target.value)
+              }
+            />
+          </div>
           {errors.yearlyGrossAmount ? (
-            <span className="field-error">{errors.yearlyGrossAmount}</span>
+            <span className="field-error">
+              <span className="material-symbols-outlined" style={{ fontSize: '0.95rem' }} aria-hidden="true">error</span>
+              {errors.yearlyGrossAmount}
+            </span>
           ) : null}
         </label>
 
         <label className="field">
           <span>Net percentage</span>
-          <input
-            aria-invalid={errors.netPercentage ? 'true' : 'false'}
-            inputMode="decimal"
-            max="100"
-            min="0"
-            step="0.1"
-            type="number"
-            value={period.netPercentage}
-            onChange={(event) => onUpdate('netPercentage', event.target.value)}
-          />
+          <div className="input-wrapper">
+            <input
+              aria-invalid={errors.netPercentage ? 'true' : 'false'}
+              inputMode="decimal"
+              max="100"
+              min="0"
+              step="0.1"
+              type="number"
+              data-has-suffix="true"
+              value={period.netPercentage}
+              onChange={(event) => onUpdate('netPercentage', event.target.value)}
+            />
+            <span className="input-suffix" aria-hidden="true">%</span>
+          </div>
           {errors.netPercentage ? (
-            <span className="field-error">{errors.netPercentage}</span>
+            <span className="field-error">
+              <span className="material-symbols-outlined" style={{ fontSize: '0.95rem' }} aria-hidden="true">error</span>
+              {errors.netPercentage}
+            </span>
           ) : null}
         </label>
       </div>
@@ -329,20 +357,20 @@ function IncomePeriodEditor({
           <strong>
             {hasValidYearlyGrossAmount
               ? formatMonthlyAmount(yearlyGrossAmount)
-              : '-'}
+              : '—'}
           </strong>
         </div>
         <div>
           <span>Gross yearly</span>
           <strong>
-            {hasValidYearlyGrossAmount ? formatMoney(yearlyGrossAmount) : '-'}
+            {hasValidYearlyGrossAmount ? formatMoney(yearlyGrossAmount) : '—'}
           </strong>
         </div>
         <div>
           <span>Net monthly</span>
           <strong>
             {calculatedNetAmount === undefined
-              ? '-'
+              ? '—'
               : formatMonthlyAmount(calculatedNetAmount)}
           </strong>
         </div>
@@ -350,7 +378,7 @@ function IncomePeriodEditor({
           <span>Net yearly</span>
           <strong>
             {calculatedNetAmount === undefined
-              ? '-'
+              ? '—'
               : formatMoney(calculatedNetAmount)}
           </strong>
         </div>

@@ -209,12 +209,12 @@ export function IncomeSourcesPage({
     <main
       className={
         layout === 'embedded'
-          ? 'settings-embedded-shell settings-8bit'
+          ? 'settings-embedded-shell app-shell'
           : 'app-shell'
       }
     >
       <header className="page-header">
-        <div>
+        <div className="page-header-text">
           <p className="eyebrow">{headerEyebrow}</p>
           <h1 ref={headingRef} tabIndex={-1}>
             Income Sources
@@ -225,14 +225,15 @@ export function IncomeSourcesPage({
           </p>
         </div>
         <button className="primary-action" type="button" onClick={startCreate}>
+          <span className="material-symbols-outlined" aria-hidden="true">add</span>
           Add income source
         </button>
       </header>
 
       {loadError ? (
         <div className="alert error-alert" role="alert">
-          {loadError}
-          <button className="link-button" type="button" onClick={refreshSources}>
+          <span>{loadError}</span>
+          <button className="link-button link-button-danger" type="button" onClick={refreshSources}>
             Retry
           </button>
         </div>
@@ -240,7 +241,7 @@ export function IncomeSourcesPage({
 
       {saveError ? (
         <div className="alert error-alert" role="alert">
-          {saveError}
+          <span>{saveError}</span>
         </div>
       ) : null}
 
@@ -263,20 +264,24 @@ export function IncomeSourcesPage({
 
       {isLoading ? (
         <section className="empty-state" aria-live="polite">
+          <span className="material-symbols-outlined" aria-hidden="true">sync</span>
           Loading income sources...
         </section>
       ) : sources.length === 0 ? (
         <section className="empty-state">
+          <span className="material-symbols-outlined" aria-hidden="true">account_balance</span>
           <h2>No income sources yet</h2>
           <p>
             Add your first source to create a starting point for future planning.
           </p>
           <button className="primary-action" type="button" onClick={startCreate}>
+            <span className="material-symbols-outlined" aria-hidden="true">add</span>
             Add income source
           </button>
         </section>
       ) : filteredSources.length === 0 ? (
         <section className="empty-state">
+          <span className="material-symbols-outlined" aria-hidden="true">filter_list_off</span>
           <h2>No {filter.toLowerCase()} sources</h2>
           <p>Reset the filter to review every source you have added.</p>
           <button
@@ -296,9 +301,14 @@ export function IncomeSourcesPage({
             return (
               <article className="source-row" key={source.id}>
                 <div className="source-main">
-                  <h2>{source.name}</h2>
+                  <h2>
+                    {source.name}
+                    <span className={`status-badge status-badge-${source.status.toLowerCase()}`}>
+                      {source.status}
+                    </span>
+                  </h2>
                   <p>
-                    {source.type} · {source.cadence} · {source.periods.length}{' '}
+                    {source.type} &middot; {source.cadence} &middot; {source.periods.length}{' '}
                     {source.periods.length === 1 ? 'period' : 'periods'}
                   </p>
                 </div>
@@ -313,14 +323,14 @@ export function IncomeSourcesPage({
                         </dd>
                       </div>
                       <div>
+                        <dt>Net percentage</dt>
+                        <dd>{displayPeriod.netPercentage}%</dd>
+                      </div>
+                      <div>
                         <dt>Gross monthly</dt>
                         <dd>
                           {formatMonthlyAmount(displayPeriod.yearlyGrossAmount)}
                         </dd>
-                      </div>
-                      <div>
-                        <dt>Gross yearly</dt>
-                        <dd>{formatMoney(displayPeriod.yearlyGrossAmount)}</dd>
                       </div>
                       <div>
                         <dt>Net monthly</dt>
@@ -331,24 +341,20 @@ export function IncomeSourcesPage({
                         </dd>
                       </div>
                       <div>
+                        <dt>Gross yearly</dt>
+                        <dd>{formatMoney(displayPeriod.yearlyGrossAmount)}</dd>
+                      </div>
+                      <div>
                         <dt>Net yearly</dt>
                         <dd>{formatMoney(calculateYearlyNetAmount(displayPeriod))}</dd>
                       </div>
-                      <div>
-                        <dt>Net percentage</dt>
-                        <dd>{displayPeriod.netPercentage}%</dd>
-                      </div>
                     </>
                   ) : (
-                    <div>
+                    <div style={{ gridColumn: '1 / -1' }}>
                       <dt>Income periods</dt>
                       <dd>None configured</dd>
                     </div>
                   )}
-                  <div>
-                    <dt>Status</dt>
-                    <dd>{source.status}</dd>
-                  </div>
                 </dl>
                 <div className="row-actions">
                   <button
@@ -356,25 +362,28 @@ export function IncomeSourcesPage({
                     type="button"
                     onClick={() => startEdit(source)}
                   >
+                    <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">edit</span>
                     Edit
                   </button>
                   {source.status === 'Active' ? (
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    onClick={() => updateStatus(source, 'Inactive')}
-                  >
-                    Mark inactive
-                  </button>
-                ) : (
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    onClick={() => updateStatus(source, 'Active')}
-                  >
-                    Reactivate
-                  </button>
-                )}
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      onClick={() => void updateStatus(source, 'Inactive')}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">block</span>
+                      Mark inactive
+                    </button>
+                  ) : (
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      onClick={() => void updateStatus(source, 'Active')}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">check_circle</span>
+                      Reactivate
+                    </button>
+                  )}
                 </div>
               </article>
             );

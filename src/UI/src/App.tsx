@@ -1,5 +1,6 @@
 import { createMockIncomeSourceRepository } from './domain/incomeSourceRepository';
 import { createMockBudgetRepository } from './domain/budgetRepository';
+import { createMockAccountRepository } from './domain/accountRepository';
 import { LandingPage } from './pages/LandingPage';
 import './styles.css';
 
@@ -42,12 +43,14 @@ const incomeSourceRepository = createMockIncomeSourceRepository({
   ],
 });
 const budgetRepository = createMockBudgetRepository();
+const accountRepository = createMockAccountRepository();
 
 export function App() {
   return (
     <LandingPage
       repository={incomeSourceRepository}
       budgetRepository={budgetRepository}
+      accountRepository={accountRepository}
     />
   );
 }

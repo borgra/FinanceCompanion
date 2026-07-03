@@ -1,18 +1,21 @@
 import { useState } from 'react';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
+import type { AccountRepository } from '../domain/accountRepository';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { SettingsConfigurationPanel } from './SettingsConfigurationPanel';
 import { SettingsBudgetPanel } from './SettingsBudgetPanel';
+import { AccountPage } from './AccountPage';
 
 export type LandingPageProps = {
   repository: IncomeSourceRepository;
   budgetRepository: BudgetRepository;
+  accountRepository: AccountRepository;
 };
 
-export function LandingPage({ repository, budgetRepository }: LandingPageProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [activeSectionId, setActiveSectionId] = useState<'income' | 'budget'>(
+export function LandingPage({ repository, budgetRepository, accountRepository }: LandingPageProps) {
+  const [isOpen, setIsOpen] = useState(true);
+  const [activeSectionId, setActiveSectionId] = useState<'income' | 'budget' | 'accounts'>(
     'income',
   );
 
@@ -25,10 +28,11 @@ export function LandingPage({ repository, budgetRepository }: LandingPageProps) 
           sections={[
             { id: 'income', label: 'Configuration' },
             { id: 'budget', label: 'Budget' },
+            { id: 'accounts', label: 'Accounts' },
           ]}
           activeSectionId={activeSectionId}
           onActiveSectionChange={(nextId) =>
-            setActiveSectionId(nextId === 'budget' ? 'budget' : 'income')
+            setActiveSectionId(nextId as 'income' | 'budget' | 'accounts')
           }
           getPanel={(activeId) => {
             if (activeId === 'budget') {
@@ -36,6 +40,15 @@ export function LandingPage({ repository, budgetRepository }: LandingPageProps) 
                 <SettingsBudgetPanel
                   incomeRepository={repository}
                   budgetRepository={budgetRepository}
+                />
+              );
+            }
+            if (activeId === 'accounts') {
+              return (
+                <AccountPage
+                  incomeRepository={repository}
+                  budgetRepository={budgetRepository}
+                  accountRepository={accountRepository}
                 />
               );
             }
