@@ -94,10 +94,8 @@ jobs:
           echo "IMAGE_NAME=${{ env.ACR_LOGIN_SERVER }}/api:${{ github.sha }}" >> "${GITHUB_ENV}"
 
       - name: Login to ACR
-        uses: azure/cli@v2
-        with:
-          inlineScript: |
-            az acr login --name "${{ env.ACR_NAME }}"
+        run: |
+          az acr login --name "${{ env.ACR_NAME }}"
 
       - name: Build image
         run: docker build -t "${IMAGE_NAME}" "${API_PATH}"
