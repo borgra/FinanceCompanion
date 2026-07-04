@@ -3,16 +3,24 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-_ROOT_ENV_FILE = _REPO_ROOT / ".env.local"
-_API_ENV_FILE = _REPO_ROOT / "src" / "API" / ".env"
+_env_files = []
+try:
+    _REPO_ROOT = Path(__file__).resolve().parents[4]
+    _ROOT_ENV_FILE = _REPO_ROOT / ".env.local"
+    _API_ENV_FILE = _REPO_ROOT / "src" / "API" / ".env"
+    if _ROOT_ENV_FILE.exists():
+        _env_files.append(str(_ROOT_ENV_FILE))
+    if _API_ENV_FILE.exists():
+        _env_files.append(str(_API_ENV_FILE))
+except (IndexError, OSError):
+    pass
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="FINANCE_COMPANION_",
         extra="ignore",
-        env_file=(str(_ROOT_ENV_FILE), str(_API_ENV_FILE)),
+        env_file=tuple(_env_files),
         env_file_encoding="utf-8",
     )
 

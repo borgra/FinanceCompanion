@@ -2,3 +2,30 @@
 .local-dev-processes.json
 src/API/.env
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+
+# Node / Frontend
+node_modules/
+dist/
+.eslintcache
+.tsbuildinfo
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
