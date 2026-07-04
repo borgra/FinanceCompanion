@@ -1,7 +1,0 @@
-project_id          = "your-gcp-project-id"
-region              = "us-central1"
-github_repository   = "your-org/FinanceCompanion"
-entra_client_id     = "your-entra-application-client-id"
-entra_tenant_id     = "your-entra-directory-tenant-id"
-session_secret      = "replace-with-a-long-random-secret-at-least-32-characters"
-cors_origins        = ["http://localhost:5173", "https://your-frontend-domain.example.com"]

@@ -1,6 +1,12 @@
 name: Backend Deploy
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/API/**'
+      - '.github/workflows/backend-deploy.yml'
   workflow_dispatch:
 
 permissions:
