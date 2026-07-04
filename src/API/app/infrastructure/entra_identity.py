@@ -36,6 +36,9 @@ class EntraIdentityTokenVerifier(IdentityTokenVerifier):
                 options={"require": ["aud", "exp", "iat", "iss", "oid", "sub", "tid"]},
             )
         except Exception as exc:
+            import traceback
+            print(f"DIAGNOSTIC: Token verification failed: {exc}", flush=True)
+            traceback.print_exc()
             raise AuthenticationError("Microsoft token verification failed.") from exc
 
         token_tenant_id = str(payload.get("tid", "")).strip()
