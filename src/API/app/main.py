@@ -1,3 +1,10 @@
+import os
+print("DIAGNOSTIC: STARTING CONTAINER APP", flush=True)
+print(f"DIAGNOSTIC: ENVIRONMENT = {os.environ.get('FINANCE_COMPANION_ENVIRONMENT')}", flush=True)
+print(f"DIAGNOSTIC: ALLOWED_EMAIL = {os.environ.get('FINANCE_COMPANION_ALLOWED_EMAIL')}", flush=True)
+print(f"DIAGNOSTIC: SESSION_SECRET_LENGTH = {len(os.environ.get('FINANCE_COMPANION_SESSION_SECRET', ''))}", flush=True)
+print(f"DIAGNOSTIC: COSMOS_CONN_STR_LENGTH = {len(os.environ.get('FINANCE_COMPANION_COSMOS_TABLE_CONNECTION_STRING', ''))}", flush=True)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
