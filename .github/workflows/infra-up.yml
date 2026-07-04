@@ -22,7 +22,7 @@ jobs:
   deploy:
     name: Deploy Azure infrastructure
     runs-on: ubuntu-latest
-    environment: infrastructure
+    environment: deployment
     concurrency:
       group: azure-infrastructure
       cancel-in-progress: false

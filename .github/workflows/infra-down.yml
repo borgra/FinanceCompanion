@@ -18,7 +18,7 @@ jobs:
   destroy:
     name: Delete Azure resource group
     runs-on: ubuntu-latest
-    environment: infrastructure
+    environment: deployment
     concurrency:
       group: azure-infrastructure
       cancel-in-progress: false
