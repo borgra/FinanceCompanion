@@ -111,7 +111,7 @@ jobs:
               --name "${COSMOS_ACCOUNT_NAME}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --type connection-strings \
-              --query 'connectionStrings[0].connectionString' \
+              --query "connectionStrings[?type=='Table' && keyKind=='Primary'].connectionString | [0]" \
               --output tsv)"
 
             az containerapp secret set \
