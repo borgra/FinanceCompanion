@@ -115,7 +115,7 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
     name: 'Basic'
   }
   properties: {
-    adminUserEnabled: false
+    adminUserEnabled: true
   }
 }
 
@@ -130,9 +130,6 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'ca-${compactAppName}-api-${suffix}'
   location: location
   tags: tags
-  identity: {
-    type: 'SystemAssigned'
-  }
   properties: {
     managedEnvironmentId: containerEnvironment.id
     configuration: {
@@ -146,7 +143,8 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: acr.properties.loginServer
-          identity: 'system'
+          username: acr.listCredentials().username
+          passwordSecretRef: 'acr-password'
         }
       ]
       secrets: [
@@ -157,6 +155,10 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'session-secret'
           value: empty(sessionSecret) ? 'local-dev-session-secret-change-me-longer-32-chars' : sessionSecret
+        }
+        {
+          name: 'acr-password'
+          value: acr.listCredentials().passwords[0].value
         }
       ]
     }
@@ -223,15 +225,7 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, apiContainerApp.id, 'AcrPull')
-  scope: acr
-  properties: {
-    principalId: apiContainerApp.identity.principalId
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-    principalType: 'ServicePrincipal'
-  }
-}
+
 
 resource blobStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = if (enableBlobStorage) {
   name: 'st${compactAppName}${suffix}'

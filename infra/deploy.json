@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.44.1.10279",
-      "templateHash": "8962573537562658646"
+      "templateHash": "86834197238351382"
     }
   },
   "parameters": {
@@ -129,7 +129,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.44.1.10279",
-              "templateHash": "1635164558853158848"
+              "templateHash": "15217631290555025497"
             }
           },
           "parameters": {
@@ -312,7 +312,7 @@
                 "name": "Basic"
               },
               "properties": {
-                "adminUserEnabled": false
+                "adminUserEnabled": true
               }
             },
             {
@@ -329,9 +329,6 @@
               "name": "[format('ca-{0}-api-{1}', variables('compactAppName'), variables('suffix'))]",
               "location": "[parameters('location')]",
               "tags": "[variables('tags')]",
-              "identity": {
-                "type": "SystemAssigned"
-              },
               "properties": {
                 "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}-{1}', variables('compactAppName'), variables('suffix')))]",
                 "configuration": {
@@ -345,7 +342,8 @@
                   "registries": [
                     {
                       "server": "[reference(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}{1}', variables('compactAppName'), variables('suffix'))), '2023-07-01').loginServer]",
-                      "identity": "system"
+                      "username": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}{1}', variables('compactAppName'), variables('suffix'))), '2023-07-01').username]",
+                      "passwordSecretRef": "acr-password"
                     }
                   ],
                   "secrets": [
@@ -356,6 +354,10 @@
                     {
                       "name": "session-secret",
                       "value": "[if(empty(parameters('sessionSecret')), 'local-dev-session-secret-change-me-longer-32-chars', parameters('sessionSecret'))]"
+                    },
+                    {
+                      "name": "acr-password",
+                      "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}{1}', variables('compactAppName'), variables('suffix'))), '2023-07-01').passwords[0].value]"
                     }
                   ]
                 },
@@ -425,21 +427,6 @@
                 "[resourceId('Microsoft.App/managedEnvironments', format('cae-{0}-{1}', variables('compactAppName'), variables('suffix')))]",
                 "[resourceId('Microsoft.DocumentDB/databaseAccounts', format('cosmos-{0}-{1}', variables('compactAppName'), variables('suffix')))]",
                 "[resourceId('Microsoft.Web/staticSites', format('stapp-{0}-{1}', variables('compactAppName'), variables('suffix')))]"
-              ]
-            },
-            {
-              "type": "Microsoft.Authorization/roleAssignments",
-              "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}{1}', variables('compactAppName'), variables('suffix')))]",
-              "name": "[guid(resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}{1}', variables('compactAppName'), variables('suffix'))), resourceId('Microsoft.App/containerApps', format('ca-{0}-api-{1}', variables('compactAppName'), variables('suffix'))), 'AcrPull')]",
-              "properties": {
-                "principalId": "[reference(resourceId('Microsoft.App/containerApps', format('ca-{0}-api-{1}', variables('compactAppName'), variables('suffix'))), '2024-03-01', 'full').identity.principalId]",
-                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')]",
-                "principalType": "ServicePrincipal"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.ContainerRegistry/registries', format('acr{0}{1}', variables('compactAppName'), variables('suffix')))]",
-                "[resourceId('Microsoft.App/containerApps', format('ca-{0}-api-{1}', variables('compactAppName'), variables('suffix')))]"
               ]
             },
             {
