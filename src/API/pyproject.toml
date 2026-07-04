@@ -5,6 +5,7 @@ description = "FastAPI backend for Finance Companion"
 requires-python = ">=3.12"
 dependencies = [
   "azure-data-tables>=12.4.0,<13.0.0",
+  "cryptography>=42.0.0",
   "fastapi>=0.115.0,<1.0.0",
   "httpx>=0.28.0,<1.0.0",
   "pydantic-settings>=2.10.0,<3.0.0",
