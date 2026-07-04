@@ -12,6 +12,11 @@ env:
   AZURE_RESOURCE_GROUP: rg-finance-companion
   AZURE_LOCATION: centralus
   AZURE_STATIC_WEB_APP_LOCATION: centralus
+  AZURE_API_TARGET_PORT: "8000"
+  AZURE_API_MAX_REPLICAS: "1"
+  AZURE_TABLE_NAME: finance
+  AZURE_TABLE_THROUGHPUT: "400"
+  AZURE_ENABLE_BLOB_STORAGE: "false"
 
 jobs:
   deploy:
@@ -33,10 +38,11 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy Bicep
+      - name: Deploy Resource Group
         uses: azure/cli@v2
         with:
           inlineScript: |
+            started_at="$(date +%s)"
             DEPLOYMENT_OUTPUTS="$(az deployment sub create \
               --name "finance-companion-${{ github.run_id }}" \
               --location "${AZURE_LOCATION}" \
@@ -44,17 +50,157 @@ jobs:
               --parameters appName="${APP_NAME}" \
                            resourceGroupName="${AZURE_RESOURCE_GROUP}" \
                            location="${AZURE_LOCATION}" \
-                           staticWebAppLocation="${AZURE_STATIC_WEB_APP_LOCATION}" \
               --query properties.outputs \
               --output json \
               --only-show-errors)"
+            ended_at="$(date +%s)"
 
             echo "${DEPLOYMENT_OUTPUTS}" > deployment-outputs.json
 
             {
-              echo "### Azure deployment outputs"
+              echo "### Resource Group tranche"
+              echo ""
+              echo "- Duration: $((ended_at - started_at)) seconds"
               echo ""
               echo "| Name | Value |"
               echo "| --- | --- |"
               jq -r 'to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' deployment-outputs.json
+            } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Deploy Frontend
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            started_at="$(date +%s)"
+            az deployment group create \
+              --name "finance-companion-frontend-${{ github.run_id }}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --template-file infra/ui.bicep \
+              --parameters appName="${APP_NAME}" \
+                           staticWebAppLocation="${AZURE_STATIC_WEB_APP_LOCATION}" \
+              --only-show-errors \
+              --output json > frontend-outputs.json
+            ended_at="$(date +%s)"
+
+            {
+              echo "### Frontend tranche"
+              echo ""
+              echo "- Duration: $((ended_at - started_at)) seconds"
+              echo ""
+              echo "| Name | Value |"
+              echo "| --- | --- |"
+              jq -r '.properties.outputs | to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' frontend-outputs.json
+            } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Deploy Data
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            started_at="$(date +%s)"
+            az deployment group create \
+              --name "finance-companion-data-${{ github.run_id }}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --template-file infra/data.bicep \
+              --parameters appName="${APP_NAME}" \
+                           location="${AZURE_LOCATION}" \
+                           tableName="${AZURE_TABLE_NAME}" \
+                           tableThroughput="${AZURE_TABLE_THROUGHPUT}" \
+              --only-show-errors \
+              --output json > data-outputs.json
+            ended_at="$(date +%s)"
+
+            {
+              echo "### Data tranche"
+              echo ""
+              echo "- Duration: $((ended_at - started_at)) seconds"
+              echo ""
+              echo "| Name | Value |"
+              echo "| --- | --- |"
+              jq -r '.properties.outputs | to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' data-outputs.json
+            } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Deploy Runtime Base
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            started_at="$(date +%s)"
+            az deployment group create \
+              --name "finance-companion-runtime-base-${{ github.run_id }}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --template-file infra/runtime-base.bicep \
+              --parameters appName="${APP_NAME}" \
+                           location="${AZURE_LOCATION}" \
+              --only-show-errors \
+              --output json > runtime-base-outputs.json
+            ended_at="$(date +%s)"
+
+            {
+              echo "### Runtime Base tranche"
+              echo ""
+              echo "- Duration: $((ended_at - started_at)) seconds"
+              echo ""
+              echo "| Name | Value |"
+              echo "| --- | --- |"
+              jq -r '.properties.outputs | to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' runtime-base-outputs.json
+            } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Deploy Runtime API
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            started_at="$(date +%s)"
+            az deployment group create \
+              --name "finance-companion-runtime-api-${{ github.run_id }}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --template-file infra/runtime-api.bicep \
+              --parameters appName="${APP_NAME}" \
+                           location="${AZURE_LOCATION}" \
+                           staticWebAppLocation="${AZURE_STATIC_WEB_APP_LOCATION}" \
+                           apiTargetPort="${AZURE_API_TARGET_PORT}" \
+                           apiMaxReplicas="${AZURE_API_MAX_REPLICAS}" \
+                           tableName="${AZURE_TABLE_NAME}" \
+                           entraClientId="${{ vars.AZURE_ENTRA_CLIENT_ID }}" \
+                           entraTenantId="${{ vars.AZURE_ENTRA_TENANT_ID }}" \
+                           allowedEmail="${{ vars.AZURE_ALLOWED_EMAIL || 'steveborgra@gmail.com' }}" \
+                           sessionSecret="${{ secrets.AZURE_API_SESSION_SECRET }}" \
+                           environment="${{ vars.AZURE_API_ENVIRONMENT || 'production' }}" \
+              --only-show-errors \
+              --output json > runtime-api-outputs.json
+            ended_at="$(date +%s)"
+
+            {
+              echo "### Runtime API tranche"
+              echo ""
+              echo "- Duration: $((ended_at - started_at)) seconds"
+              echo ""
+              echo "| Name | Value |"
+              echo "| --- | --- |"
+              jq -r '.properties.outputs | to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' runtime-api-outputs.json
+            } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Deploy Optional Storage
+        if: env.AZURE_ENABLE_BLOB_STORAGE == 'true'
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            started_at="$(date +%s)"
+            az deployment group create \
+              --name "finance-companion-storage-${{ github.run_id }}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --template-file infra/storage.bicep \
+              --parameters appName="${APP_NAME}" \
+                           location="${AZURE_LOCATION}" \
+                           enableBlobStorage=true \
+              --only-show-errors \
+              --output json > storage-outputs.json
+            ended_at="$(date +%s)"
+
+            {
+              echo "### Storage tranche"
+              echo ""
+              echo "- Duration: $((ended_at - started_at)) seconds"
+              echo ""
+              echo "| Name | Value |"
+              echo "| --- | --- |"
+              jq -r '.properties.outputs | to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' storage-outputs.json
             } >> "${GITHUB_STEP_SUMMARY}"

@@ -1,6 +1,6 @@
 # Azure Infrastructure
 
-This directory contains Bicep templates, deployment parameters, and helper scripts for provisioning the Azure infrastructure used by the web UI.
+This directory contains Bicep templates, deployment parameters, and helper scripts for provisioning the Azure infrastructure used by the web UI, API runtime, and supporting data services.
 
 ## Resource Topology
 
@@ -8,15 +8,23 @@ The active deployment creates:
 
 - An Azure resource group.
 - An Azure Static Web App for the frontend.
-
-API, database, and file-storage resources are not part of the active infrastructure deployment.
+- A Cosmos DB Table API account and table.
+- An Azure Container Registry.
+- An Azure Container Apps environment.
+- An Azure Container App for the API.
+- Optional blob storage when explicitly enabled.
 
 ## Files
 
 | Path | Purpose |
 | --- | --- |
-| `deploy.bicep` | Subscription-scoped entrypoint. Creates the resource group and deploys UI resources. |
-| `ui.bicep` | Resource-group-scoped template for Azure Static Web Apps. |
+| `deploy.bicep` | Subscription-scoped entrypoint. Creates the resource group. |
+| `main.bicep` | Legacy all-in-one resource-group template retained as a reference and fallback. |
+| `ui.bicep` | Frontend tranche for Azure Static Web Apps. |
+| `data.bicep` | Data tranche for Cosmos Table API resources. |
+| `runtime-base.bicep` | Runtime base tranche for ACR and Container Apps environment. |
+| `runtime-api.bicep` | Runtime API tranche for the Container App and app configuration. |
+| `storage.bicep` | Optional storage tranche. |
 | `parameters/dev.subscription.bicepparam` | Example subscription-scoped development parameters. |
 | `scripts/up.ps1` | Local deployment helper. |
 | `scripts/down.ps1` | Local resource group deletion helper. |
@@ -45,7 +53,16 @@ Deploy:
 .\infra\scripts\up.ps1 -SubscriptionId "<subscription-id>"
 ```
 
-The script runs a subscription-scoped Bicep deployment through `deploy.bicep`. The deployment creates the target resource group and then deploys the Static Web App from `ui.bicep`.
+The script now runs staged deployments in observable tranches:
+
+1. `resource-group`
+2. `frontend`
+3. `data`
+4. `runtime-base`
+5. `runtime-api`
+6. `storage` if enabled
+
+Each tranche prints its own elapsed time so you can see where Azure provisioning is spending time.
 
 ## Local Tear-Down
 
@@ -83,6 +100,18 @@ Or split client IDs for stronger least-privilege separation:
 
 See [SECURITY.md](SECURITY.md) for the recommended OIDC and RBAC setup.
 
+### Additional Variables And Secrets
+
+For the runtime API tranche, set these repository values:
+
+| Name | Type | Purpose |
+| --- | --- | --- |
+| `AZURE_ENTRA_CLIENT_ID` | Variable | Microsoft Entra app client ID used by the API. |
+| `AZURE_ENTRA_TENANT_ID` | Variable | Microsoft Entra tenant ID used by the API. |
+| `AZURE_ALLOWED_EMAIL` | Variable | Primary allowed user email for the placeholder seeded user. |
+| `AZURE_API_ENVIRONMENT` | Variable | API environment string, typically `production`. |
+| `AZURE_API_SESSION_SECRET` | Secret | Session signing secret for the API cookie/JWT. |
+
 ### Workflow Defaults
 
 These values are set inside the workflow files:
@@ -99,6 +128,7 @@ Change these defaults in the workflow files if a different environment name, res
 ## Deployment Flow
 
 1. Run the `Infra Up` workflow or `scripts/up.ps1`.
-2. Run the `Frontend Deploy` workflow to publish the web app.
+2. Review per-tranche timing in the script output or GitHub Actions step timings.
+3. Run the `Frontend Deploy` workflow to publish the web app.
 
-The infrastructure deployment is idempotent. Re-running `Infra Up` updates the existing resource group and Static Web App to match the Bicep templates.
+The infrastructure deployment is idempotent. Re-running `Infra Up` updates each tranche independently to match the Bicep templates.
