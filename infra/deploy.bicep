@@ -12,6 +12,22 @@ param appName string
 @description('Azure Static Web Apps region. Static Web Apps supports a smaller region set than normal Azure resources.')
 param staticWebAppLocation string = 'centralus'
 
+@description('The Microsoft Entra Client ID for the production environment.')
+param entraClientId string = ''
+
+@description('The Microsoft Entra Tenant ID for the production environment.')
+param entraTenantId string = ''
+
+@description('The primary user email allowed to access this workspace.')
+param allowedEmail string = 'steveborgra@gmail.com'
+
+@description('The secure secret used to sign session cookies. Should be at least 32 characters.')
+@secure()
+param sessionSecret string = ''
+
+@description('The application environment setting (e.g. production, development).')
+param environment string = 'production'
+
 var tags = {
   app: toLower(appName)
   managedBy: 'bicep'
@@ -31,6 +47,11 @@ module appResources 'main.bicep' = {
     appName: appName
     location: location
     staticWebAppLocation: staticWebAppLocation
+    entraClientId: entraClientId
+    entraTenantId: entraTenantId
+    allowedEmail: allowedEmail
+    sessionSecret: sessionSecret
+    environment: environment
   }
 }
 
@@ -41,3 +62,5 @@ output containerAppName string = appResources.outputs.containerAppName
 output containerAppUrl string = appResources.outputs.containerAppUrl
 output cosmosAccountName string = appResources.outputs.cosmosAccountName
 output cosmosTableName string = appResources.outputs.cosmosTableName
+output acrLoginServer string = appResources.outputs.acrLoginServer
+output acrName string = appResources.outputs.acrName

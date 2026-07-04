@@ -30,6 +30,22 @@ param tableThroughput int = 400
 @description('Create a low-cost blob storage account for optional file persistence.')
 param enableBlobStorage bool = false
 
+@description('The Microsoft Entra Client ID for the production environment.')
+param entraClientId string = ''
+
+@description('The Microsoft Entra Tenant ID for the production environment.')
+param entraTenantId string = ''
+
+@description('The primary user email allowed to access this workspace.')
+param allowedEmail string = 'steveborgra@gmail.com'
+
+@description('The secure secret used to sign session cookies. Should be at least 32 characters.')
+@secure()
+param sessionSecret string = ''
+
+@description('The application environment setting (e.g. production, development).')
+param environment string = 'production'
+
 var normalizedAppName = toLower(appName)
 var compactAppName = take(replace(normalizedAppName, '-', ''), 8)
 var suffix = uniqueString(resourceGroup().id, normalizedAppName)
@@ -91,6 +107,18 @@ resource cosmosTable 'Microsoft.DocumentDB/databaseAccounts/tables@2024-05-15' =
   }
 }
 
+resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
+  name: 'acr${compactAppName}${suffix}'
+  location: location
+  tags: tags
+  sku: {
+    name: 'Basic'
+  }
+  properties: {
+    adminUserEnabled: false
+  }
+}
+
 resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: 'cae-${compactAppName}-${suffix}'
   location: location
@@ -102,6 +130,9 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'ca-${compactAppName}-api-${suffix}'
   location: location
   tags: tags
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     managedEnvironmentId: containerEnvironment.id
     configuration: {
@@ -112,10 +143,20 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
         allowInsecure: false
       }
+      registries: [
+        {
+          server: acr.properties.loginServer
+          identity: 'system'
+        }
+      ]
       secrets: [
         {
           name: 'cosmos-connection-string'
           value: cosmosAccount.listConnectionStrings().connectionStrings[0].connectionString
+        }
+        {
+          name: 'session-secret'
+          value: empty(sessionSecret) ? 'local-dev-session-secret-change-me-longer-32-chars' : sessionSecret
         }
       ]
     }
@@ -132,6 +173,30 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'FINANCE_COMPANION_COSMOS_TABLE_NAME'
               value: tableName
+            }
+            {
+              name: 'FINANCE_COMPANION_SESSION_SECRET'
+              secretRef: 'session-secret'
+            }
+            {
+              name: 'FINANCE_COMPANION_ENVIRONMENT'
+              value: environment
+            }
+            {
+              name: 'FINANCE_COMPANION_ALLOWED_EMAIL'
+              value: allowedEmail
+            }
+            {
+              name: 'FINANCE_COMPANION_ENTRA_CLIENT_ID'
+              value: entraClientId
+            }
+            {
+              name: 'FINANCE_COMPANION_ENTRA_TENANT_ID'
+              value: entraTenantId
+            }
+            {
+              name: 'FINANCE_COMPANION_CORS_ORIGINS'
+              value: '["http://localhost:5173", "https://${staticWebApp.properties.defaultHostname}"]'
             }
           ]
           resources: {
@@ -155,6 +220,16 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
         ]
       }
     }
+  }
+}
+
+resource acrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acr.id, apiContainerApp.id, 'AcrPull')
+  scope: acr
+  properties: {
+    principalId: apiContainerApp.identity.principalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -183,3 +258,5 @@ output cosmosAccountName string = cosmosAccount.name
 output cosmosTableEndpoint string = 'https://${cosmosAccount.name}.table.cosmos.azure.com:443/'
 output cosmosTableName string = tableName
 output storageAccountName string = enableBlobStorage ? blobStorage.name : ''
+output acrLoginServer string = acr.properties.loginServer
+output acrName string = acr.name
