@@ -30,7 +30,7 @@ def now_iso() -> str:
 
 def _user_from_entity(entity: dict) -> User:
     return User(
-        id=entity["id"],
+        id=entity.get("entityId") or entity.get("id") or entity.get("PartitionKey"),
         email=entity["email"],
         display_name=entity["displayName"],
         identity_subject=entity.get("identitySubject"),
@@ -44,7 +44,7 @@ def _user_to_entity(user: User) -> dict:
     return {
         "PartitionKey": user.id,
         "RowKey": "profile",
-        "id": user.id,
+        "entityId": user.id,
         "email": user.email,
         "displayName": user.display_name,
         "identitySubject": user.identity_subject,
@@ -67,7 +67,7 @@ def _income_source_from_entity(entity: dict) -> IncomeSource:
         for p in periods_data
     ]
     return IncomeSource(
-        id=entity["id"],
+        id=entity.get("entityId") or entity.get("id") or entity["RowKey"].split(":", 1)[1],
         name=entity["name"],
         type=entity["type"],
         cadence=entity["cadence"],
@@ -82,7 +82,7 @@ def _income_source_to_entity(user_id: str, source: IncomeSource) -> dict:
     return {
         "PartitionKey": user_id,
         "RowKey": f"income_source:{source.id}",
-        "id": source.id,
+        "entityId": source.id,
         "name": source.name,
         "type": source.type,
         "cadence": source.cadence,
@@ -107,7 +107,7 @@ def _budget_category_from_entity(entity: dict) -> BudgetCategory:
         for s in sub_data
     ]
     return BudgetCategory(
-        id=entity["id"],
+        id=entity.get("entityId") or entity.get("id") or entity["RowKey"].split(":", 1)[1],
         name=entity["name"],
         color_hex=entity["colorHex"],
         created_at=entity["createdAt"],
@@ -120,7 +120,7 @@ def _budget_category_to_entity(user_id: str, category: BudgetCategory) -> dict:
     return {
         "PartitionKey": user_id,
         "RowKey": f"budget_category:{category.id}",
-        "id": category.id,
+        "entityId": category.id,
         "name": category.name,
         "colorHex": category.color_hex,
         "createdAt": category.created_at,
@@ -152,7 +152,7 @@ def _account_from_entity(entity: dict) -> Account:
         for r in records_data
     ]
     return Account(
-        id=entity["id"],
+        id=entity.get("entityId") or entity.get("id") or entity["RowKey"].split(":", 1)[1],
         name=entity["name"],
         type=entity["type"],
         starting_balance=int(entity["startingBalance"]),
@@ -169,7 +169,7 @@ def _account_to_entity(user_id: str, account: Account) -> dict:
     return {
         "PartitionKey": user_id,
         "RowKey": f"account:{account.id}",
-        "id": account.id,
+        "entityId": account.id,
         "name": account.name,
         "type": account.type,
         "startingBalance": account.starting_balance,
