@@ -24,15 +24,20 @@ resource appResourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   tags: tags
 }
 
-module uiResources 'ui.bicep' = {
-  name: 'ui-resources'
+module appResources 'main.bicep' = {
+  name: 'app-resources'
   scope: appResourceGroup
   params: {
     appName: appName
+    location: location
     staticWebAppLocation: staticWebAppLocation
   }
 }
 
 output resourceGroupName string = appResourceGroup.name
-output staticWebAppName string = uiResources.outputs.staticWebAppName
-output staticWebAppDefaultHostName string = uiResources.outputs.staticWebAppDefaultHostName
+output staticWebAppName string = appResources.outputs.staticWebAppName
+output staticWebAppDefaultHostName string = appResources.outputs.staticWebAppDefaultHostName
+output containerAppName string = appResources.outputs.containerAppName
+output containerAppUrl string = appResources.outputs.containerAppUrl
+output cosmosAccountName string = appResources.outputs.cosmosAccountName
+output cosmosTableName string = appResources.outputs.cosmosTableName

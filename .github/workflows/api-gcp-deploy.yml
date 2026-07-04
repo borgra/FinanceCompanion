@@ -1,0 +1,73 @@
+name: API GCP Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/api-gcp-deploy.yml"
+      - "src/API/**"
+      - "infra/gcp-api/**"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  API_PATH: src/API
+
+jobs:
+  test-build-deploy:
+    name: Test, build, and deploy API
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install API dependencies
+        working-directory: ${{ env.API_PATH }}
+        run: python -m pip install -e .[dev]
+
+      - name: Run API tests
+        working-directory: ${{ env.API_PATH }}
+        run: python -m pytest
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build API image
+        working-directory: ${{ env.API_PATH }}
+        run: |
+          docker build \
+            -t "${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPOSITORY }}/finance-companion-api:${{ github.sha }}" \
+            .
+
+      - name: Push API image
+        run: |
+          docker push "${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPOSITORY }}/finance-companion-api:${{ github.sha }}"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "${{ vars.GCP_CLOUD_RUN_SERVICE }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --image "${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPOSITORY }}/finance-companion-api:${{ github.sha }}" \
+            --service-account "${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}" \
+            --allow-unauthenticated \
+            --quiet

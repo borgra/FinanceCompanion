@@ -112,6 +112,12 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
         allowInsecure: false
       }
+      secrets: [
+        {
+          name: 'cosmos-connection-string'
+          value: cosmosAccount.listConnectionStrings().connectionStrings[0].connectionString
+        }
+      ]
     }
     template: {
       containers: [
@@ -120,11 +126,11 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
           image: containerImage
           env: [
             {
-              name: 'COSMOS_TABLE_ENDPOINT'
-              value: 'https://${cosmosAccount.name}.table.cosmos.azure.com:443/'
+              name: 'FINANCE_COMPANION_COSMOS_TABLE_CONNECTION_STRING'
+              secretRef: 'cosmos-connection-string'
             }
             {
-              name: 'COSMOS_TABLE_NAME'
+              name: 'FINANCE_COMPANION_COSMOS_TABLE_NAME'
               value: tableName
             }
           ]

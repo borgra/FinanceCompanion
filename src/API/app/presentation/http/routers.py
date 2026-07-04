@@ -1,0 +1,232 @@
+from __future__ import annotations
+
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+
+from app.domain.exceptions import AuthenticationError, DomainError, NotFoundError
+from app.domain.models import BudgetCategory, BudgetSubCategory
+from app.infrastructure.in_memory_repositories import now_iso
+from app.presentation.http.dependencies import get_container, require_session_user
+from app.presentation.http.mappers import (
+    to_account,
+    to_account_payload,
+    to_budget_category_payload,
+    to_budget_sub_category_payload,
+    to_income_source,
+    to_income_source_payload,
+    to_user_response,
+)
+from app.presentation.http.schemas import (
+    AccountPayload,
+    AccountUpsertRequest,
+    AuthSessionResponse,
+    AuthVerifyRequest,
+    BudgetCategoryCreateRequest,
+    BudgetCategoryPayload,
+    BudgetCategoryUpdateRequest,
+    BudgetSubCategoryCreateRequest,
+    BudgetSubCategoryPayload,
+    BudgetSubCategoryUpdateRequest,
+    IncomeSourcePayload,
+    IncomeSourceStatusRequest,
+    IncomeSourceUpsertRequest,
+    UserResponse,
+)
+
+router = APIRouter()
+
+
+def _domain_error_to_http(exc: DomainError) -> HTTPException:
+    if isinstance(exc, AuthenticationError):
+        return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
+    if isinstance(exc, NotFoundError):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@router.post("/auth/entra/verify", response_model=AuthSessionResponse)
+def verify_entra_login(request: AuthVerifyRequest, response: Response, container=Depends(get_container)) -> AuthSessionResponse:
+    try:
+        access_token, user = container.authenticate_identity_user.execute(
+            request.id_token,
+            container.settings.entra_client_id,
+            container.settings.entra_tenant_id,
+        )
+    except DomainError as exc:
+        raise _domain_error_to_http(exc) from exc
+
+    response.set_cookie(
+        key=container.settings.session_cookie_name,
+        value=access_token,
+        httponly=True,
+        secure=container.settings.session_cookie_secure,
+        samesite=container.settings.session_cookie_samesite,
+        max_age=container.settings.session_expiration_seconds,
+        path="/",
+    )
+    return AuthSessionResponse(user=to_user_response(user))
+
+
+@router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(response: Response, container=Depends(get_container)) -> Response:
+    response.delete_cookie(
+        key=container.settings.session_cookie_name,
+        httponly=True,
+        secure=container.settings.session_cookie_secure,
+        samesite=container.settings.session_cookie_samesite,
+        path="/",
+    )
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
+@router.get("/auth/session", response_model=UserResponse)
+def get_session(user=Depends(require_session_user), container=Depends(get_container)) -> UserResponse:
+    try:
+        current_user = container.get_current_user.execute(user.user_id)
+    except DomainError as exc:
+        raise _domain_error_to_http(exc) from exc
+    return to_user_response(current_user)
+
+
+@router.get("/income-sources", response_model=list[IncomeSourcePayload])
+def list_income_sources(user=Depends(require_session_user), container=Depends(get_container)) -> list[IncomeSourcePayload]:
+    return [to_income_source_payload(item) for item in container.list_income_sources.execute(user.user_id)]
+
+
+@router.post("/income-sources", response_model=IncomeSourcePayload, status_code=status.HTTP_201_CREATED)
+def create_income_source(request: IncomeSourceUpsertRequest, user=Depends(require_session_user), container=Depends(get_container)) -> IncomeSourcePayload:
+    timestamp = now_iso()
+    source = to_income_source(
+        source_id=f"income-source-{uuid.uuid4().hex[:8]}",
+        payload=request,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    return to_income_source_payload(container.create_income_source.execute(user.user_id, source))
+
+
+@router.put("/income-sources/{source_id}", response_model=IncomeSourcePayload)
+def update_income_source(source_id: str, request: IncomeSourceUpsertRequest, user=Depends(require_session_user), container=Depends(get_container)) -> IncomeSourcePayload:
+    existing = next((item for item in container.list_income_sources.execute(user.user_id) if item.id == source_id), None)
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Income source not found.")
+    source = to_income_source(
+        source_id=source_id,
+        payload=request,
+        created_at=existing.created_at,
+        updated_at=now_iso(),
+    )
+    return to_income_source_payload(container.update_income_source.execute(user.user_id, source_id, source))
+
+
+@router.post("/income-sources/{source_id}/status", response_model=IncomeSourcePayload)
+def set_income_source_status(source_id: str, request: IncomeSourceStatusRequest, user=Depends(require_session_user), container=Depends(get_container)) -> IncomeSourcePayload:
+    return to_income_source_payload(
+        container.set_income_source_status.execute(user.user_id, source_id, request.status)
+    )
+
+
+@router.get("/budget/categories", response_model=list[BudgetCategoryPayload])
+def list_budget_categories(user=Depends(require_session_user), container=Depends(get_container)) -> list[BudgetCategoryPayload]:
+    return [to_budget_category_payload(item) for item in container.list_budget_categories.execute(user.user_id)]
+
+
+@router.post("/budget/categories", response_model=BudgetCategoryPayload, status_code=status.HTTP_201_CREATED)
+def create_budget_category(request: BudgetCategoryCreateRequest, user=Depends(require_session_user), container=Depends(get_container)) -> BudgetCategoryPayload:
+    timestamp = now_iso()
+    category = BudgetCategory(
+        id=f"cat-{uuid.uuid4().hex[:8]}",
+        name=request.name,
+        color_hex=request.color_hex,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    return to_budget_category_payload(container.create_budget_category.execute(user.user_id, category))
+
+
+@router.put("/budget/categories/{category_id}", response_model=BudgetCategoryPayload)
+def update_budget_category(category_id: str, request: BudgetCategoryUpdateRequest, user=Depends(require_session_user), container=Depends(get_container)) -> BudgetCategoryPayload:
+    return to_budget_category_payload(
+        container.update_budget_category.execute(user.user_id, category_id, request.name, request.color_hex)
+    )
+
+
+@router.delete("/budget/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_budget_category(category_id: str, user=Depends(require_session_user), container=Depends(get_container)) -> Response:
+    container.delete_budget_category.execute(user.user_id, category_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/budget/sub-categories", response_model=BudgetSubCategoryPayload, status_code=status.HTTP_201_CREATED)
+def create_budget_sub_category(request: BudgetSubCategoryCreateRequest, user=Depends(require_session_user), container=Depends(get_container)) -> BudgetSubCategoryPayload:
+    timestamp = now_iso()
+    sub_category = BudgetSubCategory(
+        id=f"sub-{uuid.uuid4().hex[:8]}",
+        category_id=request.category_id,
+        name=request.name,
+        monthly_amount_usd=request.monthly_amount_usd,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    return to_budget_sub_category_payload(
+        container.create_budget_sub_category.execute(user.user_id, sub_category)
+    )
+
+
+@router.put("/budget/sub-categories/{sub_category_id}", response_model=BudgetSubCategoryPayload)
+def update_budget_sub_category(sub_category_id: str, request: BudgetSubCategoryUpdateRequest, user=Depends(require_session_user), container=Depends(get_container)) -> BudgetSubCategoryPayload:
+    return to_budget_sub_category_payload(
+        container.update_budget_sub_category.execute(
+            user.user_id, sub_category_id, request.name, request.monthly_amount_usd
+        )
+    )
+
+
+@router.delete("/budget/sub-categories/{sub_category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_budget_sub_category(sub_category_id: str, user=Depends(require_session_user), container=Depends(get_container)) -> Response:
+    container.delete_budget_sub_category.execute(user.user_id, sub_category_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/accounts", response_model=list[AccountPayload])
+def list_accounts(user=Depends(require_session_user), container=Depends(get_container)) -> list[AccountPayload]:
+    return [to_account_payload(item) for item in container.list_accounts.execute(user.user_id)]
+
+
+@router.post("/accounts", response_model=AccountPayload, status_code=status.HTTP_201_CREATED)
+def create_account(request: AccountUpsertRequest, user=Depends(require_session_user), container=Depends(get_container)) -> AccountPayload:
+    timestamp = now_iso()
+    account = to_account(
+        account_id=f"acc-{uuid.uuid4().hex[:8]}",
+        payload=request,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    return to_account_payload(container.create_account.execute(user.user_id, account))
+
+
+@router.put("/accounts/{account_id}", response_model=AccountPayload)
+def update_account(account_id: str, request: AccountUpsertRequest, user=Depends(require_session_user), container=Depends(get_container)) -> AccountPayload:
+    existing = next((item for item in container.list_accounts.execute(user.user_id) if item.id == account_id), None)
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found.")
+    account = to_account(
+        account_id=account_id,
+        payload=request,
+        created_at=existing.created_at,
+        updated_at=now_iso(),
+    )
+    return to_account_payload(container.update_account.execute(user.user_id, account_id, account))
+
+
+@router.delete("/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(account_id: str, user=Depends(require_session_user), container=Depends(get_container)) -> Response:
+    container.delete_account.execute(user.user_id, account_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

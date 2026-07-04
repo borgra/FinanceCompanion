@@ -1,56 +1,79 @@
-import { createMockIncomeSourceRepository } from './domain/incomeSourceRepository';
-import { createMockBudgetRepository } from './domain/budgetRepository';
-import { createMockAccountRepository } from './domain/accountRepository';
+import { useEffect, useState } from 'react';
+import { createAccountApiRepository } from './api/accountApiRepository';
+import { loadSessionUser, logout } from './api/authApi';
+import { createBudgetApiRepository } from './api/budgetApiRepository';
+import { HttpClient } from './api/httpClient';
+import { createIncomeSourceApiRepository } from './api/incomeSourceApiRepository';
+import { AuthPage } from './auth/AuthPage';
+import type { AuthSession } from './auth/authTypes';
 import { LandingPage } from './pages/LandingPage';
 import './styles.css';
 
-const incomeSourceRepository = createMockIncomeSourceRepository({
-  initialSources: [
-    {
-      id: 'income-source-primary',
-      name: 'Primary job',
-      type: 'Salary',
-      cadence: 'Bi-weekly',
-      periods: [
-        {
-          id: 'primary-period',
-          startDate: '2026-01-01',
-          yearlyGrossAmount: 120000,
-          netPercentage: 75,
-        },
-      ],
-      status: 'Active',
-      createdAt: '2026-06-30T00:00:00.000Z',
-      updatedAt: '2026-06-30T00:00:00.000Z',
-    },
-    {
-      id: 'income-source-side',
-      name: 'Side income',
-      type: 'Salary',
-      cadence: 'Bi-weekly',
-      periods: [
-        {
-          id: 'side-period',
-          startDate: '2026-01-01',
-          yearlyGrossAmount: 30000,
-          netPercentage: 50,
-        },
-      ],
-      status: 'Active',
-      createdAt: '2026-06-30T00:00:00.000Z',
-      updatedAt: '2026-06-30T00:00:00.000Z',
-    },
-  ],
-});
-const budgetRepository = createMockBudgetRepository();
-const accountRepository = createMockAccountRepository();
-
 export function App() {
+  const [session, setSession] = useState<AuthSession | undefined>();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const user = await loadSessionUser();
+        setSession({ user });
+      } catch {
+        setSession(undefined);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-card">
+          <p className="eyebrow">Secure Access</p>
+          <h1>Loading Finance Companion</h1>
+          <p>Checking your session before opening the budget workspace.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return (
+      <AuthPage
+        onAuthenticated={(nextSession) => {
+          setSession(nextSession);
+        }}
+      />
+    );
+  }
+
+  const client = new HttpClient();
+  const incomeSourceRepository = createIncomeSourceApiRepository(client);
+  const budgetRepository = createBudgetApiRepository(client);
+  const accountRepository = createAccountApiRepository(client);
+
   return (
-    <LandingPage
-      repository={incomeSourceRepository}
-      budgetRepository={budgetRepository}
-      accountRepository={accountRepository}
-    />
+    <>
+      <div className="app-shell narrow-shell" style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: 12 }}>
+        <button
+          className="secondary-action"
+          type="button"
+          onClick={() => {
+            void (async () => {
+              await logout();
+              setSession(undefined);
+            })();
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+      <LandingPage
+        repository={incomeSourceRepository}
+        budgetRepository={budgetRepository}
+        accountRepository={accountRepository}
+      />
+    </>
   );
 }

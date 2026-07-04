@@ -1,0 +1,60 @@
+from app.domain.models import BudgetCategory, BudgetSubCategory
+from app.domain.protocols import BudgetRepository
+
+
+class ListBudgetCategories:
+    def __init__(self, repository: BudgetRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str) -> list[BudgetCategory]:
+        return self._repository.list_categories_for_user(user_id)
+
+
+class CreateBudgetCategory:
+    def __init__(self, repository: BudgetRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, category: BudgetCategory) -> BudgetCategory:
+        return self._repository.create_category_for_user(user_id, category)
+
+
+class UpdateBudgetCategory:
+    def __init__(self, repository: BudgetRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, category_id: str, name: str, color_hex: str) -> BudgetCategory:
+        return self._repository.update_category_for_user(user_id, category_id, name, color_hex)
+
+
+class DeleteBudgetCategory:
+    def __init__(self, repository: BudgetRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, category_id: str) -> None:
+        self._repository.delete_category_for_user(user_id, category_id)
+
+
+class CreateBudgetSubCategory:
+    def __init__(self, repository: BudgetRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, sub_category: BudgetSubCategory) -> BudgetSubCategory:
+        return self._repository.create_sub_category_for_user(user_id, sub_category)
+
+
+class UpdateBudgetSubCategory:
+    def __init__(self, repository: BudgetRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, sub_category_id: str, name: str, monthly_amount_usd: int) -> BudgetSubCategory:
+        return self._repository.update_sub_category_for_user(
+            user_id, sub_category_id, name, monthly_amount_usd
+        )
+
+
+class DeleteBudgetSubCategory:
+    def __init__(self, repository: BudgetRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, sub_category_id: str) -> None:
+        self._repository.delete_sub_category_for_user(user_id, sub_category_id)

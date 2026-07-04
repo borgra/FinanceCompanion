@@ -16,7 +16,7 @@ export type LandingPageProps = {
 export function LandingPage({ repository, budgetRepository, accountRepository }: LandingPageProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [activeSectionId, setActiveSectionId] = useState<'income' | 'budget' | 'accounts'>(
-    'income',
+    'budget',
   );
 
   return (
