@@ -113,7 +113,9 @@ jobs:
             az containerapp secret set \
               --name "${API_CONTAINER_APP_NAME}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
-              --secrets cosmos-table-connection-string="${COSMOS_TABLE_CONNECTION_STRING}" \
+              --secrets \
+                cosmos-table-connection-string="${COSMOS_TABLE_CONNECTION_STRING}" \
+                session-secret="${{ secrets.ENV_PROD_SESSION_SECRET }}" \
               --only-show-errors
 
       - name: Deploy API image
@@ -127,4 +129,9 @@ jobs:
               --set-env-vars \
                 FINANCE_COMPANION_COSMOS_TABLE_CONNECTION_STRING=secretref:cosmos-table-connection-string \
                 FINANCE_COMPANION_COSMOS_TABLE_NAME="${COSMOS_TABLE_NAME}" \
+                FINANCE_COMPANION_SESSION_SECRET=secretref:session-secret \
+                FINANCE_COMPANION_ENTRA_CLIENT_ID="${{ vars.ENV_PROD_ENTRA_CLIENT_ID }}" \
+                FINANCE_COMPANION_ENTRA_TENANT_ID="${{ vars.ENV_PROD_ENTRA_TENANT_ID }}" \
+                FINANCE_COMPANION_ALLOWED_EMAIL="${{ vars.ENV_PROD_ALLOWED_EMAIL }}" \
+                FINANCE_COMPANION_ENVIRONMENT="production" \
               --only-show-errors

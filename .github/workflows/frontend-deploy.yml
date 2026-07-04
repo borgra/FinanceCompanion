@@ -102,8 +102,8 @@ jobs:
         working-directory: src/UI
         env:
           VITE_API_BASE_URL: ${{ env.VITE_API_BASE_URL }}
-          VITE_ENTRA_CLIENT_ID: ${{ vars.VITE_ENTRA_CLIENT_ID || vars.AZURE_CLIENT_ID }}
-          VITE_ENTRA_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          VITE_ENTRA_CLIENT_ID: ${{ vars.ENV_PROD_ENTRA_CLIENT_ID }}
+          VITE_ENTRA_TENANT_ID: ${{ vars.ENV_PROD_ENTRA_TENANT_ID }}
           VITE_ENTRA_REDIRECT_URI: ${{ env.VITE_ENTRA_REDIRECT_URI }}
         run: npm run build
 
