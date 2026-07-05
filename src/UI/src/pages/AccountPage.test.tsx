@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import { createMockAccountRepository } from '../domain/accountRepository';
-import type { Account } from '../domain/account';
+import { type Account, defaultMonthlyRecords } from '../domain/account';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import { AccountPage } from './AccountPage';
 
