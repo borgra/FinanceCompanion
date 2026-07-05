@@ -446,11 +446,11 @@ describe('AccountPage', () => {
     const firstSavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
     expect(firstSavingsCell).toBeDisabled();
 
-    await userEvent.click(screen.getByRole('button', { name: /morgan stanley premium savings/i }));
+    await userEvent.click(screen.getByText('Morgan Stanley Premium Savings'));
     const secondSavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
     expect(secondSavingsCell).toBeDisabled();
 
-    await userEvent.click(screen.getByRole('button', { name: /checking with savings/i }));
+    await userEvent.click(screen.getByText('Checking With Savings'));
     const thirdSavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
     expect(thirdSavingsCell).not.toBeDisabled();
   });
