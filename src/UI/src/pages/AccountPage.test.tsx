@@ -221,11 +221,14 @@ describe('AccountPage', () => {
 
     expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
 
+    await userEvent.click(screen.getByRole('button', { name: /^add$/i }));
     await userEvent.type(screen.getByLabelText(/new account column name/i), 'Travel');
     await userEvent.click(screen.getByRole('button', { name: /add column/i }));
 
-    expect(screen.getByRole('columnheader', { name: /travel/i })).toBeInTheDocument();
+    const travelHeader = screen.getByRole('columnheader', { name: /travel/i });
+    expect(travelHeader).toBeInTheDocument();
 
+    await userEvent.hover(travelHeader);
     await userEvent.click(screen.getByRole('button', { name: /move travel left/i }));
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -234,6 +237,21 @@ describe('AccountPage', () => {
     const columnNames = updatedAccount?.columns.map((column) => column.name);
 
     expect(columnNames?.slice(-2)).toEqual(['Travel', 'Misc']);
+  });
+
+  it('removes account columns from the ledger table', async () => {
+    const repository = renderPage();
+
+    expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /remove house/i }));
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const accounts = await repository.listAccounts();
+    const updatedAccount = accounts.find((account) => account.id === 'acc-lfcu');
+
+    expect(updatedAccount?.columns.some((column) => column.name === 'House')).toBe(false);
+    expect(updatedAccount?.monthlyRecords.some((record) => 'house' in record.outflows)).toBe(false);
   });
 
   it('moves focus to the same ledger column in the next row when pressing Enter', async () => {
@@ -329,9 +347,11 @@ describe('AccountPage', () => {
 
     expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
 
+    await userEvent.click(screen.getByRole('button', { name: /^add$/i }));
+    await userEvent.click(screen.getByLabelText(/add budget item/i));
     await userEvent.selectOptions(screen.getByLabelText(/budget category to associate/i), 'cat-housing');
     await userEvent.selectOptions(screen.getByLabelText(/budget sub-category to associate/i), 'sub-hoa');
-    await userEvent.click(screen.getByRole('button', { name: /associate budget/i }));
+    await userEvent.click(screen.getByRole('button', { name: /add column/i }));
 
     expect(screen.getByRole('columnheader', { name: /hoa/i })).toBeInTheDocument();
 
@@ -353,8 +373,10 @@ describe('AccountPage', () => {
 
     expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
 
+    await userEvent.click(screen.getByRole('button', { name: /^add$/i }));
+    await userEvent.click(screen.getByLabelText(/add budget item/i));
     await userEvent.selectOptions(screen.getByLabelText(/budget category to associate/i), 'cat-housing');
-    await userEvent.click(screen.getByRole('button', { name: /associate budget/i }));
+    await userEvent.click(screen.getByRole('button', { name: /add column/i }));
 
     expect(screen.getByRole('columnheader', { name: /housing/i })).toBeInTheDocument();
 

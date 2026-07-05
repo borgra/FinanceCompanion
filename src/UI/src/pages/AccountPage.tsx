@@ -111,6 +111,8 @@ type ProjectionMonth = {
   dateCode: string;
 };
 
+type ColumnModalMode = 'custom' | 'budget';
+
 const getCurrentProjectionMonth = (projectionMonths: ProjectionMonth[]) => {
   const now = new Date();
   const currentDateCode = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -304,6 +306,9 @@ export function AccountPage({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalAccountId, setModalAccountId] = useState<string | null>(null);
   const [modalDraft, setModalDraft] = useState<AccountDraft>(() => emptyAccountDraft());
+  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+  const [columnModalMode, setColumnModalMode] = useState<ColumnModalMode>('custom');
+  const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
   const [newColumnName, setNewColumnName] = useState('');
   const [selectedBudgetCategoryId, setSelectedBudgetCategoryId] = useState('');
   const [selectedBudgetSubCategoryId, setSelectedBudgetSubCategoryId] = useState('');
@@ -380,6 +385,21 @@ export function AccountPage({
     setModalAccountId(null);
     setModalDraft(emptyAccountDraft());
     setIsModalOpen(false);
+  };
+
+  const openColumnModal = () => {
+    setColumnModalMode('custom');
+    setNewColumnName('');
+    setSelectedBudgetCategoryId('');
+    setSelectedBudgetSubCategoryId('');
+    setIsColumnModalOpen(true);
+  };
+
+  const closeColumnModal = () => {
+    setIsColumnModalOpen(false);
+    setNewColumnName('');
+    setSelectedBudgetCategoryId('');
+    setSelectedBudgetSubCategoryId('');
   };
 
   const projectionMonths = useMemo(() => [
@@ -659,9 +679,9 @@ export function AccountPage({
   };
 
   const addAccountColumn = () => {
-    if (!draftAccount) return;
+    if (!draftAccount) return false;
     const name = newColumnName.trim();
-    if (!name) return;
+    if (!name) return false;
 
     const column = {
       id: createColumnId(name),
@@ -683,10 +703,11 @@ export function AccountPage({
     });
     setNewColumnName('');
     setIsDirty(true);
+    return true;
   };
 
   const associateBudgetSelectionToAccount = () => {
-    if (!draftAccount || !selectedBudgetAssociation) return;
+    if (!draftAccount || !selectedBudgetAssociation) return false;
 
     const existingColumn = draftAccount.columns.find(
       (column) => column.id === selectedBudgetAssociation.columnId,
@@ -719,6 +740,17 @@ export function AccountPage({
       monthlyRecords,
     });
     setIsDirty(true);
+    return true;
+  };
+
+  const addColumnFromModal = () => {
+    const didAdd =
+      columnModalMode === 'custom'
+        ? addAccountColumn()
+        : associateBudgetSelectionToAccount();
+    if (didAdd) {
+      closeColumnModal();
+    }
   };
 
   const moveAccountColumn = (columnId: string, direction: -1 | 1) => {
@@ -731,6 +763,22 @@ export function AccountPage({
     const [column] = columns.splice(index, 1);
     columns.splice(nextIndex, 0, column);
     setDraftAccount({ ...draftAccount, columns });
+    setIsDirty(true);
+  };
+
+  const removeAccountColumn = (columnId: string) => {
+    if (!draftAccount) return;
+    const columns = draftAccount.columns.filter((column) => column.id !== columnId);
+    const monthlyRecords = draftAccount.monthlyRecords.map((record) => {
+      const outflows = { ...record.outflows };
+      delete outflows[columnId];
+      return {
+        ...record,
+        outflows,
+      };
+    });
+    setDraftAccount({ ...draftAccount, columns, monthlyRecords });
+    setHoveredColumnId((current) => (current === columnId ? null : current));
     setIsDirty(true);
   };
 
@@ -1038,6 +1086,113 @@ export function AccountPage({
         </div>
       )}
 
+      {isColumnModalOpen && (
+        <div className="modal-overlay" onClick={closeColumnModal}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <h2>Add Ledger Column</h2>
+            <div className="modal-form">
+              <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+                <span>Column Type</span>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="radio"
+                      name="column-mode"
+                      checked={columnModalMode === 'custom'}
+                      onChange={() => setColumnModalMode('custom')}
+                    />
+                    <span>Add Custom Column</span>
+                  </label>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      type="radio"
+                      name="column-mode"
+                      checked={columnModalMode === 'budget'}
+                      onChange={() => setColumnModalMode('budget')}
+                    />
+                    <span>Add Budget Item</span>
+                  </label>
+                </div>
+              </fieldset>
+
+              {columnModalMode === 'custom' ? (
+                <label className="field">
+                  <span>Column Name</span>
+                  <input
+                    aria-label="New account column name"
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addColumnFromModal();
+                      }
+                    }}
+                    placeholder="Column name"
+                    autoFocus
+                  />
+                </label>
+              ) : (
+                <>
+                  <label className="field">
+                    <span>Budget Category</span>
+                    <select
+                      aria-label="Budget category to associate"
+                      value={selectedBudgetCategoryId}
+                      onChange={(e) => {
+                        setSelectedBudgetCategoryId(e.target.value);
+                        setSelectedBudgetSubCategoryId('');
+                      }}
+                    >
+                      <option value="">Budget category</option>
+                      {budgetCategories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Budget Sub-Category</span>
+                    <select
+                      aria-label="Budget sub-category to associate"
+                      value={selectedBudgetSubCategoryId}
+                      onChange={(e) => setSelectedBudgetSubCategoryId(e.target.value)}
+                      disabled={!selectedBudgetCategory}
+                    >
+                      <option value="">--</option>
+                      {selectedBudgetCategory?.subCategories.map((subCategory) => (
+                        <option key={subCategory.id} value={subCategory.id}>
+                          {subCategory.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
+            </div>
+
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={closeColumnModal}>
+                Cancel
+              </button>
+              <button
+                className="primary-action"
+                type="button"
+                onClick={addColumnFromModal}
+                disabled={
+                  columnModalMode === 'custom'
+                    ? !newColumnName.trim()
+                    : !selectedBudgetAssociation
+                }
+              >
+                Add Column
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {draftAccount ? (
         <>
           {/* WORKSPACE DETAIL WORKSPACE WITH INLINE SPENDING COLUMN CONFIGURATOR */}
@@ -1086,8 +1241,8 @@ export function AccountPage({
               </div>
             </div>
 
-            {/* Read-only account details and inline columns chips */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '20px', marginBottom: '16px' }}>
+            {/* Read-only account details */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 420px)', gap: '20px', marginBottom: '16px' }}>
               <div
                 aria-label="Account details"
                 style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}
@@ -1101,164 +1256,20 @@ export function AccountPage({
                   <strong style={{ fontSize: '0.95rem' }}>{draftAccount.yieldRate}%</strong>
                 </div>
               </div>
-
-              {/* Spending categories columns display */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                    Account Columns
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <select
-                      aria-label="Budget category to associate"
-                      value={selectedBudgetCategoryId}
-                      onChange={(e) => {
-                        setSelectedBudgetCategoryId(e.target.value);
-                        setSelectedBudgetSubCategoryId('');
-                      }}
-                      style={{
-                        minHeight: '30px',
-                        maxWidth: '150px',
-                        borderRadius: 'var(--md-sys-shape-corner-xs)',
-                        border: '1px solid var(--md-sys-color-outline)',
-                        background: 'transparent',
-                        color: 'var(--md-sys-color-on-surface)',
-                        fontSize: '0.8rem',
-                      }}
-                    >
-                      <option value="">Budget category</option>
-                      {budgetCategories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      aria-label="Budget sub-category to associate"
-                      value={selectedBudgetSubCategoryId}
-                      onChange={(e) => setSelectedBudgetSubCategoryId(e.target.value)}
-                      disabled={!selectedBudgetCategory}
-                      style={{
-                        minHeight: '30px',
-                        maxWidth: '150px',
-                        borderRadius: 'var(--md-sys-shape-corner-xs)',
-                        border: '1px solid var(--md-sys-color-outline)',
-                        background: 'transparent',
-                        color: 'var(--md-sys-color-on-surface)',
-                        fontSize: '0.8rem',
-                      }}
-                    >
-                      <option value="">--</option>
-                      {selectedBudgetCategory?.subCategories.map((subCategory) => (
-                        <option key={subCategory.id} value={subCategory.id}>
-                          {subCategory.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      onClick={associateBudgetSelectionToAccount}
-                      disabled={!selectedBudgetAssociation}
-                      style={{ minHeight: '30px', padding: '0 8px', fontSize: '0.75rem' }}
-                    >
-                      Associate Budget
-                    </button>
-                    <input
-                      aria-label="New account column name"
-                      value={newColumnName}
-                      onChange={(e) => setNewColumnName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          addAccountColumn();
-                        }
-                      }}
-                      placeholder="Column name"
-                      style={{
-                        width: '150px',
-                        minHeight: '30px',
-                        padding: '4px 8px',
-                        borderRadius: 'var(--md-sys-shape-corner-xs)',
-                        border: '1px solid var(--md-sys-color-outline)',
-                        background: 'transparent',
-                        color: 'var(--md-sys-color-on-surface)',
-                        fontSize: '0.8rem',
-                      }}
-                    />
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      onClick={addAccountColumn}
-                      disabled={!newColumnName.trim()}
-                      style={{ minHeight: '30px', padding: '0 8px', fontSize: '0.75rem' }}
-                    >
-                      Add Column
-                    </button>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px', maxHeight: '110px', overflowY: 'auto' }}>
-                  {activeColumns.length === 0 ? (
-                    <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                      No extra account columns.
-                    </span>
-                  ) : (
-                    activeColumns.map((col, index) => (
-                      <span
-                        key={col.id}
-                        className="status-badge"
-                        style={{
-                          backgroundColor: 'var(--md-sys-color-surface-container-high)',
-                          border: '1px solid var(--md-sys-color-outline)',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '4px 8px',
-                          fontSize: '0.75rem',
-                          borderRadius: 'var(--md-sys-shape-corner-xs)',
-                          textTransform: 'none',
-                          color: 'var(--md-sys-color-on-surface)',
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: '8px',
-                            height: '8px',
-                            borderRadius: '50%',
-                            backgroundColor: 'var(--md-sys-color-outline)',
-                          }}
-                        />
-                        <strong>{col.name}</strong>
-                        <button
-                          className="link-button"
-                          type="button"
-                          aria-label={`Move ${col.name} left`}
-                          disabled={index === 0}
-                          onClick={() => moveAccountColumn(col.id, -1)}
-                          style={{ minHeight: 'auto', padding: 0 }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>chevron_left</span>
-                        </button>
-                        <button
-                          className="link-button"
-                          type="button"
-                          aria-label={`Move ${col.name} right`}
-                          disabled={index === activeColumns.length - 1}
-                          onClick={() => moveAccountColumn(col.id, 1)}
-                          style={{ minHeight: 'auto', padding: 0 }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>chevron_right</span>
-                        </button>
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
             </div>
 
             {/* FULL WIDTH LEDGER GRID WITH TIGHT PADDING AND NO FOOTER TOTALS */}
             <div className="excel-table-fullwidth">
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={openColumnModal}
+                  style={{ minHeight: '30px', padding: '0 10px', fontSize: '0.75rem' }}
+                >
+                  Add
+                </button>
+              </div>
               <div className="excel-wrapper" style={{ margin: 0 }}>
                 <table className="excel-table">
                   <thead>
@@ -1276,16 +1287,57 @@ export function AccountPage({
                       </th>
 
                       {/* Active category columns */}
-                      {activeColumns.map((col) => (
-                        <th key={col.id} title={col.name}>
-                          <div className="excel-th-content">
+                      {activeColumns.map((col, index) => (
+                        <th
+                          key={col.id}
+                          title={col.name}
+                          onMouseEnter={() => setHoveredColumnId(col.id)}
+                          onMouseLeave={() => setHoveredColumnId((current) => (current === col.id ? null : current))}
+                        >
+                          <div className="excel-th-content" style={{ gap: '4px' }}>
+                            <button
+                              className="link-button"
+                              type="button"
+                              aria-label={`Move ${col.name} left`}
+                              disabled={index === 0}
+                              onClick={() => moveAccountColumn(col.id, -1)}
+                              style={{
+                                minHeight: 'auto',
+                                padding: 0,
+                                visibility: hoveredColumnId === col.id ? 'visible' : 'hidden',
+                              }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>chevron_left</span>
+                            </button>
                             {col.icon && (
                               <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
                                 {col.icon}
                               </span>
                             )}
                             <span>{col.name.length > 15 ? `${col.name.slice(0, 12)}...` : col.name}</span>
-                            <span className="excel-filter-arrow">▾</span>
+                            <button
+                              className="link-button"
+                              type="button"
+                              aria-label={`Remove ${col.name}`}
+                              onClick={() => removeAccountColumn(col.id)}
+                              style={{ minHeight: 'auto', padding: 0 }}
+                            >
+                              <span style={{ fontSize: '0.85rem', lineHeight: 1 }}>[x]</span>
+                            </button>
+                            <button
+                              className="link-button"
+                              type="button"
+                              aria-label={`Move ${col.name} right`}
+                              disabled={index === activeColumns.length - 1}
+                              onClick={() => moveAccountColumn(col.id, 1)}
+                              style={{
+                                minHeight: 'auto',
+                                padding: 0,
+                                visibility: hoveredColumnId === col.id ? 'visible' : 'hidden',
+                              }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>chevron_right</span>
+                            </button>
                           </div>
                         </th>
                       ))}
