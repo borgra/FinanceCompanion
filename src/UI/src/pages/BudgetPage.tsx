@@ -365,10 +365,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
         <div className="page-header-text">
           <p className="eyebrow">Budget Planning</p>
           <h1>Monthly Plan</h1>
-          <p>
-            Build a budget from monthly line items, compare it to take-home income, and keep space
-            for the goals and surprises that show up between paychecks.
-          </p>
         </div>
       </header>
 
@@ -379,10 +375,10 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
         </div>
       ) : null}
 
-      <section className="budget-overview" aria-label="Budget overview">
-        <article className="budget-hero-card">
-          <div className="budget-hero-topline">
-            <span className="budget-section-label">Monthly posture</span>
+      <section className="budget-overview" aria-label="Budget overview" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
+        <article className="budget-hero-card" style={{ maxWidth: '600px', width: '100%' }}>
+          <div className="budget-hero-topline" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <span className="budget-section-label" style={{ fontSize: '0.85rem', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 'bold' }}>Monthly Posture</span>
             <span
               className={`budget-health-pill budget-health-pill-${budgetHealthTone}`}
               aria-label={`Budget health ${budgetHealthLabel}`}
@@ -391,81 +387,39 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
             </span>
           </div>
 
-          <div className="budget-hero-main">
+          <div className="budget-hero-main" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>
-              <span className="budget-summary-label">Left after budget</span>
-              <strong className={`budget-hero-value ${isOverBudget ? 'budget-hero-value-negative' : ''}`}>
-                {formatMoney(monthlyMargin)}
-              </strong>
-              <p>
-                {incomeLoading
-                  ? 'Loading income context...'
-                  : isOverBudget
-                  ? 'Planned spending is above take-home income. Trim categories or raise income assumptions.'
-                  : 'This is the room left for extra saving, debt payoff, and unplanned spending.'}
-              </p>
+              <span className="budget-summary-label" style={{ display: 'block', fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Budgeted Amount</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                <strong style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--md-sys-color-primary)' }}>
+                  {formatMoney(totals.totalMonth)}
+                </strong>
+                <span style={{ fontSize: '1rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  / {incomeLoading ? '—' : formatMoney(incomeTotals.monthlyNet)} budgeted
+                </span>
+              </div>
             </div>
 
-            <dl className="budget-hero-stats">
-              <div>
-                <dt>Net income</dt>
-                <dd>{incomeLoading ? '—' : formatMoney(incomeTotals.monthlyNet)}</dd>
+            <div className="budget-progress-panel" style={{ marginTop: 0 }}>
+              <div className="budget-progress-header" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)', marginBottom: '6px' }}>
+                <span>Income Budgeted</span>
+                <strong>{incomeLoading ? '—' : formatPercent(totals.percentNet)}</strong>
               </div>
-              <div>
-                <dt>Planned budget</dt>
-                <dd>{formatMoney(totals.totalMonth)}</dd>
+              <div className="budget-progress-track" aria-hidden="true" style={{ height: '8px', backgroundColor: 'var(--md-sys-color-surface-container-highest)', borderRadius: '4px', overflow: 'hidden' }}>
+                <span
+                  className={`budget-progress-fill ${isOverBudget ? 'budget-progress-fill-over' : ''}`}
+                  style={{
+                    display: 'block',
+                    height: '100%',
+                    backgroundColor: isOverBudget ? 'var(--md-sys-color-error)' : 'var(--md-sys-color-primary)',
+                    width: `${clampPercent(allocationRate)}%`,
+                    transition: 'width 0.3s ease'
+                  }}
+                />
               </div>
-              <div>
-                <dt>Allocation rate</dt>
-                <dd>{incomeLoading ? '—' : formatPercent(totals.percentNet)}</dd>
-              </div>
-              <div>
-                <dt>Yearly cushion</dt>
-                <dd>{incomeLoading ? '—' : formatMoney(yearlyMargin)}</dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="budget-progress-panel">
-            <div className="budget-progress-header">
-              <span>Take-home budgeted</span>
-              <strong>{incomeLoading ? '—' : formatPercent(totals.percentNet)}</strong>
-            </div>
-            <div className="budget-progress-track" aria-hidden="true">
-              <span
-                className={`budget-progress-fill ${isOverBudget ? 'budget-progress-fill-over' : ''}`}
-                style={{ width: `${clampPercent(allocationRate)}%` }}
-              />
             </div>
           </div>
         </article>
-
-        <div className="budget-summary" aria-label="Budget summary">
-          <div className="budget-summary-card">
-            <span className="budget-summary-label">Monthly budget</span>
-            <strong className="budget-summary-value">{formatMoney(totals.totalMonth)}</strong>
-            <p className="budget-summary-note">All planned category totals combined.</p>
-          </div>
-          <div className="budget-summary-card">
-            <span className="budget-summary-label">Yearly budget</span>
-            <strong className="budget-summary-value">{formatMoney(totals.totalYear)}</strong>
-            <p className="budget-summary-note">Annualized from the current monthly plan.</p>
-          </div>
-          <div className="budget-summary-card">
-            <span className="budget-summary-label">Gross coverage</span>
-            <strong className="budget-summary-value">
-              {incomeLoading ? '—' : formatPercent(totals.percentGross)}
-            </strong>
-            <p className="budget-summary-note">How much of gross income the plan consumes.</p>
-          </div>
-          <div className="budget-summary-card">
-            <span className="budget-summary-label">Net coverage</span>
-            <strong className="budget-summary-value">
-              {incomeLoading ? '—' : formatPercent(totals.percentNet)}
-            </strong>
-            <p className="budget-summary-note">Best single signal for affordability.</p>
-          </div>
-        </div>
       </section>
 
       <section className="budget-main-grid" aria-label="Budget categories">
@@ -475,10 +429,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               <span className="budget-section-label">Category groups</span>
               <h2>What needs money every month?</h2>
             </div>
-            <p>
-              Start with essentials, then keep flexible spending and future obligations visible so
-              the budget stays realistic.
-            </p>
           </section>
 
           {isLoading ? (
@@ -514,40 +464,71 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                       style={
                         {
                           '--category-color': effectiveCat.colorHex,
+                          display: 'flex',
+                          alignItems: 'stretch',
+                          padding: 0,
+                          overflow: 'hidden'
                         } as React.CSSProperties
                       }
                     >
-                      <button
-                        className="budget-category-select"
-                        type="button"
-                        aria-pressed={isSelected}
-                        onClick={() => void ensureSavedBeforeSwitch(cat.id)}
-                      >
-                        <div className="budget-category-copy">
-                          <span className="budget-category-name">{cat.name}</span>
-                          <span className="budget-category-meta">
-                            {effectiveCat.subCategories.length} line
-                            {effectiveCat.subCategories.length === 1 ? '' : ' items'}
-                          </span>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <button
+                          className="budget-category-select"
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => void ensureSavedBeforeSwitch(cat.id)}
+                          style={{
+                            flex: 1,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '12px 16px',
+                            background: 'none',
+                            border: 'none',
+                            textAlign: 'left',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <div className="budget-category-copy" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span className="budget-category-name" style={{ fontWeight: 'bold' }}>{cat.name}</span>
+                            <span className="budget-category-meta" style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                              {effectiveCat.subCategories.length} line
+                              {effectiveCat.subCategories.length === 1 ? '' : ' items'}
+                            </span>
+                          </div>
+                          <div className="budget-category-metrics" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                            <span className="budget-category-month" style={{ fontWeight: 'bold' }}>{formatMoney(categoryMonthlyTotal)}</span>
+                            <span className="budget-category-share" style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>{formatPercent(categoryShare)}</span>
+                          </div>
+                        </button>
+                        <div className="budget-category-progress" aria-hidden="true" style={{ height: '3px', backgroundColor: 'var(--md-sys-color-surface-container-highest)', overflow: 'hidden' }}>
+                          <span style={{ display: 'block', height: '100%', backgroundColor: 'var(--category-color)', width: `${clampPercent(categoryShare)}%` }} />
                         </div>
-                        <div className="budget-category-metrics">
-                          <span className="budget-category-month">{formatMoney(categoryMonthlyTotal)}</span>
-                          <span className="budget-category-share">{formatPercent(categoryShare)}</span>
-                        </div>
-                      </button>
-
-                      <div className="budget-category-progress" aria-hidden="true">
-                        <span style={{ width: `${clampPercent(categoryShare)}%` }} />
                       </div>
 
-                      <div className="budget-category-row-actions">
+                      {/* Vertical Divider */}
+                      <div style={{ width: '1px', backgroundColor: 'var(--md-sys-color-outline-variant)', alignSelf: 'stretch', margin: '8px 0' }} />
+
+                      {/* Trashcan Delete Icon Right Aligned */}
+                      <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px' }}>
                         <button
                           className="link-button link-button-danger"
                           type="button"
                           onClick={() => void deleteCategory(cat.id)}
+                          aria-label={`Delete ${cat.name} category`}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '8px',
+                            color: 'var(--md-sys-color-error)',
+                            borderRadius: '50%'
+                          }}
                         >
-                          <span className="material-symbols-outlined" style={{ fontSize: '1rem' }} aria-hidden="true">delete</span>
-                          Delete
+                          <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }} aria-hidden="true">delete</span>
                         </button>
                       </div>
                     </article>
@@ -558,7 +539,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               <div className="budget-add-category" aria-label="Add category">
                 <div className="budget-add-category-header">
                   <span className="budget-section-label">New category</span>
-                  <p>Add a group for a major area of spending.</p>
                 </div>
                 <label className="field">
                   <span>Category name</span>
@@ -600,7 +580,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                   <div className="budget-right-title">
                     <span className="budget-section-label">Category workspace</span>
                     <h2 className="budget-right-title-text">{draftCategory.name || 'Untitled'}</h2>
-                    <p>Adjust the category settings, then tune the monthly line items below.</p>
                   </div>
                   <div className="budget-save-actions">
                     <button
@@ -639,13 +618,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               ) : null}
 
               <section className="budget-subcategory-editor" aria-label="Sub-categories">
-                <div className="budget-settings-card">
-                  <div className="budget-settings-copy">
-                    <span className="budget-section-label">Category settings</span>
-                    <p>Keep labels clear and use color only as a quick visual grouping cue.</p>
-                  </div>
-                </div>
-
                 <div className="budget-category-inline-editor">
                   <label className="field">
                     <span>Category name</span>
@@ -678,14 +650,70 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                 </div>
 
                 <div className="budget-subcategory-table" role="list">
-                  {draftCategory.subCategories.length > 0 ? (
-                    <div className="subcategory-header" aria-hidden="true">
-                      <div>Line item</div>
-                      <div>Monthly Budget</div>
-                      <div>Yearly Budget</div>
-                      <div style={{ textAlign: 'right' }}>Actions</div>
+                  <div className="subcategory-header" aria-hidden="true">
+                    <div>Line item</div>
+                    <div>Monthly Budget</div>
+                    <div>Yearly Budget</div>
+                    <div style={{ textAlign: 'right' }}>Actions</div>
+                  </div>
+
+                  {/* In-line Add Sub-Category Row at the top */}
+                  <div
+                    className="budget-subcategory-row budget-subcategory-row-new"
+                    style={{
+                      borderBottom: '2px solid var(--md-sys-color-outline-variant)',
+                      paddingBottom: '12px',
+                      marginBottom: '12px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.015)'
+                    }}
+                  >
+                    <label className="field budget-subcategory-name-field">
+                      <span>New Line Item Name</span>
+                      <input
+                        value={newSubName}
+                        onChange={(e) => setNewSubName(e.target.value)}
+                        placeholder="e.g. HOA or Rent"
+                      />
+                    </label>
+
+                    <label className="field budget-subcategory-amount-field">
+                      <span>Monthly amount ($)</span>
+                      <div className="input-wrapper">
+                        <span className="input-prefix" aria-hidden="true">$</span>
+                        <input
+                          value={newSubMonthlyAmount}
+                          onChange={(e) => setNewSubMonthlyAmount(e.target.value)}
+                          inputMode="decimal"
+                          data-has-prefix="true"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </label>
+
+                    <div className="budget-subcategory-annual" style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                      {newSubMonthlyAmount && parsePositiveUsd(newSubMonthlyAmount) !== undefined
+                        ? formatMoney(Number(newSubMonthlyAmount) * 12)
+                        : '$   -   '}
                     </div>
-                  ) : null}
+
+                    <div className="budget-subcategory-actions" style={{ display: 'flex', alignItems: 'center' }}>
+                      <button
+                        className="primary-action"
+                        type="button"
+                        onClick={addSubCategoryToDraft}
+                        disabled={!newSubName.trim() || parsePositiveUsd(newSubMonthlyAmount) === undefined}
+                        style={{
+                          minHeight: '36px',
+                          padding: '0 12px',
+                          fontSize: '0.75rem',
+                          borderRadius: 'var(--md-sys-shape-corner-s)'
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: '1rem' }} aria-hidden="true">add</span>
+                        Add Item
+                      </button>
+                    </div>
+                  </div>
 
                   {draftCategory.subCategories.map((sub) => (
                     <article
@@ -737,50 +765,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                       </div>
                     </article>
                   ))}
-                </div>
-
-                <div className="budget-add-subcategory" aria-label="Add sub-category">
-                  <div className="budget-add-subcategory-header">
-                    <div>
-                      <span className="budget-section-label">New line item</span>
-                      <h3>Add new sub-category</h3>
-                    </div>
-                    <p>Break larger categories into amounts you can review and edit confidently.</p>
-                  </div>
-                  <div className="budget-add-sub-grid">
-                    <label className="field">
-                      <span>Name</span>
-                      <input
-                        value={newSubName}
-                        onChange={(e) => setNewSubName(e.target.value)}
-                        placeholder="e.g. HOA"
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Monthly amount ($)</span>
-                      <div className="input-wrapper">
-                        <span className="input-prefix" aria-hidden="true">$</span>
-                        <input
-                          value={newSubMonthlyAmount}
-                          onChange={(e) => setNewSubMonthlyAmount(e.target.value)}
-                          inputMode="decimal"
-                          data-has-prefix="true"
-                          placeholder="0.00"
-                        />
-                      </div>
-                    </label>
-                  </div>
-                  <div className="budget-add-sub-actions">
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      onClick={addSubCategoryToDraft}
-                      disabled={!newSubName.trim() || parsePositiveUsd(newSubMonthlyAmount) === undefined}
-                    >
-                      <span className="material-symbols-outlined" aria-hidden="true">add</span>
-                      Add sub-category
-                    </button>
-                  </div>
                 </div>
               </section>
 

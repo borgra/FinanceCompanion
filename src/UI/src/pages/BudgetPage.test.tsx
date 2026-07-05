@@ -36,11 +36,9 @@ describe('BudgetPage', () => {
       />,
     );
 
-    expect(await screen.findByText('Monthly posture')).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: /housing/i })).toBeInTheDocument();
-    expect(await screen.findByText('Category settings')).toBeInTheDocument();
-    expect(screen.getByText('Left after budget')).toBeInTheDocument();
-    expect(screen.getByText('Take-home budgeted')).toBeInTheDocument();
+    expect(await screen.findByText('Monthly Posture')).toBeInTheDocument();
+    expect(await screen.findByText('Housing')).toBeInTheDocument();
+    expect(screen.getByText('Income Budgeted')).toBeInTheDocument();
     expect(screen.getByText('What needs money every month?')).toBeInTheDocument();
     expect(screen.getByText('Yearly Budget')).toBeInTheDocument();
   });
@@ -55,10 +53,9 @@ describe('BudgetPage', () => {
       />,
     );
 
-    expect(await screen.findByRole('button', { name: /housing/i })).toBeInTheDocument();
-    expect(await screen.findByText('Category settings')).toBeInTheDocument();
+    expect(await screen.findByText('Housing')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /utilities/i }));
+    await userEvent.click(screen.getByText('Utilities'));
 
     expect(await screen.findByDisplayValue('Electricity')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Internet')).toBeInTheDocument();
