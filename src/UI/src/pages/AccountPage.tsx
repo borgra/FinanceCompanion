@@ -530,6 +530,25 @@ export function AccountPage({
         monthlyRecords: recordsPayload,
       };
       await accountRepository.updateAccount(selectedAccountId, draftInput);
+
+      if (draftInput.type === 'Checking' && draftInput.savingsAccountId) {
+        const savingsAcc = accounts.find((a) => a.id === draftInput.savingsAccountId);
+        if (savingsAcc) {
+          const updatedSavingsRecords = savingsAcc.monthlyRecords.map((savRecord) => {
+            const checkRecord = recordsPayload.find((r) => r.month === savRecord.month);
+            return {
+              ...savRecord,
+              savings: checkRecord ? checkRecord.savings : savRecord.savings,
+            };
+          });
+          const savingsDraft: AccountDraft = {
+            ...toAccountDraft(savingsAcc),
+            monthlyRecords: updatedSavingsRecords,
+          };
+          await accountRepository.updateAccount(savingsAcc.id, savingsDraft);
+        }
+      }
+
       setIsDirty(false);
       await refreshAccounts();
     } catch {
@@ -594,13 +613,34 @@ export function AccountPage({
         monthlyRecords: recordsPayload,
       };
 
+      let targetAccountId = '';
       if (isEditingAccount && modalAccountId) {
         await accountRepository.updateAccount(modalAccountId, draftInput);
-        await refreshAccounts(modalAccountId);
+        targetAccountId = modalAccountId;
       } else {
         const createdAccount = await accountRepository.createAccount(draftInput);
-        await refreshAccounts(createdAccount.id);
+        targetAccountId = createdAccount.id;
       }
+
+      if (draftInput.type === 'Checking' && draftInput.savingsAccountId) {
+        const savingsAcc = accounts.find((a) => a.id === draftInput.savingsAccountId);
+        if (savingsAcc) {
+          const updatedSavingsRecords = savingsAcc.monthlyRecords.map((savRecord) => {
+            const checkRecord = recordsPayload.find((r) => r.month === savRecord.month);
+            return {
+              ...savRecord,
+              savings: checkRecord ? checkRecord.savings : savRecord.savings,
+            };
+          });
+          const savingsDraft: AccountDraft = {
+            ...toAccountDraft(savingsAcc),
+            monthlyRecords: updatedSavingsRecords,
+          };
+          await accountRepository.updateAccount(savingsAcc.id, savingsDraft);
+        }
+      }
+
+      await refreshAccounts(targetAccountId);
 
       closeAccountModal();
     } catch {

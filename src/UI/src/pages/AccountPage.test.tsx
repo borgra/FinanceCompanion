@@ -480,4 +480,59 @@ describe('AccountPage', () => {
     expect(await screen.findByText('High Yield Savings')).toBeInTheDocument();
     expect(screen.getAllByText('$10,500.00').length).toBeGreaterThan(0);
   });
+
+  it('saves checking account savings amounts into the associated savings account savings column', async () => {
+    const mockAccounts: Account[] = [
+      {
+        id: 'acc-checking-with-savings',
+        name: 'Checking With Savings',
+        type: 'Checking',
+        startingBalance: 2000,
+        startDate: '2026-01-01',
+        yieldRate: 0,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: 'acc-savings-test',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+      {
+        id: 'acc-savings-test',
+        name: 'Morgan Stanley Premium Savings',
+        type: 'Savings',
+        startingBalance: 5000,
+        startDate: '2026-01-01',
+        yieldRate: 4.5,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: '',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+    ];
+
+    const repository = renderPage(mockAccounts);
+
+    expect(await screen.findByText('Checking With Savings')).toBeInTheDocument();
+
+    const januarySavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
+    expect(januarySavingsCell).not.toBeDisabled();
+    
+    await userEvent.clear(januarySavingsCell!);
+    await userEvent.type(januarySavingsCell!, '400');
+    
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await userEvent.click(screen.getByText('Morgan Stanley Premium Savings'));
+
+    const savingsCellSavingsAcc = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
+    expect(savingsCellSavingsAcc?.value).toBe('$400.00');
+    expect(savingsCellSavingsAcc).toBeDisabled();
+
+    const accounts = await repository.listAccounts();
+    const updatedSavingsAcc = accounts.find((acc) => acc.id === 'acc-savings-test');
+    expect(updatedSavingsAcc?.monthlyRecords[0].savings).toBe(400);
+  });
 });
