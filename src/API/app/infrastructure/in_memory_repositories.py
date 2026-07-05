@@ -93,6 +93,7 @@ def _account_from_dict(data: dict) -> Account:
         starting_balance=int(data["startingBalance"]),
         start_date=data["startDate"],
         yield_rate=float(data["yieldRate"]),
+        assigned_income_source_ids=list(data.get("assignedIncomeSourceIds", [])),
         columns=[_account_column_from_dict(item) for item in data["columns"]],
         monthly_records=[_monthly_record_from_dict(item) for item in data["monthlyRecords"]],
         created_at=data["createdAt"],

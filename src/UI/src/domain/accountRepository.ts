@@ -17,6 +17,7 @@ const nowIso = () => new Date().toISOString();
 const cloneAccounts = (accounts: Account[]) =>
   accounts.map((account) => ({
     ...account,
+    assignedIncomeSourceIds: [...(account.assignedIncomeSourceIds || [])],
     columns: account.columns.map((c) => ({ ...c })),
     monthlyRecords: account.monthlyRecords.map((r) => ({
       ...r,
@@ -30,6 +31,7 @@ const draftToAccountFields = (draft: AccountDraft) => ({
   startingBalance: Number(draft.startingBalance) || 0,
   startDate: draft.startDate || '2026-01-01',
   yieldRate: Number(draft.yieldRate) || 0,
+  assignedIncomeSourceIds: [...draft.assignedIncomeSourceIds],
   columns: draft.columns.map((c) => ({ ...c })),
   monthlyRecords: draft.monthlyRecords.map((r) => ({
     month: r.month,
@@ -55,6 +57,7 @@ export function createMockAccountRepository({
       startingBalance: 30564,
       startDate: '2026-01-01',
       yieldRate: 0,
+      assignedIncomeSourceIds: ['income-source-primary'],
       columns: [
         { id: 'house', name: 'House', icon: 'home' },
         { id: 'chase', name: 'Chase', icon: 'credit_card' },
@@ -159,6 +162,7 @@ export function createMockAccountRepository({
       startingBalance: 5000,
       startDate: '2026-01-01',
       yieldRate: 0,
+      assignedIncomeSourceIds: [],
       columns: [
         { id: 'utilities', name: 'Utilities', icon: 'bolt' },
         { id: 'misc', name: 'Misc', icon: 'payments' },
@@ -174,6 +178,7 @@ export function createMockAccountRepository({
       startingBalance: 15000,
       startDate: '2026-01-01',
       yieldRate: 4.5,
+      assignedIncomeSourceIds: [],
       columns: [],
       monthlyRecords: defaultMonthlyRecords(),
       createdAt: '2026-06-30T00:00:00.000Z',

@@ -226,6 +226,7 @@ SEED_ACCOUNTS = {
             "startingBalance": 30564,
             "startDate": "2026-01-01",
             "yieldRate": 0,
+            "assignedIncomeSourceIds": ["income-source-primary", "income-source-side"],
             "columns": [
                 {"id": "house", "name": "House", "icon": "home"},
                 {"id": "chase", "name": "Chase", "icon": "credit_card"},
@@ -258,6 +259,7 @@ SEED_ACCOUNTS = {
             "startingBalance": 5000,
             "startDate": "2026-01-01",
             "yieldRate": 0,
+            "assignedIncomeSourceIds": [],
             "columns": [
                 {"id": "utilities", "name": "Utilities", "icon": "bolt"},
                 {"id": "misc", "name": "Misc", "icon": "payments"},
@@ -286,6 +288,7 @@ SEED_ACCOUNTS = {
             "startingBalance": 15000,
             "startDate": "2026-01-01",
             "yieldRate": 4.5,
+            "assignedIncomeSourceIds": [],
             "columns": [],
             "monthlyRecords": [
                 {"month": "Jan-26", "credit": 0, "outflows": {}, "invest": 0, "savings": 0},

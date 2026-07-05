@@ -3,7 +3,6 @@ import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import type { AccountRepository } from '../domain/accountRepository';
 import type { IncomeSource } from '../domain/incomeSource';
-import type { BudgetCategoryWithSubCategories } from '../domain/budget';
 import {
   type Account,
   type AccountDraft,
@@ -26,6 +25,10 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 const accountSelectorMaxWidth = '960px';
 const maxAccountNameLength = 100;
 const maxAccountBalance = 999_999_999.99;
+const accountTypeOrder: Record<AccountType, number> = {
+  Checking: 0,
+  Savings: 1,
+};
 
 const formatMoney = (amount: number) => {
   if (amount < 0) {
@@ -37,9 +40,14 @@ const formatMoney = (amount: number) => {
   return currencyFormatter.format(amount);
 };
 
-const getMonthlyNetIncomeForMonth = (sources: IncomeSource[], monthCode: string): number => {
+const getMonthlyNetIncomeForMonth = (
+  sources: IncomeSource[],
+  monthCode: string,
+  assignedIncomeSourceIds: string[],
+): number => {
   let totalNet = 0;
-  const activeSources = sources.filter((s) => s.status === 'Active');
+  const assignedIds = new Set(assignedIncomeSourceIds);
+  const activeSources = sources.filter((s) => s.status === 'Active' && assignedIds.has(s.id));
   for (const source of activeSources) {
     const period = source.periods.find((p) => {
       const startMonth = p.startDate.slice(0, 7);
@@ -56,6 +64,12 @@ const getMonthlyNetIncomeForMonth = (sources: IncomeSource[], monthCode: string)
   return Math.round(totalNet);
 };
 
+const sortAccounts = (items: Account[]) =>
+  [...items].sort((a, b) => {
+    const typeDelta = accountTypeOrder[a.type] - accountTypeOrder[b.type];
+    return typeDelta || a.name.localeCompare(b.name);
+  });
+
 type ComputedRecord = {
   month: string;
   start: number;
@@ -66,6 +80,86 @@ type ComputedRecord = {
   invest: number;
   savings: number;
   net: number;
+};
+
+type ProjectionMonth = {
+  name: string;
+  dateCode: string;
+};
+
+const getCurrentProjectionMonth = (projectionMonths: ProjectionMonth[]) => {
+  const now = new Date();
+  const currentDateCode = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return projectionMonths.find((month) => month.dateCode === currentDateCode) ?? projectionMonths[0];
+};
+
+const computeAccountRecords = (
+  account: Account,
+  incomeSources: IncomeSource[],
+  projectionMonths: ProjectionMonth[],
+): ComputedRecord[] => {
+  let currentStart = 0;
+  let balanceRealized = false;
+  const startCode = account.startDate ? account.startDate.slice(0, 7) : '2026-01';
+  const assignedIncomeSourceIds = account.assignedIncomeSourceIds || [];
+
+  return account.monthlyRecords.map((record) => {
+    const monthCode = projectionMonths.find((m) => m.name === record.month)?.dateCode || '2026-01';
+
+    let start = 0;
+    let credit = 0;
+    const outflows: Record<string, number> = {};
+    let expenses = 0;
+    let invest = 0;
+    let savings = 0;
+    let net = 0;
+
+    if (monthCode < startCode) {
+      return {
+        month: record.month,
+        start,
+        credit,
+        outflows,
+        expenses,
+        subtotal: 0,
+        invest,
+        savings,
+        net,
+      };
+    }
+
+    if (!balanceRealized) {
+      start = Number(account.startingBalance) || 0;
+      balanceRealized = true;
+    } else {
+      start = currentStart;
+    }
+
+    credit = getMonthlyNetIncomeForMonth(incomeSources, monthCode, assignedIncomeSourceIds);
+
+    account.columns.forEach((col) => {
+      const val = Number(record.outflows[col.id]) || 0;
+      outflows[col.id] = val;
+      expenses += val;
+    });
+
+    invest = Number(record.invest) || 0;
+    savings = Number(record.savings) || 0;
+    net = start + credit - expenses - invest - savings;
+    currentStart = net;
+
+    return {
+      month: record.month,
+      start,
+      credit,
+      outflows,
+      expenses,
+      subtotal: start + credit - expenses,
+      invest,
+      savings,
+      net,
+    };
+  });
 };
 
 type ExcelCellInputProps = {
@@ -111,7 +205,6 @@ export function AccountPage({
 }: AccountPageProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
-  const [budgetCategories, setBudgetCategories] = useState<BudgetCategoryWithSubCategories[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>();
@@ -128,6 +221,17 @@ export function AccountPage({
   const [modalDraft, setModalDraft] = useState<AccountDraft>(() => emptyAccountDraft());
 
   const isEditingAccount = modalAccountId !== null;
+  const sortedAccounts = useMemo(() => sortAccounts(accounts), [accounts]);
+  const assignedIncomeAccountBySourceId = useMemo(() => {
+    const assignments = new Map<string, Account>();
+    accounts.forEach((account) => {
+      if (account.id === modalAccountId) return;
+      (account.assignedIncomeSourceIds || []).forEach((sourceId) => {
+        assignments.set(sourceId, account);
+      });
+    });
+    return assignments;
+  }, [accounts, modalAccountId]);
   const parsedModalBalance = Number(modalDraft.startingBalance);
   const isModalBalanceValid =
     modalDraft.startingBalance !== '' &&
@@ -174,30 +278,35 @@ export function AccountPage({
     { name: 'Dec-26', dateCode: '2026-12' },
   ], []);
 
-  // Load all accounts, income sources, and budget categories
-  const loadAllData = async () => {
-    setIsLoading(true);
-    setLoadError(undefined);
-    try {
-      const [accts, sources, cats] = await Promise.all([
-        accountRepository.listAccounts(),
-        incomeRepository.listIncomeSources(),
-        budgetRepository.listCategoriesWithSubCategories(),
-      ]);
-      setAccounts(accts);
-      setIncomeSources(sources);
-      setBudgetCategories(cats);
-      setSelectedAccountId((prev) => prev ?? accts[0]?.id);
-    } catch {
-      setLoadError('Failed to load required finance data. Try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Load all accounts, income sources, and budget categories.
   useEffect(() => {
+    const loadAllData = async () => {
+      setIsLoading(true);
+      setLoadError(undefined);
+      try {
+        const [accts, sources] = await Promise.all([
+          accountRepository.listAccounts(),
+          incomeRepository.listIncomeSources(),
+          budgetRepository.listCategoriesWithSubCategories(),
+        ]);
+        const sorted = sortAccounts(accts);
+        setAccounts(sorted);
+        setIncomeSources(sources);
+        setSelectedAccountId((prev) => prev ?? sorted[0]?.id);
+      } catch {
+        setLoadError('Failed to load required finance data. Try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     void loadAllData();
   }, [accountRepository, incomeRepository, budgetRepository]);
+
+  const selectedAccount = useMemo(
+    () => accounts.find((a) => a.id === selectedAccountId),
+    [accounts, selectedAccountId],
+  );
 
   // Sync draft state on account switch
   useEffect(() => {
@@ -209,21 +318,17 @@ export function AccountPage({
     setDraftAccount(accountCopy);
     setIsDirty(false);
     setSaveError(undefined);
-  }, [selectedAccountId, accounts]);
-
-  const selectedAccount = useMemo(
-    () => accounts.find((a) => a.id === selectedAccountId),
-    [accounts, selectedAccountId],
-  );
+  }, [selectedAccount]);
 
   const refreshAccounts = async (preferredSelectedId?: string) => {
     const list = await accountRepository.listAccounts();
-    setAccounts(list);
+    const sorted = sortAccounts(list);
+    setAccounts(sorted);
     setSelectedAccountId((prev) => {
       const nextSelectedId = preferredSelectedId ?? prev;
-      return nextSelectedId && list.some((a) => a.id === nextSelectedId)
+      return nextSelectedId && sorted.some((a) => a.id === nextSelectedId)
         ? nextSelectedId
-        : list[0]?.id;
+        : sorted[0]?.id;
     });
   };
 
@@ -245,7 +350,8 @@ export function AccountPage({
     setIsSaving(true);
     setSaveError(undefined);
     try {
-      const columnsPayload = activeColumns.map((col) => ({
+      const modalColumns = modalDraft.columns.filter((col) => !col.isDeleted);
+      const columnsPayload = modalColumns.map((col) => ({
         id: col.id,
         name: col.name,
         icon: col.icon,
@@ -253,7 +359,11 @@ export function AccountPage({
 
       const recordsPayload = draftAccount.monthlyRecords.map((r, mIdx) => {
         const monthCode = projectionMonths[mIdx]?.dateCode || '2026-01';
-        const derivedCredit = getMonthlyNetIncomeForMonth(incomeSources, monthCode);
+        const derivedCredit = getMonthlyNetIncomeForMonth(
+          incomeSources,
+          monthCode,
+          draftAccount.assignedIncomeSourceIds || [],
+        );
         return {
           ...r,
           credit: derivedCredit,
@@ -270,6 +380,7 @@ export function AccountPage({
         startingBalance: String(draftAccount.startingBalance),
         startDate: draftAccount.startDate,
         yieldRate: String(draftAccount.yieldRate),
+        assignedIncomeSourceIds: draftAccount.assignedIncomeSourceIds || [],
         columns: columnsPayload,
         monthlyRecords: recordsPayload,
       };
@@ -302,7 +413,8 @@ export function AccountPage({
     setSaveError(undefined);
 
     try {
-      const columnsPayload = activeColumns.map((col) => ({
+      const modalColumns = modalDraft.columns.filter((col) => !col.isDeleted);
+      const columnsPayload = modalColumns.map((col) => ({
         id: col.id,
         name: col.name,
         icon: col.icon,
@@ -310,11 +422,15 @@ export function AccountPage({
 
       const recordsPayload = (modalDraft.monthlyRecords.length > 0 ? modalDraft.monthlyRecords : emptyAccountDraft().monthlyRecords).map((r, mIdx) => {
         const monthCode = projectionMonths[mIdx]?.dateCode || '2026-01';
-        const derivedCredit = getMonthlyNetIncomeForMonth(incomeSources, monthCode);
+        const derivedCredit = getMonthlyNetIncomeForMonth(
+          incomeSources,
+          monthCode,
+          modalDraft.assignedIncomeSourceIds,
+        );
         return {
           ...r,
           credit: derivedCredit,
-          outflows: activeColumns.reduce((acc, col) => {
+          outflows: modalColumns.reduce((acc, col) => {
             acc[col.id] = r.outflows[col.id] || 0;
             return acc;
           }, {} as Record<string, number>),
@@ -327,6 +443,7 @@ export function AccountPage({
         startingBalance: String(balanceNum),
         startDate: modalDraft.startDate || '2026-01-01',
         yieldRate: String(Number(modalDraft.yieldRate) || 0),
+        assignedIncomeSourceIds: modalDraft.assignedIncomeSourceIds,
         columns: columnsPayload,
         monthlyRecords: recordsPayload,
       };
@@ -389,74 +506,42 @@ export function AccountPage({
     setIsDirty(true);
   };
 
-  // Dynamic active columns generated from current budget categories
+  const toggleModalIncomeSource = (sourceId: string) => {
+    const assigned = new Set(modalDraft.assignedIncomeSourceIds);
+    if (assigned.has(sourceId)) {
+      assigned.delete(sourceId);
+    } else {
+      assigned.add(sourceId);
+    }
+    setModalDraft({ ...modalDraft, assignedIncomeSourceIds: [...assigned] });
+  };
+
+  // Active columns are owned by the account so each account can keep a distinct ledger shape.
   const activeColumns = useMemo(() => {
-    return budgetCategories.map((cat) => ({
-      id: cat.id,
-      name: cat.name,
-      icon: 'payments',
-    }));
-  }, [budgetCategories]);
+    return (draftAccount?.columns || []).filter((col) => !col.isDeleted);
+  }, [draftAccount]);
 
   // Simulation calculations with dynamic balance realization and cascading
   const computedRecords = useMemo((): ComputedRecord[] => {
     if (!draftAccount) return [];
 
-    let currentStart = 0;
-    let balanceRealized = false;
-    const startCode = draftAccount.startDate ? draftAccount.startDate.slice(0, 7) : '2026-01';
+    return computeAccountRecords(draftAccount, incomeSources, projectionMonths);
+  }, [draftAccount, projectionMonths, incomeSources]);
 
-    return draftAccount.monthlyRecords.map((record) => {
-      const monthCode = projectionMonths.find((m) => m.name === record.month)?.dateCode || '2026-01';
+  const currentProjectionMonth = useMemo(
+    () => getCurrentProjectionMonth(projectionMonths),
+    [projectionMonths],
+  );
 
-      let start = 0;
-      let credit = 0;
-      let expenses = 0;
-      const outflows: Record<string, number> = {};
-      let invest = 0;
-      let savings = 0;
-      let net = 0;
-
-      if (monthCode < startCode) {
-        start = 0;
-        net = 0;
-      } else {
-        if (!balanceRealized) {
-          start = Number(draftAccount.startingBalance) || 0;
-          balanceRealized = true;
-        } else {
-          start = currentStart;
-        }
-
-        credit = getMonthlyNetIncomeForMonth(incomeSources, monthCode);
-
-        // Map and sum only active column outflow values
-        activeColumns.forEach((col) => {
-          const val = Number(record.outflows[col.id]) || 0;
-          outflows[col.id] = val;
-          expenses += val;
-        });
-
-        invest = Number(record.invest) || 0;
-        savings = Number(record.savings) || 0;
-        net = start + credit - expenses - invest - savings;
-
-        currentStart = net;
-      }
-
-      return {
-        month: record.month,
-        start,
-        credit,
-        outflows,
-        expenses,
-        subtotal: start + credit - expenses,
-        invest,
-        savings,
-        net,
-      };
-    });
-  }, [draftAccount, activeColumns, projectionMonths, incomeSources]);
+  const currentBalanceByAccountId = useMemo(() => {
+    return new Map(
+      accounts.map((account) => {
+        const records = computeAccountRecords(account, incomeSources, projectionMonths);
+        const currentRecord = records.find((record) => record.month === currentProjectionMonth.name);
+        return [account.id, currentRecord?.net ?? 0];
+      }),
+    );
+  }, [accounts, currentProjectionMonth.name, incomeSources, projectionMonths]);
 
   // Overall sums/averages for KPIs and Summary Table footer
   const summaryTotals = useMemo(() => {
@@ -489,11 +574,7 @@ export function AccountPage({
     <main className="app-shell budget-shell">
       <header className="page-header compact-header">
         <div className="page-header-text">
-          <p className="eyebrow">Accounting Ledger</p>
           <h1>Account Management</h1>
-          <p>
-            Forecast monthly allocations and propagate start/end balances over the calendar year.
-          </p>
         </div>
       </header>
 
@@ -515,7 +596,7 @@ export function AccountPage({
       <section style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }} aria-label="Bank accounts selectors">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: accountSelectorMaxWidth }}>
           <span style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#d97706', letterSpacing: '0.05em' }}>
-            Select Bank Account
+            Select Account
           </span>
           <button
             className="secondary-action"
@@ -523,20 +604,20 @@ export function AccountPage({
             onClick={openCreateAccountModal}
             style={{ minHeight: '28px', padding: '0 10px', fontSize: '0.75rem', borderRadius: 'var(--md-sys-shape-corner-s)' }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>add</span>
-            Add New Account
+            <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">add</span>
+            + Add Account
           </button>
         </div>
 
         <div className="accounts-vertical-stack" role="list" style={{ maxWidth: accountSelectorMaxWidth }}>
           {isLoading ? (
             <div style={{ fontSize: '0.85rem', padding: '8px' }}>Loading accounts...</div>
-          ) : accounts.length === 0 ? (
+          ) : sortedAccounts.length === 0 ? (
             <div style={{ fontSize: '0.85rem', padding: '8px', fontStyle: 'italic' }}>No accounts. Add one.</div>
           ) : (
-            accounts.map((acc) => {
+            sortedAccounts.map((acc) => {
               const isSelected = acc.id === selectedAccountId;
-              const balance = acc.id === draftAccount?.id ? summaryTotals.checkingEnding : (acc.monthlyRecords.slice(-1)[0]?.credit || acc.startingBalance);
+              const balance = currentBalanceByAccountId.get(acc.id) ?? 0;
               
               return (
                 <div
@@ -660,6 +741,51 @@ export function AccountPage({
                   placeholder="e.g. 4.5"
                 />
               </label>
+
+              <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+                <span>Credited Income</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {incomeSources.length === 0 ? (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                      No income sources available.
+                    </span>
+                  ) : (
+                    incomeSources.map((source) => {
+                      const assignedAccount = assignedIncomeAccountBySourceId.get(source.id);
+                      const isChecked = modalDraft.assignedIncomeSourceIds.includes(source.id);
+                      const isDisabled = Boolean(assignedAccount);
+
+                      return (
+                        <label
+                          key={source.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontSize: '0.85rem',
+                            color: isDisabled
+                              ? 'var(--md-sys-color-on-surface-variant)'
+                              : 'var(--md-sys-color-on-surface)',
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isDisabled}
+                            onChange={() => toggleModalIncomeSource(source.id)}
+                          />
+                          <span>{source.name}</span>
+                          {assignedAccount ? (
+                            <span style={{ fontSize: '0.75rem' }}>
+                              Assigned to {assignedAccount.name}
+                            </span>
+                          ) : null}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </fieldset>
             </div>
 
             <div className="modal-actions">
@@ -750,19 +876,19 @@ export function AccountPage({
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                    Active Budget Categories (driven by Budget configuration)
+                    Account Columns
                   </span>
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px', maxHeight: '110px', overflowY: 'auto' }}>
-                  {budgetCategories.length === 0 ? (
+                  {activeColumns.length === 0 ? (
                     <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                      No active budget categories. Add categories in the Budget panel.
+                      No extra account columns.
                     </span>
                   ) : (
-                    budgetCategories.map((cat) => (
+                    activeColumns.map((col) => (
                       <span
-                        key={cat.id}
+                        key={col.id}
                         className="status-badge"
                         style={{
                           backgroundColor: 'var(--md-sys-color-surface-container-high)',
@@ -782,10 +908,10 @@ export function AccountPage({
                             width: '8px',
                             height: '8px',
                             borderRadius: '50%',
-                            backgroundColor: cat.colorHex || 'var(--md-sys-color-outline)',
+                            backgroundColor: 'var(--md-sys-color-outline)',
                           }}
                         />
-                        <strong>{cat.name}</strong>
+                        <strong>{col.name}</strong>
                       </span>
                     ))
                   )}
@@ -851,7 +977,7 @@ export function AccountPage({
                   </thead>
                   <tbody>
                     {computedRecords.map((row, m) => {
-                      const isCurrent = row.month === 'Jul-26';
+                      const isCurrent = row.month === currentProjectionMonth.name;
                       // Forecast calculations are standard, no amber highlighting
                       const isForecast = ['Aug-26', 'Sep-26', 'Oct-26', 'Nov-26', 'Dec-26'].includes(row.month);
                       const rowClass = isCurrent

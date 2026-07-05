@@ -228,6 +228,7 @@ def test_account_create_and_update(mock_table_client):
         starting_balance=5000,
         start_date="2026-01-01",
         yield_rate=0.0,
+        assigned_income_source_ids=["income-source-primary"],
         columns=[AccountColumn("col-1", "Rent", "home")],
         monthly_records=[MonthlyRecord("Jan-26", 4000, {"col-1": 1500}, 500, 200)],
         created_at="2026-01-01T00:00:00Z",

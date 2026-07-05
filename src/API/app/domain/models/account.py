@@ -14,6 +14,7 @@ class Account:
     starting_balance: int
     start_date: str
     yield_rate: float
+    assigned_income_source_ids: list[str]
     columns: list[AccountColumn]
     monthly_records: list[MonthlyRecord]
     created_at: str

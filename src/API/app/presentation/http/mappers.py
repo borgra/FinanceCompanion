@@ -127,6 +127,7 @@ def to_account(account_id: str, payload: AccountUpsertRequest, created_at: str, 
         starting_balance=payload.starting_balance,
         start_date=payload.start_date,
         yield_rate=payload.yield_rate,
+        assigned_income_source_ids=payload.assigned_income_source_ids,
         columns=[to_account_column(item) for item in payload.columns],
         monthly_records=[to_monthly_record(item) for item in payload.monthly_records],
         created_at=created_at,
@@ -142,6 +143,7 @@ def to_account_payload(item: Account) -> AccountPayload:
         starting_balance=item.starting_balance,
         start_date=item.start_date,
         yield_rate=item.yield_rate,
+        assigned_income_source_ids=item.assigned_income_source_ids,
         columns=[
             AccountColumnPayload(
                 id=column.id,

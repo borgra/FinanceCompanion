@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.domain.exceptions import AuthenticationError, DomainError, NotFoundError
-from app.domain.models import BudgetCategory, BudgetSubCategory
+from app.domain.models import Account, BudgetCategory, BudgetSubCategory
 from app.infrastructure.in_memory_repositories import now_iso
 from app.presentation.http.dependencies import get_container, require_session_user
 from app.presentation.http.mappers import (
@@ -43,6 +43,27 @@ def _domain_error_to_http(exc: DomainError) -> HTTPException:
     if isinstance(exc, NotFoundError):
         return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+def _ensure_income_sources_are_unassigned(
+    account: Account,
+    existing_accounts: list[Account],
+    *,
+    current_account_id: str | None = None,
+) -> None:
+    assigned_source_ids = set(account.assigned_income_source_ids)
+    if not assigned_source_ids:
+        return
+
+    for existing in existing_accounts:
+        if existing.id == current_account_id:
+            continue
+        duplicated_source_ids = assigned_source_ids.intersection(existing.assigned_income_source_ids)
+        if duplicated_source_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Income source is already assigned to another account.",
+            )
 
 
 @router.get("/health")
@@ -209,6 +230,7 @@ def create_account(request: AccountUpsertRequest, user=Depends(require_session_u
         created_at=timestamp,
         updated_at=timestamp,
     )
+    _ensure_income_sources_are_unassigned(account, container.list_accounts.execute(user.user_id))
     return to_account_payload(container.create_account.execute(user.user_id, account))
 
 
@@ -223,6 +245,7 @@ def update_account(account_id: str, request: AccountUpsertRequest, user=Depends(
         created_at=existing.created_at,
         updated_at=now_iso(),
     )
+    _ensure_income_sources_are_unassigned(account, container.list_accounts.execute(user.user_id), current_account_id=account_id)
     return to_account_payload(container.update_account.execute(user.user_id, account_id, account))
 
 

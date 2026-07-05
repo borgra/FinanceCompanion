@@ -22,6 +22,7 @@ export type Account = {
   startingBalance: number;
   startDate: string; // YYYY-MM-DD
   yieldRate: number; // APY percentage
+  assignedIncomeSourceIds: string[];
   columns: AccountColumn[];
   monthlyRecords: MonthlyRecord[];
   createdAt: string;
@@ -34,6 +35,7 @@ export type AccountDraft = {
   startingBalance: string;
   startDate: string;
   yieldRate: string;
+  assignedIncomeSourceIds: string[];
   columns: AccountColumn[];
   monthlyRecords: MonthlyRecord[];
 };
@@ -62,22 +64,14 @@ export const defaultMonthlyRecords = (): MonthlyRecord[] =>
     savings: 0,
   }));
 
-const defaultColumns = (): AccountColumn[] => [
-  { id: 'house', name: 'House', icon: 'home' },
-  { id: 'chase', name: 'Chase', icon: 'credit_card' },
-  { id: 'amex-p', name: 'Amex - P', icon: 'credit_card' },
-  { id: 'amex-c', name: 'Amex - C', icon: 'credit_card' },
-  { id: 'rh', name: 'RH', icon: 'trending_up' },
-  { id: 'misc', name: 'Misc', icon: 'payments' },
-];
-
 export const emptyAccountDraft = (): AccountDraft => ({
   name: '',
   type: 'Checking',
   startingBalance: '',
   startDate: '2026-01-01',
   yieldRate: '',
-  columns: defaultColumns(),
+  assignedIncomeSourceIds: [],
+  columns: [],
   monthlyRecords: defaultMonthlyRecords(),
 });
 
@@ -87,6 +81,7 @@ export const toAccountDraft = (account: Account): AccountDraft => ({
   startingBalance: String(account.startingBalance),
   startDate: account.startDate ?? '2026-01-01',
   yieldRate: account.yieldRate !== undefined ? String(account.yieldRate) : '',
+  assignedIncomeSourceIds: [...(account.assignedIncomeSourceIds || [])],
   columns: (account.columns || []).map((c) => ({ ...c })),
   monthlyRecords: account.monthlyRecords.map((r) => ({
     ...r,

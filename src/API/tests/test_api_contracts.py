@@ -75,8 +75,31 @@ def test_seeded_contracts_are_served_after_authentication():
     assert budget_payload[0]["id"] == "cat-housing"
     assert budget_payload[0]["subCategories"][0]["id"] == "sub-house"
     assert account_payload[0]["id"] == "acc-lfcu"
+    assert account_payload[0]["assignedIncomeSourceIds"] == ["income-source-primary", "income-source-side"]
     assert account_payload[0]["monthlyRecords"][0]["month"] == "Jan-26"
     assert session_response.json()["email"] == "steveborgra@gmail.com"
+
+
+def test_income_source_can_only_be_assigned_to_one_account():
+    client = build_test_client()
+    authenticate(client)
+
+    response = client.post(
+        "/api/v1/accounts",
+        json={
+            "name": "Duplicate income account",
+            "type": "Checking",
+            "startingBalance": 0,
+            "startDate": "2026-01-01",
+            "yieldRate": 0,
+            "assignedIncomeSourceIds": ["income-source-primary"],
+            "columns": [],
+            "monthlyRecords": [],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Income source is already assigned to another account."
 
 
 def test_logout_clears_the_cookie_session():
