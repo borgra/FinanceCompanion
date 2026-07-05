@@ -10,6 +10,7 @@ import {
   type AccountType,
   emptyAccountDraft,
   toAccountDraft,
+  defaultMonthlyRecords,
 } from '../domain/account';
 
 type AccountPageProps = {
@@ -201,7 +202,11 @@ export function AccountPage({
   // Sync draft state on account switch
   useEffect(() => {
     if (!selectedAccount) return;
-    setDraftAccount(JSON.parse(JSON.stringify(selectedAccount)));
+    const accountCopy = JSON.parse(JSON.stringify(selectedAccount));
+    if (!accountCopy.monthlyRecords || accountCopy.monthlyRecords.length === 0) {
+      accountCopy.monthlyRecords = defaultMonthlyRecords();
+    }
+    setDraftAccount(accountCopy);
     setIsDirty(false);
     setSaveError(undefined);
   }, [selectedAccountId, accounts]);

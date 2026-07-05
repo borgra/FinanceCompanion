@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 
 class CamelModel(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
 
 
 class UserResponse(CamelModel):
@@ -124,5 +128,5 @@ class AccountUpsertRequest(CamelModel):
     starting_balance: int = Field(serialization_alias="startingBalance")
     start_date: str = Field(serialization_alias="startDate")
     yield_rate: float = Field(serialization_alias="yieldRate")
-    columns: list[AccountColumnPayload]
-    monthly_records: list[MonthlyRecordPayload] = Field(serialization_alias="monthlyRecords")
+    columns: list[AccountColumnPayload] = Field(default_factory=list)
+    monthly_records: list[MonthlyRecordPayload] = Field(default_factory=list, serialization_alias="monthlyRecords")
