@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def adjust_production_cookie_settings(self) -> Settings:
+    def adjust_production_cookie_settings(self) -> 'Settings':
         if self.environment != "development":
             self.session_cookie_secure = True
             self.session_cookie_samesite = "none"
