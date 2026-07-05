@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { BudgetRepository } from '../domain/budgetRepository';
@@ -242,7 +242,7 @@ describe('AccountPage', () => {
     await userEvent.click(firstInvestCell!);
     await userEvent.keyboard('{Enter}');
 
-    expect(document.activeElement).toBe(secondInvestCell);
+    await waitFor(() => expect(document.activeElement).toBe(secondInvestCell));
   });
 
   it('shows the starting balance as current balance when an account has no monthly rows', async () => {
@@ -266,5 +266,53 @@ describe('AccountPage', () => {
     const selector = accountName.closest('.account-selector-item');
 
     expect(selector).toHaveTextContent('Current Balance: $100.00');
+  });
+
+  it('auto-populates an editable ledger value down through future rows', async () => {
+    const repository = renderPage();
+
+    expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
+
+    const januaryInvestCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="invest-0"]');
+    expect(januaryInvestCell).not.toBeNull();
+
+    await userEvent.click(januaryInvestCell!);
+    await userEvent.clear(januaryInvestCell!);
+    await userEvent.type(januaryInvestCell!, '500');
+    await userEvent.click(
+      screen.getByRole('button', { name: /auto-populate invest from jan-26 down/i }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const accounts = await repository.listAccounts();
+    const updatedAccount = accounts.find((account) => account.id === 'acc-lfcu');
+
+    expect(updatedAccount?.monthlyRecords.map((record) => record.invest)).toEqual(
+      Array(12).fill(500),
+    );
+  });
+
+  it('auto-populates an account column value down through future rows', async () => {
+    const repository = renderPage();
+
+    expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
+
+    const januaryHouseCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="outflow-house-0"]');
+    expect(januaryHouseCell).not.toBeNull();
+
+    await userEvent.click(januaryHouseCell!);
+    await userEvent.clear(januaryHouseCell!);
+    await userEvent.type(januaryHouseCell!, '500');
+    await userEvent.click(
+      screen.getByRole('button', { name: /auto-populate house from jan-26 down/i }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const accounts = await repository.listAccounts();
+    const updatedAccount = accounts.find((account) => account.id === 'acc-lfcu');
+
+    expect(updatedAccount?.monthlyRecords.map((record) => record.outflows.house)).toEqual(
+      Array(12).fill(500),
+    );
   });
 });

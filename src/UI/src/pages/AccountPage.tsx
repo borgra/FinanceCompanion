@@ -188,6 +188,8 @@ type ExcelCellInputProps = {
   disabled?: boolean;
   focusId?: string;
   nextFocusId?: string;
+  fillDownLabel?: string;
+  onFillDown?: (val: string) => void;
 };
 
 function ExcelCellInput({
@@ -197,6 +199,8 @@ function ExcelCellInput({
   disabled = false,
   focusId,
   nextFocusId,
+  fillDownLabel,
+  onFillDown,
 }: ExcelCellInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [tempValue, setTempValue] = useState(String(value));
@@ -229,18 +233,46 @@ function ExcelCellInput({
     }
   };
 
+  const handleFillDown = () => {
+    onFillDown?.(tempValue);
+  };
+
   return (
-    <input
-      type="text"
-      className={`excel-cell-input ${className}`}
-      data-ledger-cell={focusId}
-      value={isFocused ? tempValue : formatMoney(value)}
-      onChange={(e) => setTempValue(e.target.value)}
-      onFocus={() => setIsFocused(true)}
-      onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
-      disabled={disabled}
-    />
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        className={`excel-cell-input ${className}`}
+        data-ledger-cell={focusId}
+        value={isFocused ? tempValue : formatMoney(value)}
+        onChange={(e) => setTempValue(e.target.value)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        disabled={disabled}
+      />
+      {isFocused && onFillDown ? (
+        <button
+          type="button"
+          className="link-button"
+          aria-label={fillDownLabel}
+          title={fillDownLabel}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={handleFillDown}
+          style={{
+            position: 'absolute',
+            right: '2px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            minHeight: '18px',
+            width: '18px',
+            padding: 0,
+            color: 'var(--md-sys-color-primary)',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>keyboard_double_arrow_down</span>
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -548,6 +580,38 @@ export function AccountPage({
             },
           }
         : r,
+    );
+    setDraftAccount({ ...draftAccount, monthlyRecords: nextRecords });
+    setIsDirty(true);
+  };
+
+  const fillDownCell = (
+    index: number,
+    field: 'invest' | 'savings',
+    value: string,
+  ) => {
+    if (!draftAccount) return;
+    const val = Number(value) || 0;
+    const nextRecords = draftAccount.monthlyRecords.map((record, rowIndex) =>
+      rowIndex >= index ? { ...record, [field]: val } : record,
+    );
+    setDraftAccount({ ...draftAccount, monthlyRecords: nextRecords });
+    setIsDirty(true);
+  };
+
+  const fillDownOutflowCell = (index: number, colId: string, value: string) => {
+    if (!draftAccount) return;
+    const val = Number(value) || 0;
+    const nextRecords = draftAccount.monthlyRecords.map((record, rowIndex) =>
+      rowIndex >= index
+        ? {
+            ...record,
+            outflows: {
+              ...record.outflows,
+              [colId]: val,
+            },
+          }
+        : record,
     );
     setDraftAccount({ ...draftAccount, monthlyRecords: nextRecords });
     setIsDirty(true);
@@ -1148,6 +1212,8 @@ export function AccountPage({
                                 nextFocusId={
                                   m < computedRecords.length - 1 ? `outflow-${col.id}-${m + 1}` : undefined
                                 }
+                                fillDownLabel={`Auto-populate ${col.name} from ${row.month} down`}
+                                onFillDown={(val) => fillDownOutflowCell(m, col.id, val)}
                               />
                             </td>
                           ))}
@@ -1165,6 +1231,8 @@ export function AccountPage({
                               onChange={(val) => updateCell(m, 'invest', val)}
                               focusId={`invest-${m}`}
                               nextFocusId={m < computedRecords.length - 1 ? `invest-${m + 1}` : undefined}
+                              fillDownLabel={`Auto-populate Invest from ${row.month} down`}
+                              onFillDown={(val) => fillDownCell(m, 'invest', val)}
                             />
                           </td>
                           <td className="excel-col-special">
@@ -1173,6 +1241,8 @@ export function AccountPage({
                               onChange={(val) => updateCell(m, 'savings', val)}
                               focusId={`savings-${m}`}
                               nextFocusId={m < computedRecords.length - 1 ? `savings-${m + 1}` : undefined}
+                              fillDownLabel={`Auto-populate Savings from ${row.month} down`}
+                              onFillDown={(val) => fillDownCell(m, 'savings', val)}
                             />
                           </td>
                           <td>
