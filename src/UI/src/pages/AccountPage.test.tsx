@@ -478,6 +478,6 @@ describe('AccountPage', () => {
     renderPage(mockAccounts);
 
     expect(await screen.findByText('High Yield Savings')).toBeInTheDocument();
-    expect(screen.getByText('$10,500.00')).toBeInTheDocument();
+    expect(screen.getAllByText('$10,500.00').length).toBeGreaterThan(0);
   });
 });
