@@ -178,7 +178,13 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
   // When the selected category changes, reset the draft.
   useEffect(() => {
-    if (!selectedCategory) return;
+    if (!selectedCategory) {
+      setDraftCategory(undefined);
+      setRemovedSubCategoryIds(new Set());
+      setIsDirty(false);
+      setSaveError(undefined);
+      return;
+    }
     // Deep clone to detach from repository state.
     const cloned: BudgetCategoryWithSubCategories = JSON.parse(JSON.stringify(selectedCategory));
     setDraftCategory(cloned);
