@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import type { AccountRepository } from '../domain/accountRepository';
@@ -28,6 +28,25 @@ const maxAccountBalance = 999_999_999.99;
 const accountTypeOrder: Record<AccountType, number> = {
   Checking: 0,
   Savings: 1,
+};
+
+const toMonthInputValue = (dateValue: string) => dateValue.slice(0, 7);
+
+const toStoredMonthStart = (monthValue: string) => `${monthValue || '2026-01'}-01`;
+
+const formatMonthYear = (dateValue: string) => {
+  const [year, month] = toMonthInputValue(dateValue).split('-');
+  if (!year || !month) return dateValue;
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(Number(year), Number(month) - 1, 1)));
+};
+
+const createColumnId = (name: string) => {
+  const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `${base || 'column'}-${crypto.randomUUID().slice(0, 6)}`;
 };
 
 const formatMoney = (amount: number) => {
@@ -167,9 +186,18 @@ type ExcelCellInputProps = {
   onChange: (val: string) => void;
   className?: string;
   disabled?: boolean;
+  focusId?: string;
+  nextFocusId?: string;
 };
 
-function ExcelCellInput({ value, onChange, className = '', disabled = false }: ExcelCellInputProps) {
+function ExcelCellInput({
+  value,
+  onChange,
+  className = '',
+  disabled = false,
+  focusId,
+  nextFocusId,
+}: ExcelCellInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [tempValue, setTempValue] = useState(String(value));
 
@@ -185,14 +213,32 @@ function ExcelCellInput({ value, onChange, className = '', disabled = false }: E
     onChange(tempValue);
   };
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    onChange(tempValue);
+    setIsFocused(false);
+
+    if (nextFocusId) {
+      window.requestAnimationFrame(() => {
+        const nextInput = document.querySelector<HTMLInputElement>(
+          `[data-ledger-cell="${nextFocusId}"]`,
+        );
+        nextInput?.focus();
+      });
+    }
+  };
+
   return (
     <input
       type="text"
       className={`excel-cell-input ${className}`}
+      data-ledger-cell={focusId}
       value={isFocused ? tempValue : formatMoney(value)}
       onChange={(e) => setTempValue(e.target.value)}
       onFocus={() => setIsFocused(true)}
       onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
       disabled={disabled}
     />
   );
@@ -219,6 +265,7 @@ export function AccountPage({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalAccountId, setModalAccountId] = useState<string | null>(null);
   const [modalDraft, setModalDraft] = useState<AccountDraft>(() => emptyAccountDraft());
+  const [newColumnName, setNewColumnName] = useState('');
 
   const isEditingAccount = modalAccountId !== null;
   const sortedAccounts = useMemo(() => sortAccounts(accounts), [accounts]);
@@ -316,6 +363,7 @@ export function AccountPage({
       accountCopy.monthlyRecords = defaultMonthlyRecords();
     }
     setDraftAccount(accountCopy);
+    setNewColumnName('');
     setIsDirty(false);
     setSaveError(undefined);
   }, [selectedAccount]);
@@ -350,8 +398,7 @@ export function AccountPage({
     setIsSaving(true);
     setSaveError(undefined);
     try {
-      const modalColumns = modalDraft.columns.filter((col) => !col.isDeleted);
-      const columnsPayload = modalColumns.map((col) => ({
+      const columnsPayload = activeColumns.map((col) => ({
         id: col.id,
         name: col.name,
         icon: col.icon,
@@ -506,6 +553,46 @@ export function AccountPage({
     setIsDirty(true);
   };
 
+  const addAccountColumn = () => {
+    if (!draftAccount) return;
+    const name = newColumnName.trim();
+    if (!name) return;
+
+    const column = {
+      id: createColumnId(name),
+      name,
+      icon: 'payments',
+    };
+    const monthlyRecords = draftAccount.monthlyRecords.map((record) => ({
+      ...record,
+      outflows: {
+        ...record.outflows,
+        [column.id]: 0,
+      },
+    }));
+
+    setDraftAccount({
+      ...draftAccount,
+      columns: [...draftAccount.columns, column],
+      monthlyRecords,
+    });
+    setNewColumnName('');
+    setIsDirty(true);
+  };
+
+  const moveAccountColumn = (columnId: string, direction: -1 | 1) => {
+    if (!draftAccount) return;
+    const columns = [...draftAccount.columns];
+    const index = columns.findIndex((column) => column.id === columnId);
+    const nextIndex = index + direction;
+    if (index < 0 || nextIndex < 0 || nextIndex >= columns.length) return;
+
+    const [column] = columns.splice(index, 1);
+    columns.splice(nextIndex, 0, column);
+    setDraftAccount({ ...draftAccount, columns });
+    setIsDirty(true);
+  };
+
   const toggleModalIncomeSource = (sourceId: string) => {
     const assigned = new Set(modalDraft.assignedIncomeSourceIds);
     if (assigned.has(sourceId)) {
@@ -538,7 +625,7 @@ export function AccountPage({
       accounts.map((account) => {
         const records = computeAccountRecords(account, incomeSources, projectionMonths);
         const currentRecord = records.find((record) => record.month === currentProjectionMonth.name);
-        return [account.id, currentRecord?.net ?? 0];
+        return [account.id, currentRecord?.net ?? account.startingBalance];
       }),
     );
   }, [accounts, currentProjectionMonth.name, incomeSources, projectionMonths]);
@@ -605,7 +692,7 @@ export function AccountPage({
             style={{ minHeight: '28px', padding: '0 10px', fontSize: '0.75rem', borderRadius: 'var(--md-sys-shape-corner-s)' }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">add</span>
-            + Add Account
+            Add Account
           </button>
         </div>
 
@@ -723,11 +810,13 @@ export function AccountPage({
               </label>
 
               <label className="field">
-                <span>Start Realization Date</span>
+                <span>Start Month</span>
                 <input
-                  type="date"
-                  value={modalDraft.startDate}
-                  onChange={(e) => setModalDraft({ ...modalDraft, startDate: e.target.value })}
+                  type="month"
+                  value={toMonthInputValue(modalDraft.startDate)}
+                  onChange={(e) =>
+                    setModalDraft({ ...modalDraft, startDate: toStoredMonthStart(e.target.value) })
+                  }
                 />
               </label>
 
@@ -863,8 +952,8 @@ export function AccountPage({
                 style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}
               >
                 <div className="status-badge" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', padding: '12px' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Start Date</span>
-                  <strong style={{ fontSize: '0.95rem' }}>{draftAccount.startDate}</strong>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Start Month</span>
+                  <strong style={{ fontSize: '0.95rem' }}>{formatMonthYear(draftAccount.startDate)}</strong>
                 </div>
                 <div className="status-badge" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', padding: '12px' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Yield / APY</span>
@@ -874,10 +963,43 @@ export function AccountPage({
 
               {/* Spending categories columns display */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                   <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--md-sys-color-on-surface-variant)' }}>
                     Account Columns
                   </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <input
+                      aria-label="New account column name"
+                      value={newColumnName}
+                      onChange={(e) => setNewColumnName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addAccountColumn();
+                        }
+                      }}
+                      placeholder="Column name"
+                      style={{
+                        width: '150px',
+                        minHeight: '30px',
+                        padding: '4px 8px',
+                        borderRadius: 'var(--md-sys-shape-corner-xs)',
+                        border: '1px solid var(--md-sys-color-outline)',
+                        background: 'transparent',
+                        color: 'var(--md-sys-color-on-surface)',
+                        fontSize: '0.8rem',
+                      }}
+                    />
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      onClick={addAccountColumn}
+                      disabled={!newColumnName.trim()}
+                      style={{ minHeight: '30px', padding: '0 8px', fontSize: '0.75rem' }}
+                    >
+                      Add Column
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px', maxHeight: '110px', overflowY: 'auto' }}>
@@ -886,7 +1008,7 @@ export function AccountPage({
                       No extra account columns.
                     </span>
                   ) : (
-                    activeColumns.map((col) => (
+                    activeColumns.map((col, index) => (
                       <span
                         key={col.id}
                         className="status-badge"
@@ -912,6 +1034,26 @@ export function AccountPage({
                           }}
                         />
                         <strong>{col.name}</strong>
+                        <button
+                          className="link-button"
+                          type="button"
+                          aria-label={`Move ${col.name} left`}
+                          disabled={index === 0}
+                          onClick={() => moveAccountColumn(col.id, -1)}
+                          style={{ minHeight: 'auto', padding: 0 }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>chevron_left</span>
+                        </button>
+                        <button
+                          className="link-button"
+                          type="button"
+                          aria-label={`Move ${col.name} right`}
+                          disabled={index === activeColumns.length - 1}
+                          onClick={() => moveAccountColumn(col.id, 1)}
+                          style={{ minHeight: 'auto', padding: 0 }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>chevron_right</span>
+                        </button>
                       </span>
                     ))
                   )}
@@ -1002,6 +1144,10 @@ export function AccountPage({
                               <ExcelCellInput
                                 value={row.outflows[col.id] || 0}
                                 onChange={(val) => updateOutflowCell(m, col.id, val)}
+                                focusId={`outflow-${col.id}-${m}`}
+                                nextFocusId={
+                                  m < computedRecords.length - 1 ? `outflow-${col.id}-${m + 1}` : undefined
+                                }
                               />
                             </td>
                           ))}
@@ -1017,12 +1163,16 @@ export function AccountPage({
                             <ExcelCellInput
                               value={row.invest}
                               onChange={(val) => updateCell(m, 'invest', val)}
+                              focusId={`invest-${m}`}
+                              nextFocusId={m < computedRecords.length - 1 ? `invest-${m + 1}` : undefined}
                             />
                           </td>
                           <td className="excel-col-special">
                             <ExcelCellInput
                               value={row.savings}
                               onChange={(val) => updateCell(m, 'savings', val)}
+                              focusId={`savings-${m}`}
+                              nextFocusId={m < computedRecords.length - 1 ? `savings-${m + 1}` : undefined}
                             />
                           </td>
                           <td>

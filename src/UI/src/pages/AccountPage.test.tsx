@@ -3,11 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import { createMockAccountRepository } from '../domain/accountRepository';
+import type { Account } from '../domain/account';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import { AccountPage } from './AccountPage';
 
-const renderPage = () => {
-  const repository = createMockAccountRepository();
+const renderPage = (initialAccounts?: Account[]) => {
+  const repository = createMockAccountRepository({ initialAccounts });
   const mockIncomeRepository: IncomeSourceRepository = {
     listIncomeSources: () => Promise.resolve([
       {
@@ -112,7 +113,7 @@ describe('AccountPage', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
-    await userEvent.click(screen.getByRole('button', { name: /\+ add account/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^add account$/i }));
 
     expect(screen.getByRole('heading', { name: /add new account/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/account name/i)).toHaveValue('');
@@ -139,7 +140,7 @@ describe('AccountPage', () => {
     expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
 
     expect(screen.getByLabelText(/account details/i)).toBeInTheDocument();
-    expect(screen.getByText('Start Date')).toBeInTheDocument();
+    expect(screen.getByText('Start Month')).toBeInTheDocument();
     expect(screen.getByText('Yield / APY')).toBeInTheDocument();
     expect(screen.queryByText('Account Name')).not.toBeInTheDocument();
     expect(screen.queryByText('Start Balance')).not.toBeInTheDocument();
@@ -171,7 +172,7 @@ describe('AccountPage', () => {
   it('enforces account name and starting balance limits in the modal', async () => {
     renderPage();
 
-    await userEvent.click(await screen.findByRole('button', { name: /\+ add account/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /^add account$/i }));
 
     const nameInput = screen.getByLabelText(/account name/i) as HTMLInputElement;
     const balanceInput = screen.getByLabelText(/starting balance/i) as HTMLInputElement;
@@ -201,9 +202,69 @@ describe('AccountPage', () => {
     expect(screen.getByLabelText(/primary job/i)).toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
-    await userEvent.click(screen.getByRole('button', { name: /\+ add account/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^add account$/i }));
 
     expect(screen.getByLabelText(/primary job/i)).toBeDisabled();
     expect(screen.getByText(/assigned to liberty federal credit union/i)).toBeInTheDocument();
+  });
+
+  it('lets account columns be added and moved in the ledger table', async () => {
+    const repository = renderPage();
+
+    expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText(/new account column name/i), 'Travel');
+    await userEvent.click(screen.getByRole('button', { name: /add column/i }));
+
+    expect(screen.getByRole('columnheader', { name: /travel/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /move travel left/i }));
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const accounts = await repository.listAccounts();
+    const updatedAccount = accounts.find((account) => account.id === 'acc-lfcu');
+    const columnNames = updatedAccount?.columns.map((column) => column.name);
+
+    expect(columnNames?.slice(-2)).toEqual(['Travel', 'Misc']);
+  });
+
+  it('moves focus to the same ledger column in the next row when pressing Enter', async () => {
+    renderPage();
+
+    expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
+
+    const firstInvestCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="invest-0"]');
+    const secondInvestCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="invest-1"]');
+
+    expect(firstInvestCell).not.toBeNull();
+    expect(secondInvestCell).not.toBeNull();
+
+    await userEvent.click(firstInvestCell!);
+    await userEvent.keyboard('{Enter}');
+
+    expect(document.activeElement).toBe(secondInvestCell);
+  });
+
+  it('shows the starting balance as current balance when an account has no monthly rows', async () => {
+    renderPage([
+      {
+        id: 'acc-empty',
+        name: 'Sparse Checking',
+        type: 'Checking',
+        startingBalance: 100,
+        startDate: '2026-07-01',
+        yieldRate: 0,
+        assignedIncomeSourceIds: [],
+        columns: [],
+        monthlyRecords: [],
+        createdAt: '2026-06-30T00:00:00.000Z',
+        updatedAt: '2026-06-30T00:00:00.000Z',
+      },
+    ]);
+
+    const accountName = await screen.findByText('Sparse Checking');
+    const selector = accountName.closest('.account-selector-item');
+
+    expect(selector).toHaveTextContent('Current Balance: $100.00');
   });
 });
