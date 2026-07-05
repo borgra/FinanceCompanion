@@ -23,6 +23,7 @@ export type Account = {
   startDate: string; // YYYY-MM-DD
   yieldRate: number; // APY percentage
   assignedIncomeSourceIds: string[];
+  savingsAccountId?: string;
   columns: AccountColumn[];
   monthlyRecords: MonthlyRecord[];
   createdAt: string;
@@ -36,6 +37,7 @@ export type AccountDraft = {
   startDate: string;
   yieldRate: string;
   assignedIncomeSourceIds: string[];
+  savingsAccountId: string;
   columns: AccountColumn[];
   monthlyRecords: MonthlyRecord[];
 };
@@ -71,6 +73,7 @@ export const emptyAccountDraft = (): AccountDraft => ({
   startDate: '2026-01-01',
   yieldRate: '',
   assignedIncomeSourceIds: [],
+  savingsAccountId: '',
   columns: [],
   monthlyRecords: defaultMonthlyRecords(),
 });
@@ -82,6 +85,7 @@ export const toAccountDraft = (account: Account): AccountDraft => ({
   startDate: account.startDate ?? '2026-01-01',
   yieldRate: account.yieldRate !== undefined ? String(account.yieldRate) : '',
   assignedIncomeSourceIds: [...(account.assignedIncomeSourceIds || [])],
+  savingsAccountId: account.savingsAccountId || '',
   columns: (account.columns || []).map((c) => ({ ...c })),
   monthlyRecords: account.monthlyRecords.map((r) => ({
     ...r,

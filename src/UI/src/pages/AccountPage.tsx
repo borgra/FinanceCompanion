@@ -171,7 +171,11 @@ const computeAccountRecords = (
 
     invest = Number(record.invest) || 0;
     savings = Number(record.savings) || 0;
-    net = start + credit - expenses - invest - savings;
+    if (account.type === 'Savings') {
+      net = start + credit - expenses - invest + savings;
+    } else {
+      net = start + credit - expenses - invest - savings;
+    }
     currentStart = net;
 
     return {
@@ -521,6 +525,7 @@ export function AccountPage({
         startDate: draftAccount.startDate,
         yieldRate: String(draftAccount.yieldRate),
         assignedIncomeSourceIds: draftAccount.assignedIncomeSourceIds || [],
+        savingsAccountId: draftAccount.savingsAccountId || '',
         columns: columnsPayload,
         monthlyRecords: recordsPayload,
       };
@@ -584,6 +589,7 @@ export function AccountPage({
         startDate: modalDraft.startDate || '2026-01-01',
         yieldRate: String(Number(modalDraft.yieldRate) || 0),
         assignedIncomeSourceIds: modalDraft.assignedIncomeSourceIds,
+        savingsAccountId: modalDraft.savingsAccountId || '',
         columns: columnsPayload,
         monthlyRecords: recordsPayload,
       };
@@ -1020,6 +1026,28 @@ export function AccountPage({
                 />
               </label>
 
+              {modalDraft.type === 'Checking' && (
+                <label className="field">
+                  <span>Associated Savings Account</span>
+                  <select
+                    value={modalDraft.savingsAccountId}
+                    onChange={(e) =>
+                      setModalDraft({ ...modalDraft, savingsAccountId: e.target.value })
+                    }
+                    style={{ border: '1.5px solid var(--md-sys-color-outline)', borderRadius: 'var(--md-sys-shape-corner-s)', height: '48px', color: 'var(--md-sys-color-on-surface)', backgroundColor: 'transparent', padding: '10px' }}
+                  >
+                    <option value="" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>-- No Associated Savings Account --</option>
+                    {(accounts || [])
+                      .filter((acc) => acc.type === 'Savings' && acc.id !== modalAccountId)
+                      .map((acc) => (
+                        <option key={acc.id} value={acc.id} style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
+                          {acc.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
+
               <fieldset className="field compact-fieldset">
                 <span>Credited Income</span>
                 <div className="income-credit-table">
@@ -1434,6 +1462,10 @@ export function AccountPage({
                               nextFocusId={m < computedRecords.length - 1 ? `savings-${m + 1}` : undefined}
                               fillDownLabel={`Auto-populate Savings from ${row.month} down`}
                               onFillDown={(val) => fillDownCell(m, 'savings', val)}
+                              disabled={
+                                draftAccount?.type === 'Savings' ||
+                                (draftAccount?.type === 'Checking' && !draftAccount?.savingsAccountId)
+                              }
                             />
                           </td>
                           <td>

@@ -163,6 +163,7 @@ def _account_from_entity(entity: dict) -> Account:
         monthly_records=monthly_records,
         created_at=entity["createdAt"],
         updated_at=entity["updatedAt"],
+        savings_account_id=entity.get("savingsAccountId"),
     )
 
 
@@ -181,6 +182,7 @@ def _account_to_entity(user_id: str, account: Account) -> dict:
         "updatedAt": account.updated_at,
         "columnsJson": json.dumps([asdict(c) for c in account.columns]),
         "monthlyRecordsJson": json.dumps([asdict(r) for r in account.monthly_records]),
+        "savingsAccountId": account.savings_account_id,
     }
 
 
@@ -525,5 +527,6 @@ def seed_cosmos_database(client: TableClient, allowed_email: str) -> None:
                 monthly_records=monthly_records,
                 created_at=raw_acc["createdAt"],
                 updated_at=raw_acc["updatedAt"],
+                savings_account_id=raw_acc.get("savingsAccountId"),
             )
             client.upsert_entity(_account_to_entity(user_id, account))

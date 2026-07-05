@@ -9,6 +9,7 @@ const draftToPayload = (draft: AccountDraft) => ({
   startDate: draft.startDate,
   yieldRate: Number(draft.yieldRate) || 0,
   assignedIncomeSourceIds: draft.assignedIncomeSourceIds,
+  savingsAccountId: draft.savingsAccountId ? draft.savingsAccountId : null,
   columns: draft.columns,
   monthlyRecords: draft.monthlyRecords,
 });

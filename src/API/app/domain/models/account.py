@@ -19,3 +19,4 @@ class Account:
     monthly_records: list[MonthlyRecord]
     created_at: str
     updated_at: str
+    savings_account_id: str | None = None

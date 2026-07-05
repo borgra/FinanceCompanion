@@ -232,7 +232,8 @@ def test_account_create_and_update(mock_table_client):
         columns=[AccountColumn("col-1", "Rent", "home")],
         monthly_records=[MonthlyRecord("Jan-26", 4000, {"col-1": 1500}, 500, 200)],
         created_at="2026-01-01T00:00:00Z",
-        updated_at="2026-01-01T00:00:00Z"
+        updated_at="2026-01-01T00:00:00Z",
+        savings_account_id=None
     )
     
     created = repo.create_for_user("user-123", account)

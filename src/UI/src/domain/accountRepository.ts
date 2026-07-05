@@ -32,6 +32,7 @@ const draftToAccountFields = (draft: AccountDraft) => ({
   startDate: draft.startDate || '2026-01-01',
   yieldRate: Number(draft.yieldRate) || 0,
   assignedIncomeSourceIds: [...draft.assignedIncomeSourceIds],
+  savingsAccountId: draft.savingsAccountId,
   columns: draft.columns.map((c) => ({ ...c })),
   monthlyRecords: draft.monthlyRecords.map((r) => ({
     month: r.month,

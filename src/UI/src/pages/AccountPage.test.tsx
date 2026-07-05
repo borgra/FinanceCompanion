@@ -392,4 +392,92 @@ describe('AccountPage', () => {
       ),
     ).toEqual(Array(12).fill(1450));
   });
+
+  it('disables Savings column if Savings account or Checking account with no associated savings', async () => {
+    const mockAccounts: Account[] = [
+      {
+        id: 'acc-checking-no-savings',
+        name: 'Checking No Savings',
+        type: 'Checking',
+        startingBalance: 1000,
+        startDate: '2026-01-01',
+        yieldRate: 0,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: '',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+      {
+        id: 'acc-savings',
+        name: 'Morgan Stanley Premium Savings',
+        type: 'Savings',
+        startingBalance: 5000,
+        startDate: '2026-01-01',
+        yieldRate: 4.5,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: '',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+      {
+        id: 'acc-checking-with-savings',
+        name: 'Checking With Savings',
+        type: 'Checking',
+        startingBalance: 2000,
+        startDate: '2026-01-01',
+        yieldRate: 0,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: 'acc-savings',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+    ];
+
+    renderPage(mockAccounts);
+
+    expect(await screen.findByText('Checking No Savings')).toBeInTheDocument();
+
+    const firstSavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
+    expect(firstSavingsCell).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /morgan stanley premium savings/i }));
+    const secondSavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
+    expect(secondSavingsCell).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /checking with savings/i }));
+    const thirdSavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
+    expect(thirdSavingsCell).not.toBeDisabled();
+  });
+
+  it('credits the savings amount to the net balance when account type is Savings', async () => {
+    const mockAccounts: Account[] = [
+      {
+        id: 'acc-savings-test',
+        name: 'High Yield Savings',
+        type: 'Savings',
+        startingBalance: 10000,
+        startDate: '2026-01-01',
+        yieldRate: 4.5,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: '',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+    ];
+
+    mockAccounts[0].monthlyRecords[0].savings = 500;
+
+    renderPage(mockAccounts);
+
+    expect(await screen.findByText('High Yield Savings')).toBeInTheDocument();
+    expect(screen.getByText('$10,500.00')).toBeInTheDocument();
+  });
 });

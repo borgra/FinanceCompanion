@@ -117,6 +117,7 @@ class AccountPayload(CamelModel):
     start_date: str = Field(serialization_alias="startDate")
     yield_rate: float = Field(serialization_alias="yieldRate")
     assigned_income_source_ids: list[str] = Field(default_factory=list, serialization_alias="assignedIncomeSourceIds")
+    savings_account_id: str | None = Field(default=None, serialization_alias="savingsAccountId")
     columns: list[AccountColumnPayload]
     monthly_records: list[MonthlyRecordPayload] = Field(serialization_alias="monthlyRecords")
     created_at: str = Field(serialization_alias="createdAt")
@@ -130,5 +131,6 @@ class AccountUpsertRequest(CamelModel):
     start_date: str = Field(serialization_alias="startDate")
     yield_rate: float = Field(serialization_alias="yieldRate")
     assigned_income_source_ids: list[str] = Field(default_factory=list, serialization_alias="assignedIncomeSourceIds")
+    savings_account_id: str | None = Field(default=None, serialization_alias="savingsAccountId")
     columns: list[AccountColumnPayload] = Field(default_factory=list)
     monthly_records: list[MonthlyRecordPayload] = Field(default_factory=list, serialization_alias="monthlyRecords")

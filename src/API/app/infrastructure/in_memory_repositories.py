@@ -98,6 +98,7 @@ def _account_from_dict(data: dict) -> Account:
         monthly_records=[_monthly_record_from_dict(item) for item in data["monthlyRecords"]],
         created_at=data["createdAt"],
         updated_at=data["updatedAt"],
+        savings_account_id=data.get("savingsAccountId"),
     )
 
 
