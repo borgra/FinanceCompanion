@@ -249,6 +249,7 @@ function ExcelCellInput({
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         disabled={disabled}
+        style={isFocused && onFillDown ? { paddingLeft: '22px' } : undefined}
       />
       {isFocused && onFillDown ? (
         <button
@@ -260,7 +261,7 @@ function ExcelCellInput({
           onClick={handleFillDown}
           style={{
             position: 'absolute',
-            right: '2px',
+            left: '2px',
             top: '50%',
             transform: 'translateY(-50%)',
             minHeight: '18px',
