@@ -78,10 +78,10 @@ def _account_column_from_dict(data: dict) -> AccountColumn:
 def _monthly_record_from_dict(data: dict) -> MonthlyRecord:
     return MonthlyRecord(
         month=data["month"],
-        credit=int(data["credit"]),
-        outflows={key: int(value) for key, value in data["outflows"].items()},
-        invest=int(data["invest"]),
-        savings=int(data["savings"]),
+        credit=float(data["credit"]),
+        outflows={key: float(value) for key, value in data["outflows"].items()},
+        invest=float(data["invest"]),
+        savings=float(data["savings"]),
     )
 
 
@@ -90,7 +90,7 @@ def _account_from_dict(data: dict) -> Account:
         id=data["id"],
         name=data["name"],
         type=data["type"],
-        starting_balance=int(data["startingBalance"]),
+        starting_balance=float(data["startingBalance"]),
         start_date=data["startDate"],
         yield_rate=float(data["yieldRate"]),
         assigned_income_source_ids=list(data.get("assignedIncomeSourceIds", [])),

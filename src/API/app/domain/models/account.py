@@ -11,7 +11,7 @@ class Account:
     id: str
     name: str
     type: str
-    starting_balance: int
+    starting_balance: float
     start_date: str
     yield_rate: float
     assigned_income_source_ids: list[str]

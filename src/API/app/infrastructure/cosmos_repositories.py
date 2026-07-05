@@ -144,10 +144,10 @@ def _account_from_entity(entity: dict) -> Account:
     monthly_records = [
         MonthlyRecord(
             month=r["month"],
-            credit=r["credit"],
-            outflows=r["outflows"],
-            invest=r["invest"],
-            savings=r["savings"],
+            credit=float(r["credit"]),
+            outflows={k: float(v) for k, v in r["outflows"].items()},
+            invest=float(r["invest"]),
+            savings=float(r["savings"]),
         )
         for r in records_data
     ]
@@ -155,7 +155,7 @@ def _account_from_entity(entity: dict) -> Account:
         id=entity.get("entityId") or entity.get("id") or entity["RowKey"].split(":", 1)[1],
         name=entity["name"],
         type=entity["type"],
-        starting_balance=int(entity["startingBalance"]),
+        starting_balance=float(entity["startingBalance"]),
         start_date=entity["startDate"],
         yield_rate=float(entity["yieldRate"]),
         assigned_income_source_ids=json.loads(entity.get("assignedIncomeSourceIdsJson", "[]")),
@@ -508,10 +508,10 @@ def seed_cosmos_database(client: TableClient, allowed_email: str) -> None:
             monthly_records = [
                 MonthlyRecord(
                     month=r["month"],
-                    credit=int(r["credit"]),
-                    outflows={k: int(v) for k, v in r["outflows"].items()},
-                    invest=int(r["invest"]),
-                    savings=int(r["savings"]),
+                    credit=float(r["credit"]),
+                    outflows={k: float(v) for k, v in r["outflows"].items()},
+                    invest=float(r["invest"]),
+                    savings=float(r["savings"]),
                 )
                 for r in raw_acc["monthlyRecords"]
             ]
@@ -519,7 +519,7 @@ def seed_cosmos_database(client: TableClient, allowed_email: str) -> None:
                 id=raw_acc["id"],
                 name=raw_acc["name"],
                 type=raw_acc["type"],
-                starting_balance=int(raw_acc["startingBalance"]),
+                starting_balance=float(raw_acc["startingBalance"]),
                 start_date=raw_acc["startDate"],
                 yield_rate=float(raw_acc["yieldRate"]),
                 assigned_income_source_ids=list(raw_acc.get("assignedIncomeSourceIds", [])),

@@ -103,17 +103,17 @@ class AccountColumnPayload(CamelModel):
 
 class MonthlyRecordPayload(CamelModel):
     month: str
-    credit: int
-    outflows: dict[str, int]
-    invest: int
-    savings: int
+    credit: float
+    outflows: dict[str, float]
+    invest: float
+    savings: float
 
 
 class AccountPayload(CamelModel):
     id: str
     name: str
     type: str
-    starting_balance: int = Field(serialization_alias="startingBalance")
+    starting_balance: float = Field(serialization_alias="startingBalance")
     start_date: str = Field(serialization_alias="startDate")
     yield_rate: float = Field(serialization_alias="yieldRate")
     assigned_income_source_ids: list[str] = Field(default_factory=list, serialization_alias="assignedIncomeSourceIds")
@@ -127,7 +127,7 @@ class AccountPayload(CamelModel):
 class AccountUpsertRequest(CamelModel):
     name: str
     type: str
-    starting_balance: int = Field(serialization_alias="startingBalance")
+    starting_balance: float = Field(serialization_alias="startingBalance")
     start_date: str = Field(serialization_alias="startDate")
     yield_rate: float = Field(serialization_alias="yieldRate")
     assigned_income_source_ids: list[str] = Field(default_factory=list, serialization_alias="assignedIncomeSourceIds")

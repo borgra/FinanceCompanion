@@ -6,7 +6,7 @@ from dataclasses import dataclass
 @dataclass(slots=True)
 class MonthlyRecord:
     month: str
-    credit: int
-    outflows: dict[str, int]
-    invest: int
-    savings: int
+    credit: float
+    outflows: dict[str, float]
+    invest: float
+    savings: float
