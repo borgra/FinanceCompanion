@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _env_files = []
@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "https://finance-companion-ui.example.com"]
     )
+
+    @model_validator(mode="after")
+    def adjust_production_cookie_settings(self) -> Settings:
+        if self.environment != "development":
+            self.session_cookie_secure = True
+            self.session_cookie_samesite = "none"
+        return self
 
     def validate_security(self) -> None:
         if self.environment != "development" and self.session_secret == "local-dev-session-secret-change-me":
