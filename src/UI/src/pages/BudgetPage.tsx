@@ -465,7 +465,9 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                         {
                           '--category-color': effectiveCat.colorHex,
                           display: 'flex',
+                          flexDirection: 'row',
                           alignItems: 'stretch',
+                          gap: 0,
                           padding: 0,
                           overflow: 'hidden'
                         } as React.CSSProperties
