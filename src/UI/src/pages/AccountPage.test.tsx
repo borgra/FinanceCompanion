@@ -50,6 +50,14 @@ const renderPage = (initialAccounts?: Account[]) => {
             monthlyAmountUsd: 1350,
             createdAt: '2026-06-30T00:00:00.000Z',
             updatedAt: '2026-06-30T00:00:00.000Z',
+          },
+          {
+            id: 'sub-hoa',
+            categoryId: 'cat-housing',
+            name: 'HOA',
+            monthlyAmountUsd: 100,
+            createdAt: '2026-06-30T00:00:00.000Z',
+            updatedAt: '2026-06-30T00:00:00.000Z',
           }
         ]
       }
@@ -314,5 +322,52 @@ describe('AccountPage', () => {
     expect(updatedAccount?.monthlyRecords.map((record) => record.outflows.house)).toEqual(
       Array(12).fill(500),
     );
+  });
+
+  it('associates a budget sub-category to the account as a populated ledger column', async () => {
+    const repository = renderPage();
+
+    expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText(/budget category to associate/i), 'cat-housing');
+    await userEvent.selectOptions(screen.getByLabelText(/budget sub-category to associate/i), 'sub-hoa');
+    await userEvent.click(screen.getByRole('button', { name: /associate budget/i }));
+
+    expect(screen.getByRole('columnheader', { name: /hoa/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const accounts = await repository.listAccounts();
+    const updatedAccount = accounts.find((account) => account.id === 'acc-lfcu');
+
+    expect(updatedAccount?.columns.some((column) => column.name === 'HOA')).toBe(true);
+    expect(
+      updatedAccount?.monthlyRecords.map(
+        (record) => record.outflows['budget-sub-category-sub-hoa'],
+      ),
+    ).toEqual(Array(12).fill(100));
+  });
+
+  it('associates a whole budget category to the account as a populated ledger column', async () => {
+    const repository = renderPage();
+
+    expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText(/budget category to associate/i), 'cat-housing');
+    await userEvent.click(screen.getByRole('button', { name: /associate budget/i }));
+
+    expect(screen.getByRole('columnheader', { name: /housing/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const accounts = await repository.listAccounts();
+    const updatedAccount = accounts.find((account) => account.id === 'acc-lfcu');
+
+    expect(updatedAccount?.columns.some((column) => column.name === 'Housing')).toBe(true);
+    expect(
+      updatedAccount?.monthlyRecords.map(
+        (record) => record.outflows['budget-category-cat-housing'],
+      ),
+    ).toEqual(Array(12).fill(1450));
   });
 });

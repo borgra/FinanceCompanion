@@ -3,6 +3,7 @@ import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import type { AccountRepository } from '../domain/accountRepository';
 import type { IncomeSource } from '../domain/incomeSource';
+import type { BudgetCategoryWithSubCategories } from '../domain/budget';
 import {
   type Account,
   type AccountDraft,
@@ -48,6 +49,10 @@ const createColumnId = (name: string) => {
   const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return `${base || 'column'}-${crypto.randomUUID().slice(0, 6)}`;
 };
+
+const budgetCategoryColumnId = (categoryId: string) => `budget-category-${categoryId}`;
+
+const budgetSubCategoryColumnId = (subCategoryId: string) => `budget-sub-category-${subCategoryId}`;
 
 const formatMoney = (amount: number) => {
   if (amount < 0) {
@@ -284,6 +289,7 @@ export function AccountPage({
 }: AccountPageProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
+  const [budgetCategories, setBudgetCategories] = useState<BudgetCategoryWithSubCategories[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>();
@@ -299,6 +305,8 @@ export function AccountPage({
   const [modalAccountId, setModalAccountId] = useState<string | null>(null);
   const [modalDraft, setModalDraft] = useState<AccountDraft>(() => emptyAccountDraft());
   const [newColumnName, setNewColumnName] = useState('');
+  const [selectedBudgetCategoryId, setSelectedBudgetCategoryId] = useState('');
+  const [selectedBudgetSubCategoryId, setSelectedBudgetSubCategoryId] = useState('');
 
   const isEditingAccount = modalAccountId !== null;
   const sortedAccounts = useMemo(() => sortAccounts(accounts), [accounts]);
@@ -312,6 +320,37 @@ export function AccountPage({
     });
     return assignments;
   }, [accounts, modalAccountId]);
+  const selectedBudgetCategory = useMemo(
+    () => budgetCategories.find((category) => category.id === selectedBudgetCategoryId),
+    [budgetCategories, selectedBudgetCategoryId],
+  );
+  const selectedBudgetSubCategory = useMemo(
+    () =>
+      selectedBudgetCategory?.subCategories.find(
+        (subCategory) => subCategory.id === selectedBudgetSubCategoryId,
+      ),
+    [selectedBudgetCategory, selectedBudgetSubCategoryId],
+  );
+  const selectedBudgetAssociation = useMemo(() => {
+    if (!selectedBudgetCategory) return undefined;
+
+    if (selectedBudgetSubCategory) {
+      return {
+        columnId: budgetSubCategoryColumnId(selectedBudgetSubCategory.id),
+        name: selectedBudgetSubCategory.name,
+        monthlyAmount: selectedBudgetSubCategory.monthlyAmountUsd,
+      };
+    }
+
+    return {
+      columnId: budgetCategoryColumnId(selectedBudgetCategory.id),
+      name: selectedBudgetCategory.name,
+      monthlyAmount: selectedBudgetCategory.subCategories.reduce(
+        (total, subCategory) => total + subCategory.monthlyAmountUsd,
+        0,
+      ),
+    };
+  }, [selectedBudgetCategory, selectedBudgetSubCategory]);
   const parsedModalBalance = Number(modalDraft.startingBalance);
   const isModalBalanceValid =
     modalDraft.startingBalance !== '' &&
@@ -364,7 +403,7 @@ export function AccountPage({
       setIsLoading(true);
       setLoadError(undefined);
       try {
-        const [accts, sources] = await Promise.all([
+        const [accts, sources, categories] = await Promise.all([
           accountRepository.listAccounts(),
           incomeRepository.listIncomeSources(),
           budgetRepository.listCategoriesWithSubCategories(),
@@ -372,6 +411,7 @@ export function AccountPage({
         const sorted = sortAccounts(accts);
         setAccounts(sorted);
         setIncomeSources(sources);
+        setBudgetCategories(categories);
         setSelectedAccountId((prev) => prev ?? sorted[0]?.id);
       } catch {
         setLoadError('Failed to load required finance data. Try again.');
@@ -642,6 +682,42 @@ export function AccountPage({
       monthlyRecords,
     });
     setNewColumnName('');
+    setIsDirty(true);
+  };
+
+  const associateBudgetSelectionToAccount = () => {
+    if (!draftAccount || !selectedBudgetAssociation) return;
+
+    const existingColumn = draftAccount.columns.find(
+      (column) => column.id === selectedBudgetAssociation.columnId,
+    );
+    const nextColumns = existingColumn
+      ? draftAccount.columns.map((column) =>
+          column.id === selectedBudgetAssociation.columnId
+            ? { ...column, name: selectedBudgetAssociation.name, icon: 'payments', isDeleted: false }
+            : column,
+        )
+      : [
+          ...draftAccount.columns,
+          {
+            id: selectedBudgetAssociation.columnId,
+            name: selectedBudgetAssociation.name,
+            icon: 'payments',
+          },
+        ];
+    const monthlyRecords = draftAccount.monthlyRecords.map((record) => ({
+      ...record,
+      outflows: {
+        ...record.outflows,
+        [selectedBudgetAssociation.columnId]: selectedBudgetAssociation.monthlyAmount,
+      },
+    }));
+
+    setDraftAccount({
+      ...draftAccount,
+      columns: nextColumns,
+      monthlyRecords,
+    });
     setIsDirty(true);
   };
 
@@ -1032,7 +1108,62 @@ export function AccountPage({
                   <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--md-sys-color-on-surface-variant)' }}>
                     Account Columns
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <select
+                      aria-label="Budget category to associate"
+                      value={selectedBudgetCategoryId}
+                      onChange={(e) => {
+                        setSelectedBudgetCategoryId(e.target.value);
+                        setSelectedBudgetSubCategoryId('');
+                      }}
+                      style={{
+                        minHeight: '30px',
+                        maxWidth: '150px',
+                        borderRadius: 'var(--md-sys-shape-corner-xs)',
+                        border: '1px solid var(--md-sys-color-outline)',
+                        background: 'transparent',
+                        color: 'var(--md-sys-color-on-surface)',
+                        fontSize: '0.8rem',
+                      }}
+                    >
+                      <option value="">Budget category</option>
+                      {budgetCategories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      aria-label="Budget sub-category to associate"
+                      value={selectedBudgetSubCategoryId}
+                      onChange={(e) => setSelectedBudgetSubCategoryId(e.target.value)}
+                      disabled={!selectedBudgetCategory}
+                      style={{
+                        minHeight: '30px',
+                        maxWidth: '150px',
+                        borderRadius: 'var(--md-sys-shape-corner-xs)',
+                        border: '1px solid var(--md-sys-color-outline)',
+                        background: 'transparent',
+                        color: 'var(--md-sys-color-on-surface)',
+                        fontSize: '0.8rem',
+                      }}
+                    >
+                      <option value="">--</option>
+                      {selectedBudgetCategory?.subCategories.map((subCategory) => (
+                        <option key={subCategory.id} value={subCategory.id}>
+                          {subCategory.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      onClick={associateBudgetSelectionToAccount}
+                      disabled={!selectedBudgetAssociation}
+                      style={{ minHeight: '30px', padding: '0 8px', fontSize: '0.75rem' }}
+                    >
+                      Associate Budget
+                    </button>
                     <input
                       aria-label="New account column name"
                       value={newColumnName}
