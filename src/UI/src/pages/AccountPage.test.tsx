@@ -535,4 +535,72 @@ describe('AccountPage', () => {
     const updatedSavingsAcc = accounts.find((acc) => acc.id === 'acc-savings-test');
     expect(updatedSavingsAcc?.monthlyRecords[0].savings).toBe(400);
   });
+
+  it('aggregates savings amounts across multiple checking accounts associated with the same savings account', async () => {
+    const mockAccounts: Account[] = [
+      {
+        id: 'acc-checking-1',
+        name: 'Checking 1',
+        type: 'Checking',
+        startingBalance: 2000,
+        startDate: '2026-01-01',
+        yieldRate: 0,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: 'acc-savings-test',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+      {
+        id: 'acc-checking-2',
+        name: 'Checking 2',
+        type: 'Checking',
+        startingBalance: 3000,
+        startDate: '2026-01-01',
+        yieldRate: 0,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: 'acc-savings-test',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+      {
+        id: 'acc-savings-test',
+        name: 'Morgan Stanley Premium Savings',
+        type: 'Savings',
+        startingBalance: 5000,
+        startDate: '2026-01-01',
+        yieldRate: 4.5,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: '',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+    ];
+
+    mockAccounts[1].monthlyRecords[0].savings = 100;
+
+    const repository = renderPage(mockAccounts);
+
+    expect(await screen.findByText('Checking 1')).toBeInTheDocument();
+
+    const januarySavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
+    await userEvent.clear(januarySavingsCell!);
+    await userEvent.type(januarySavingsCell!, '100');
+    
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await userEvent.click(screen.getByText('Morgan Stanley Premium Savings'));
+
+    const savingsCellSavingsAcc = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
+    expect(savingsCellSavingsAcc?.value).toBe('$200.00');
+
+    const accounts = await repository.listAccounts();
+    const updatedSavingsAcc = accounts.find((acc) => acc.id === 'acc-savings-test');
+    expect(updatedSavingsAcc?.monthlyRecords[0].savings).toBe(200);
+  });
 });

@@ -532,15 +532,30 @@ export function AccountPage({
       await accountRepository.updateAccount(selectedAccountId, draftInput);
 
       if (draftInput.type === 'Checking' && draftInput.savingsAccountId) {
-        const savingsAcc = accounts.find((a) => a.id === draftInput.savingsAccountId);
+        const targetSavingsAccountId = draftInput.savingsAccountId;
+        const savingsAcc = accounts.find((a) => a.id === targetSavingsAccountId);
         if (savingsAcc) {
+          const checkingAccounts = accounts.filter(
+            (a) => a.id !== selectedAccountId && a.type === 'Checking' && a.savingsAccountId === targetSavingsAccountId
+          );
+
           const updatedSavingsRecords = savingsAcc.monthlyRecords.map((savRecord) => {
-            const checkRecord = recordsPayload.find((r) => r.month === savRecord.month);
+            const currentCheckingRecord = recordsPayload.find((r) => r.month === savRecord.month);
+            let sum = currentCheckingRecord ? (Number(currentCheckingRecord.savings) || 0) : 0;
+
+            checkingAccounts.forEach((checkingAcc) => {
+              const matchingRecord = checkingAcc.monthlyRecords.find((r) => r.month === savRecord.month);
+              if (matchingRecord) {
+                sum += Number(matchingRecord.savings) || 0;
+              }
+            });
+
             return {
               ...savRecord,
-              savings: checkRecord ? checkRecord.savings : savRecord.savings,
+              savings: sum,
             };
           });
+
           const savingsDraft: AccountDraft = {
             ...toAccountDraft(savingsAcc),
             monthlyRecords: updatedSavingsRecords,
@@ -623,15 +638,30 @@ export function AccountPage({
       }
 
       if (draftInput.type === 'Checking' && draftInput.savingsAccountId) {
-        const savingsAcc = accounts.find((a) => a.id === draftInput.savingsAccountId);
+        const targetSavingsAccountId = draftInput.savingsAccountId;
+        const savingsAcc = accounts.find((a) => a.id === targetSavingsAccountId);
         if (savingsAcc) {
+          const checkingAccounts = accounts.filter(
+            (a) => a.id !== targetAccountId && a.type === 'Checking' && a.savingsAccountId === targetSavingsAccountId
+          );
+
           const updatedSavingsRecords = savingsAcc.monthlyRecords.map((savRecord) => {
-            const checkRecord = recordsPayload.find((r) => r.month === savRecord.month);
+            const currentCheckingRecord = recordsPayload.find((r) => r.month === savRecord.month);
+            let sum = currentCheckingRecord ? (Number(currentCheckingRecord.savings) || 0) : 0;
+
+            checkingAccounts.forEach((checkingAcc) => {
+              const matchingRecord = checkingAcc.monthlyRecords.find((r) => r.month === savRecord.month);
+              if (matchingRecord) {
+                sum += Number(matchingRecord.savings) || 0;
+              }
+            });
+
             return {
               ...savRecord,
-              savings: checkRecord ? checkRecord.savings : savRecord.savings,
+              savings: sum,
             };
           });
+
           const savingsDraft: AccountDraft = {
             ...toAccountDraft(savingsAcc),
             monthlyRecords: updatedSavingsRecords,
