@@ -71,9 +71,16 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryColorHex, setNewCategoryColorHex] = useState('#00e676');
+  const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
 
   const [newSubName, setNewSubName] = useState('');
   const [newSubMonthlyAmount, setNewSubMonthlyAmount] = useState('');
+
+  const closeAddCatModal = () => {
+    setNewCategoryName('');
+    setNewCategoryColorHex('#00e676');
+    setIsAddCatModalOpen(false);
+  };
 
   const selectedCategory = useMemo(
     () => categories.find((c) => c.id === selectedCategoryId),
@@ -293,6 +300,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     await budgetRepository.createCategory(name, newCategoryColorHex);
     setNewCategoryName('');
     setNewCategoryColorHex('#00e676');
+    setIsAddCatModalOpen(false);
     await refreshCategories();
   };
 
@@ -430,11 +438,20 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
       <section className="budget-main-grid" aria-label="Budget categories">
         <div className="budget-left">
-          <section className="budget-left-intro">
+          <section className="budget-left-intro" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>
               <span className="budget-section-label">Category groups</span>
-              <h2>What needs money every month?</h2>
+              <h2 style={{ margin: 0 }}>What needs money every month?</h2>
             </div>
+            <button
+              className="primary-action"
+              type="button"
+              onClick={() => setIsAddCatModalOpen(true)}
+              style={{ minHeight: '36px', padding: '0 12px', fontSize: '0.8rem', gap: '6px' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>add</span>
+              Add Category
+            </button>
           </section>
 
           {isLoading ? (
@@ -446,137 +463,102 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
             <div className="empty-state">
               <span className="material-symbols-outlined" aria-hidden="true">folder_off</span>
               <h2>No categories yet</h2>
-              <p>Add a category to start building your net budget.</p>
+              <p>Click "Add Category" above to start building your net budget.</p>
             </div>
           ) : (
-            <>
-              <div className="budget-category-list" role="list">
-                {categories.map((cat) => {
-                  const isSelected = cat.id === selectedCategoryId;
-                  const effectiveCat =
-                    isSelected && draftCategory ? draftCategory : cat;
-                  const categoryMonthlyTotal = selectedCategoryMonthlyTotal(effectiveCat);
-                  const categoryShare =
-                    totals.totalMonth > 0 ? (categoryMonthlyTotal / totals.totalMonth) * 100 : 0;
+            <div className="budget-category-list" role="list">
+              {categories.map((cat) => {
+                const isSelected = cat.id === selectedCategoryId;
+                const effectiveCat =
+                  isSelected && draftCategory ? draftCategory : cat;
+                const categoryMonthlyTotal = selectedCategoryMonthlyTotal(effectiveCat);
+                const categoryShare =
+                  totals.totalMonth > 0 ? (categoryMonthlyTotal / totals.totalMonth) * 100 : 0;
 
-                  return (
-                    <article
-                      key={cat.id}
-                      className={
-                        isSelected
-                          ? 'budget-category-card budget-category-card-selected'
-                          : 'budget-category-card'
-                      }
-                      style={
-                        {
-                          '--category-color': effectiveCat.colorHex,
-                          display: 'flex',
-                          flexDirection: 'row',
-                          alignItems: 'stretch',
-                          gap: 0,
-                          padding: 0,
-                          overflow: 'hidden'
-                        } as React.CSSProperties
-                      }
-                    >
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <button
-                          className="budget-category-select"
-                          type="button"
-                          aria-pressed={isSelected}
-                          onClick={() => void ensureSavedBeforeSwitch(cat.id)}
-                          style={{
-                            flex: 1,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '12px 16px',
-                            background: 'none',
-                            border: 'none',
-                            textAlign: 'left',
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <div className="budget-category-copy" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span className="budget-category-name" style={{ fontWeight: 'bold' }}>{cat.name}</span>
-                            <span className="budget-category-meta" style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                              {effectiveCat.subCategories.length} line
-                              {effectiveCat.subCategories.length === 1 ? '' : ' items'}
-                            </span>
-                          </div>
-                          <div className="budget-category-metrics" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-                            <span className="budget-category-month" style={{ fontWeight: 'bold' }}>{formatMoney(categoryMonthlyTotal)}</span>
-                            <span className="budget-category-share" style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>{formatPercent(categoryShare)}</span>
-                          </div>
-                        </button>
-                        <div className="budget-category-progress" aria-hidden="true" style={{ height: '3px', backgroundColor: 'var(--md-sys-color-surface-container-highest)', overflow: 'hidden' }}>
-                          <span style={{ display: 'block', height: '100%', backgroundColor: 'var(--category-color)', width: `${clampPercent(categoryShare)}%` }} />
-                        </div>
-                      </div>
-
-                      {/* Vertical Divider */}
-                      <div style={{ width: '1px', backgroundColor: 'var(--md-sys-color-outline-variant)', alignSelf: 'stretch', margin: '8px 0' }} />
-
-                      {/* Trashcan Delete Icon Right Aligned */}
-                      <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px' }}>
-                        <button
-                          className="link-button link-button-danger"
-                          type="button"
-                          onClick={() => void deleteCategory(cat.id)}
-                          aria-label={`Delete ${cat.name} category`}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '8px',
-                            color: 'var(--md-sys-color-error)',
-                            borderRadius: '50%'
-                          }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }} aria-hidden="true">delete</span>
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-
-              <div className="budget-add-category" aria-label="Add category">
-                <div className="budget-add-category-header">
-                  <span className="budget-section-label">New category</span>
-                </div>
-                <label className="field">
-                  <span>Category name</span>
-                  <input
-                    value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
-                    placeholder="e.g. Housing"
-                  />
-                </label>
-                <label className="field budget-color-field">
-                  <span>Color</span>
-                  <input
-                    type="color"
-                    value={newCategoryColorHex}
-                    onChange={(e) => setNewCategoryColorHex(e.target.value)}
-                  />
-                </label>
-                <div className="budget-add-category-actions">
-                  <button
-                    className="primary-action"
-                    type="button"
-                    onClick={() => void createCategory()}
-                    disabled={!newCategoryName.trim()}
+                return (
+                  <article
+                    key={cat.id}
+                    className={
+                      isSelected
+                        ? 'budget-category-card budget-category-card-selected'
+                        : 'budget-category-card'
+                    }
+                    style={
+                      {
+                        '--category-color': effectiveCat.colorHex,
+                        display: 'flex',
+                        flexDirection: 'row',
+                        alignItems: 'stretch',
+                        gap: 0,
+                        padding: 0,
+                        overflow: 'hidden'
+                      } as React.CSSProperties
+                    }
                   >
-                    <span className="material-symbols-outlined" aria-hidden="true">add</span>
-                    Add Category
-                  </button>
-                </div>
-              </div>
-            </>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                      <button
+                        className="budget-category-select"
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => void ensureSavedBeforeSwitch(cat.id)}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '12px 16px',
+                          background: 'none',
+                          border: 'none',
+                          textAlign: 'left',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <div className="budget-category-copy" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span className="budget-category-name" style={{ fontWeight: 'bold' }}>{cat.name}</span>
+                          <span className="budget-category-meta" style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                            {effectiveCat.subCategories.length} line
+                            {effectiveCat.subCategories.length === 1 ? '' : ' items'}
+                          </span>
+                        </div>
+                        <div className="budget-category-metrics" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                          <span className="budget-category-month" style={{ fontWeight: 'bold' }}>{formatMoney(categoryMonthlyTotal)}</span>
+                          <span className="budget-category-share" style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>{formatPercent(categoryShare)}</span>
+                        </div>
+                      </button>
+                      <div className="budget-category-progress" aria-hidden="true" style={{ height: '3px', backgroundColor: 'var(--md-sys-color-surface-container-highest)', overflow: 'hidden' }}>
+                        <span style={{ display: 'block', height: '100%', backgroundColor: 'var(--category-color)', width: `${clampPercent(categoryShare)}%` }} />
+                      </div>
+                    </div>
+
+                    {/* Vertical Divider */}
+                    <div style={{ width: '1px', backgroundColor: 'var(--md-sys-color-outline-variant)', alignSelf: 'stretch', margin: '8px 0' }} />
+
+                    {/* Trashcan Delete Icon Right Aligned */}
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px' }}>
+                      <button
+                        className="link-button link-button-danger"
+                        type="button"
+                        onClick={() => void deleteCategory(cat.id)}
+                        aria-label={`Delete ${cat.name} category`}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '8px',
+                          color: 'var(--md-sys-color-error)',
+                          borderRadius: '50%'
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }} aria-hidden="true">delete</span>
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           )}
         </div>
 
@@ -792,6 +774,51 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
           )}
         </div>
       </section>
+
+      {/* POP-UP MODAL: ADD CATEGORY */}
+      {isAddCatModalOpen && (
+        <div className="modal-overlay" onClick={closeAddCatModal}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <h2>New category</h2>
+            <p style={{ fontSize: '0.85rem', color: 'var(--md-sys-color-on-surface-variant)', marginBottom: '16px' }}>
+              Add a group for a major area of monthly spending.
+            </p>
+            <div className="modal-form">
+              <label className="field">
+                <span>Category name</span>
+                <input
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="e.g. Housing or Subscriptions"
+                  autoFocus
+                />
+              </label>
+              <label className="field budget-color-field">
+                <span>Color</span>
+                <input
+                  type="color"
+                  value={newCategoryColorHex}
+                  onChange={(e) => setNewCategoryColorHex(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={closeAddCatModal}>
+                Cancel
+              </button>
+              <button
+                className="primary-action"
+                type="button"
+                onClick={() => void createCategory()}
+                disabled={!newCategoryName.trim()}
+              >
+                Add Category
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
