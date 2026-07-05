@@ -1020,47 +1020,52 @@ export function AccountPage({
                 />
               </label>
 
-              <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+              <fieldset className="field compact-fieldset">
                 <span>Credited Income</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="income-credit-table">
                   {incomeSources.length === 0 ? (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                    <span className="income-credit-empty">
                       No income sources available.
                     </span>
                   ) : (
-                    incomeSources.map((source) => {
-                      const assignedAccount = assignedIncomeAccountBySourceId.get(source.id);
-                      const isChecked = modalDraft.assignedIncomeSourceIds.includes(source.id);
-                      const isDisabled = Boolean(assignedAccount);
+                    <>
+                      <div className="income-credit-row income-credit-row-header" aria-hidden="true">
+                        <span>Use</span>
+                        <span>Income Source</span>
+                        <span>Status</span>
+                      </div>
+                      {incomeSources.map((source) => {
+                        const assignedAccount = assignedIncomeAccountBySourceId.get(source.id);
+                        const isChecked = modalDraft.assignedIncomeSourceIds.includes(source.id);
+                        const isDisabled = Boolean(assignedAccount);
 
-                      return (
-                        <label
-                          key={source.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            fontSize: '0.85rem',
-                            color: isDisabled
-                              ? 'var(--md-sys-color-on-surface-variant)'
-                              : 'var(--md-sys-color-on-surface)',
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            disabled={isDisabled}
-                            onChange={() => toggleModalIncomeSource(source.id)}
-                          />
-                          <span>{source.name}</span>
-                          {assignedAccount ? (
-                            <span style={{ fontSize: '0.75rem' }}>
-                              Assigned to {assignedAccount.name}
+                        return (
+                          <label
+                            key={source.id}
+                            className={`income-credit-row${isDisabled ? ' income-credit-row-disabled' : ''}`}
+                          >
+                            <span className="income-credit-control">
+                              <input
+                                className="income-credit-checkbox"
+                                type="checkbox"
+                                aria-label={`Credit ${source.name} to this account`}
+                                checked={isChecked}
+                                disabled={isDisabled}
+                                onChange={() => toggleModalIncomeSource(source.id)}
+                              />
                             </span>
-                          ) : null}
-                        </label>
-                      );
-                    })
+                            <span className="income-credit-name">{source.name}</span>
+                            <span className="income-credit-status">
+                              {assignedAccount
+                                ? `Assigned to ${assignedAccount.name}`
+                                : isChecked
+                                  ? 'Credits this account'
+                                  : 'Available'}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </>
                   )}
                 </div>
               </fieldset>
@@ -1091,11 +1096,12 @@ export function AccountPage({
           <div className="modal-container" onClick={(e) => e.stopPropagation()}>
             <h2>Add Ledger Column</h2>
             <div className="modal-form">
-              <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>
+              <fieldset className="field compact-fieldset">
                 <span>Column Type</span>
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <div className="column-mode-options">
+                  <label className={`column-mode-option${columnModalMode === 'custom' ? ' selected' : ''}`}>
                     <input
+                      className="compact-radio"
                       type="radio"
                       name="column-mode"
                       checked={columnModalMode === 'custom'}
@@ -1103,8 +1109,9 @@ export function AccountPage({
                     />
                     <span>Add Custom Column</span>
                   </label>
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <label className={`column-mode-option${columnModalMode === 'budget' ? ' selected' : ''}`}>
                     <input
+                      className="compact-radio"
                       type="radio"
                       name="column-mode"
                       checked={columnModalMode === 'budget'}

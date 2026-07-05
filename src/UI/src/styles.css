@@ -520,6 +520,134 @@ p {
   border-color: var(--md-sys-color-error) !important;
 }
 
+.compact-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.column-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.column-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: rgba(255, 255, 255, 0.025);
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+}
+
+.column-mode-option.selected {
+  border-color: rgba(0, 230, 118, 0.55);
+  background-color: rgba(0, 230, 118, 0.08);
+}
+
+.column-mode-option span {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: inherit;
+}
+
+.field .compact-radio,
+.field .income-credit-checkbox {
+  width: 14px;
+  min-width: 14px;
+  height: 14px;
+  min-height: 14px;
+  margin: 0;
+  padding: 0;
+  border-radius: 999px;
+  accent-color: var(--md-sys-color-primary);
+  box-shadow: none;
+}
+
+.field .income-credit-checkbox {
+  border-radius: 3px;
+}
+
+.field .compact-radio:focus,
+.field .income-credit-checkbox:focus {
+  outline: 2px solid var(--md-sys-color-secondary);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.income-credit-table {
+  overflow: hidden;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: rgba(255, 255, 255, 0.018);
+}
+
+.income-credit-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(130px, 0.85fr);
+  align-items: center;
+  min-height: 34px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+}
+
+.income-credit-row:first-child {
+  border-top: 0;
+}
+
+.income-credit-row:hover:not(.income-credit-row-header):not(.income-credit-row-disabled) {
+  background-color: rgba(255, 255, 255, 0.035);
+}
+
+.income-credit-row-header {
+  min-height: 28px;
+  background-color: rgba(148, 163, 184, 0.08);
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: default;
+}
+
+.income-credit-row-disabled {
+  color: var(--md-sys-color-on-surface-variant);
+  cursor: not-allowed;
+}
+
+.income-credit-row span {
+  min-width: 0;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: inherit;
+}
+
+.income-credit-control {
+  display: flex;
+  justify-content: center;
+}
+
+.income-credit-name,
+.income-credit-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.income-credit-status {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.income-credit-empty {
+  display: block;
+  padding: 10px 12px;
+  font-size: 0.8rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
 /* Read Only / Static Form Value Display */
 .read-only-field {
   display: flex;
@@ -1549,9 +1677,9 @@ p {
   width: 100%;
   overflow-x: auto;
   margin-top: 16px;
-  border: 1.5px solid #d97706;
+  border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 6px;
-  background-color: #0d1117;
+  background: linear-gradient(180deg, rgba(22, 31, 48, 0.92), rgba(8, 10, 15, 0.96));
 }
 
 .excel-table {
@@ -1560,27 +1688,28 @@ p {
   font-family: Consolas, Monaco, "Lucida Console", Courier, monospace;
   font-size: 0.85rem;
   text-align: left;
-  color: #c9d1d9;
+  color: var(--md-sys-color-on-surface);
 }
 
 .excel-table th,
 .excel-table td {
-  border: 1.5px solid #ca8a04;
+  border: 1px solid rgba(148, 163, 184, 0.22);
   padding: 6px 12px;
   vertical-align: middle;
   height: 38px;
   white-space: nowrap;
 }
 
-/* Header Styling (Warm Orange/Gold from Excel) */
+/* Header Styling */
 .excel-table th {
-  background-color: #d97706 !important;
-  color: #ffffff;
+  background-color: var(--md-sys-color-surface-container-highest) !important;
+  color: var(--md-sys-color-on-surface);
   font-family: var(--md-sys-font-display);
   font-weight: 700;
   font-size: 0.8rem;
   letter-spacing: 0.02em;
   text-align: center;
+  border-bottom-color: rgba(0, 230, 118, 0.32);
 }
 
 .excel-th-content {
@@ -1596,31 +1725,37 @@ p {
   justify-content: center;
   width: 16px;
   height: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 2px;
-  background-color: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.04);
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 8px;
   font-weight: bold;
   cursor: pointer;
 }
 
 .excel-filter-arrow:hover {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--md-sys-color-on-surface);
 }
 
 /* Row states */
 .excel-table tr.excel-row-actual {
-  background-color: rgba(22, 27, 34, 0.5);
+  background-color: rgba(255, 255, 255, 0.018);
 }
 
-/* Soft Purple Highlight for Current Month (July-26) */
+.excel-table tr.excel-row-forecast {
+  background-color: rgba(255, 255, 255, 0.032);
+}
+
+/* Soft highlight for the current month */
 .excel-table tr.excel-row-current {
-  background-color: rgba(167, 139, 250, 0.15) !important;
+  background-color: rgba(0, 230, 118, 0.09) !important;
 }
 
 .excel-table tr.excel-row-current td {
-  border-color: rgba(167, 139, 250, 0.5) !important;
-  color: #a78bfa !important;
+  border-color: rgba(0, 230, 118, 0.38) !important;
+  color: var(--md-sys-color-on-surface) !important;
   font-weight: 700;
 }
 
@@ -1636,12 +1771,12 @@ p {
 
 /* Special Columns Styles (Invest & Savings) */
 .excel-col-special {
-  background-color: rgba(56, 189, 248, 0.06) !important; /* Ocean blue background tint */
-  border-color: rgba(56, 189, 248, 0.5) !important;
+  background-color: rgba(56, 189, 248, 0.07) !important;
+  border-color: rgba(56, 189, 248, 0.34) !important;
 }
 
 .excel-table th.excel-col-special-header {
-  background-color: #0369a1 !important; /* Ocean blue header */
+  background-color: rgba(3, 105, 161, 0.9) !important;
 }
 
 
@@ -1659,8 +1794,9 @@ p {
 }
 
 .excel-cell-input:focus {
-  outline: 2px solid #38bdf8 !important; /* Light blue cell active outline */
-  background-color: rgba(255, 255, 255, 0.05);
+  outline: 2px solid var(--md-sys-color-secondary) !important;
+  outline-offset: -1px;
+  background-color: rgba(255, 255, 255, 0.08);
 }
 
 .excel-cell-val {
