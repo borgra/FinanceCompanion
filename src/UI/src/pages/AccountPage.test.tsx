@@ -8,12 +8,64 @@ import { AccountPage } from './AccountPage';
 
 const renderPage = () => {
   const repository = createMockAccountRepository();
+  const mockIncomeRepository: IncomeSourceRepository = {
+    listIncomeSources: () => Promise.resolve([
+      {
+        id: 'income-source-primary',
+        name: 'Primary job',
+        type: 'Salary',
+        cadence: 'Bi-weekly',
+        periods: [
+          {
+            id: 'primary-period',
+            startDate: '2026-01-01',
+            yearlyGrossAmount: 120000,
+            netPercentage: 75,
+          }
+        ],
+        status: 'Active',
+        createdAt: '2026-06-30T00:00:00.000Z',
+        updatedAt: '2026-06-30T00:00:00.000Z',
+      }
+    ]),
+    createIncomeSource: () => Promise.reject(),
+    updateIncomeSource: () => Promise.reject(),
+    setIncomeSourceStatus: () => Promise.reject(),
+  };
+
+  const mockBudgetRepository: BudgetRepository = {
+    listCategoriesWithSubCategories: () => Promise.resolve([
+      {
+        id: 'cat-housing',
+        name: 'Housing',
+        colorHex: '#4de3ff',
+        createdAt: '2026-06-30T00:00:00.000Z',
+        updatedAt: '2026-06-30T00:00:00.000Z',
+        subCategories: [
+          {
+            id: 'sub-house',
+            categoryId: 'cat-housing',
+            name: 'Rent',
+            monthlyAmountUsd: 1350,
+            createdAt: '2026-06-30T00:00:00.000Z',
+            updatedAt: '2026-06-30T00:00:00.000Z',
+          }
+        ]
+      }
+    ]),
+    createCategory: () => Promise.reject(),
+    updateCategory: () => Promise.reject(),
+    deleteCategory: () => Promise.reject(),
+    createSubCategory: () => Promise.reject(),
+    updateSubCategory: () => Promise.reject(),
+    deleteSubCategory: () => Promise.reject(),
+  };
 
   render(
     <AccountPage
       accountRepository={repository}
-      budgetRepository={{} as BudgetRepository}
-      incomeRepository={{} as IncomeSourceRepository}
+      budgetRepository={mockBudgetRepository}
+      incomeRepository={mockIncomeRepository}
     />,
   );
 

@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import type { AccountRepository } from '../domain/accountRepository';
+import type { IncomeSource } from '../domain/incomeSource';
+import type { BudgetCategoryWithSubCategories } from '../domain/budget';
 import {
   type Account,
   type AccountDraft,
-  type AccountColumn,
   type AccountType,
   emptyAccountDraft,
   toAccountDraft,
@@ -35,6 +36,25 @@ const formatMoney = (amount: number) => {
   return currencyFormatter.format(amount);
 };
 
+const getMonthlyNetIncomeForMonth = (sources: IncomeSource[], monthCode: string): number => {
+  let totalNet = 0;
+  const activeSources = sources.filter((s) => s.status === 'Active');
+  for (const source of activeSources) {
+    const period = source.periods.find((p) => {
+      const startMonth = p.startDate.slice(0, 7);
+      const endMonth = p.endDate ? p.endDate.slice(0, 7) : '9999-12';
+      return startMonth <= monthCode && monthCode <= endMonth;
+    }) ?? source.periods[source.periods.length - 1];
+
+    if (period) {
+      const monthlyGross = period.yearlyGrossAmount / 12;
+      const monthlyNet = monthlyGross * (period.netPercentage / 100);
+      totalNet += monthlyNet;
+    }
+  }
+  return Math.round(totalNet);
+};
+
 type ComputedRecord = {
   month: string;
   start: number;
@@ -51,9 +71,10 @@ type ExcelCellInputProps = {
   value: number;
   onChange: (val: string) => void;
   className?: string;
+  disabled?: boolean;
 };
 
-function ExcelCellInput({ value, onChange, className = '' }: ExcelCellInputProps) {
+function ExcelCellInput({ value, onChange, className = '', disabled = false }: ExcelCellInputProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [tempValue, setTempValue] = useState(String(value));
 
@@ -77,14 +98,19 @@ function ExcelCellInput({ value, onChange, className = '' }: ExcelCellInputProps
       onChange={(e) => setTempValue(e.target.value)}
       onFocus={() => setIsFocused(true)}
       onBlur={handleBlur}
+      disabled={disabled}
     />
   );
 }
 
 export function AccountPage({
+  incomeRepository,
+  budgetRepository,
   accountRepository,
 }: AccountPageProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
+  const [budgetCategories, setBudgetCategories] = useState<BudgetCategoryWithSubCategories[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>();
@@ -132,29 +158,6 @@ export function AccountPage({
     setIsModalOpen(false);
   };
 
-  // Add Column modal states
-  const [isColModalOpen, setIsColModalOpen] = useState(false);
-  const [newColName, setNewColName] = useState('');
-  const [newColIcon, setNewColIcon] = useState('payments');
-
-  // Double-sure Column Delete prompt states
-  const [colToDelete, setColToDelete] = useState<AccountColumn | null>(null);
-  const [colDeleteConfirmInput, setColDeleteConfirmInput] = useState('');
-
-  // Built-in icon options for column modal selector
-  const iconOptions = [
-    { value: 'payments', label: 'Cash (💵)' },
-    { value: 'credit_card', label: 'Credit Card (💳)' },
-    { value: 'home', label: 'House (🏠)' },
-    { value: 'bolt', label: 'Utilities (⚡)' },
-    { value: 'shopping_cart', label: 'Shopping (🛒)' },
-    { value: 'directions_car', label: 'Car (🚗)' },
-    { value: 'flight', label: 'Travel (✈️)' },
-    { value: 'trending_up', label: 'Investing (📈)' },
-    { value: 'savings', label: 'Savings (🐷)' },
-    { value: 'celebration', label: 'Fun (🎉)' },
-  ];
-
   const projectionMonths = useMemo(() => [
     { name: 'Jan-26', dateCode: '2026-01' },
     { name: 'Feb-26', dateCode: '2026-02' },
@@ -170,16 +173,22 @@ export function AccountPage({
     { name: 'Dec-26', dateCode: '2026-12' },
   ], []);
 
-  // Load accounts
+  // Load all accounts, income sources, and budget categories
   const loadAllData = async () => {
     setIsLoading(true);
     setLoadError(undefined);
     try {
-      const accts = await accountRepository.listAccounts();
+      const [accts, sources, cats] = await Promise.all([
+        accountRepository.listAccounts(),
+        incomeRepository.listIncomeSources(),
+        budgetRepository.listCategoriesWithSubCategories(),
+      ]);
       setAccounts(accts);
+      setIncomeSources(sources);
+      setBudgetCategories(cats);
       setSelectedAccountId((prev) => prev ?? accts[0]?.id);
     } catch {
-      setLoadError('Failed to load accounts. Try again.');
+      setLoadError('Failed to load required finance data. Try again.');
     } finally {
       setIsLoading(false);
     }
@@ -187,7 +196,7 @@ export function AccountPage({
 
   useEffect(() => {
     void loadAllData();
-  }, [accountRepository]);
+  }, [accountRepository, incomeRepository, budgetRepository]);
 
   // Sync draft state on account switch
   useEffect(() => {
@@ -231,14 +240,33 @@ export function AccountPage({
     setIsSaving(true);
     setSaveError(undefined);
     try {
+      const columnsPayload = activeColumns.map((col) => ({
+        id: col.id,
+        name: col.name,
+        icon: col.icon,
+      }));
+
+      const recordsPayload = draftAccount.monthlyRecords.map((r, mIdx) => {
+        const monthCode = projectionMonths[mIdx]?.dateCode || '2026-01';
+        const derivedCredit = getMonthlyNetIncomeForMonth(incomeSources, monthCode);
+        return {
+          ...r,
+          credit: derivedCredit,
+          outflows: activeColumns.reduce((acc, col) => {
+            acc[col.id] = r.outflows[col.id] || 0;
+            return acc;
+          }, {} as Record<string, number>),
+        };
+      });
+
       const draftInput: AccountDraft = {
         name: draftAccount.name,
         type: draftAccount.type,
         startingBalance: String(draftAccount.startingBalance),
         startDate: draftAccount.startDate,
         yieldRate: String(draftAccount.yieldRate),
-        columns: draftAccount.columns,
-        monthlyRecords: draftAccount.monthlyRecords,
+        columns: columnsPayload,
+        monthlyRecords: recordsPayload,
       };
       await accountRepository.updateAccount(selectedAccountId, draftInput);
       setIsDirty(false);
@@ -269,14 +297,33 @@ export function AccountPage({
     setSaveError(undefined);
 
     try {
+      const columnsPayload = activeColumns.map((col) => ({
+        id: col.id,
+        name: col.name,
+        icon: col.icon,
+      }));
+
+      const recordsPayload = (modalDraft.monthlyRecords.length > 0 ? modalDraft.monthlyRecords : emptyAccountDraft().monthlyRecords).map((r, mIdx) => {
+        const monthCode = projectionMonths[mIdx]?.dateCode || '2026-01';
+        const derivedCredit = getMonthlyNetIncomeForMonth(incomeSources, monthCode);
+        return {
+          ...r,
+          credit: derivedCredit,
+          outflows: activeColumns.reduce((acc, col) => {
+            acc[col.id] = r.outflows[col.id] || 0;
+            return acc;
+          }, {} as Record<string, number>),
+        };
+      });
+
       const draftInput: AccountDraft = {
         name,
         type: modalDraft.type,
         startingBalance: String(balanceNum),
         startDate: modalDraft.startDate || '2026-01-01',
         yieldRate: String(Number(modalDraft.yieldRate) || 0),
-        columns: modalDraft.columns,
-        monthlyRecords: modalDraft.monthlyRecords,
+        columns: columnsPayload,
+        monthlyRecords: recordsPayload,
       };
 
       if (isEditingAccount && modalAccountId) {
@@ -309,82 +356,6 @@ export function AccountPage({
     await refreshAccounts();
   };
 
-  // Add category column
-  const handleAddColumn = () => {
-    if (!draftAccount) return;
-    const name = newColName.trim();
-    if (!name) return;
-    const colId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
-    const existingSoftDeletedIdx = draftAccount.columns.findIndex(c => c.id === colId);
-    let nextColumns = [...draftAccount.columns];
-
-    if (existingSoftDeletedIdx > -1) {
-      // Reactivate soft-deleted column
-      nextColumns[existingSoftDeletedIdx] = {
-        ...nextColumns[existingSoftDeletedIdx],
-        name,
-        icon: newColIcon,
-        isDeleted: false,
-      };
-    } else {
-      nextColumns.push({
-        id: colId,
-        name,
-        icon: newColIcon,
-      });
-    }
-
-    setDraftAccount({
-      ...draftAccount,
-      columns: nextColumns,
-    });
-    setIsDirty(true);
-    
-    // Reset and close
-    setNewColName('');
-    setNewColIcon('payments');
-    setIsColModalOpen(false);
-  };
-
-  // Trigger double-sure prompt modal for column soft-deletion
-  const triggerSoftDeleteColumn = (col: AccountColumn) => {
-    setColToDelete(col);
-    setColDeleteConfirmInput('');
-  };
-
-  const confirmSoftDeleteColumn = () => {
-    if (!draftAccount || !colToDelete) return;
-    setDraftAccount({
-      ...draftAccount,
-      columns: draftAccount.columns.map((c) =>
-        c.id === colToDelete.id ? { ...c, isDeleted: true } : c,
-      ),
-    });
-    setIsDirty(true);
-    setColToDelete(null);
-    setColDeleteConfirmInput('');
-  };
-
-  // Reorder active columns in draftAccount
-  const moveColumn = (index: number, direction: 'up' | 'down') => {
-    if (!draftAccount) return;
-    const nextColumns = [...draftAccount.columns];
-    const targetIdx = direction === 'up' ? index - 1 : index + 1;
-    if (targetIdx < 0 || targetIdx >= nextColumns.length) return;
-
-    // Swap
-    const temp = nextColumns[index];
-    nextColumns[index] = nextColumns[targetIdx];
-    nextColumns[targetIdx] = temp;
-
-    setDraftAccount({
-      ...draftAccount,
-      columns: nextColumns,
-    });
-    setIsDirty(true);
-  };
-
   const updateCell = (index: number, field: 'credit' | 'invest' | 'savings', value: string) => {
     if (!draftAccount) return;
     const val = Number(value) || 0;
@@ -413,11 +384,14 @@ export function AccountPage({
     setIsDirty(true);
   };
 
-  // Filter only active (non-soft-deleted) columns for ledger rendering and calculations
+  // Dynamic active columns generated from current budget categories
   const activeColumns = useMemo(() => {
-    if (!draftAccount) return [];
-    return draftAccount.columns.filter((c) => !c.isDeleted);
-  }, [draftAccount]);
+    return budgetCategories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      icon: 'payments',
+    }));
+  }, [budgetCategories]);
 
   // Simulation calculations with dynamic balance realization and cascading
   const computedRecords = useMemo((): ComputedRecord[] => {
@@ -449,7 +423,8 @@ export function AccountPage({
           start = currentStart;
         }
 
-        credit = Number(record.credit) || 0;
+        credit = getMonthlyNetIncomeForMonth(incomeSources, monthCode);
+
         // Map and sum only active column outflow values
         activeColumns.forEach((col) => {
           const val = Number(record.outflows[col.id]) || 0;
@@ -476,7 +451,7 @@ export function AccountPage({
         net,
       };
     });
-  }, [draftAccount, activeColumns, projectionMonths]);
+  }, [draftAccount, activeColumns, projectionMonths, incomeSources]);
 
   // Overall sums/averages for KPIs and Summary Table footer
   const summaryTotals = useMemo(() => {
@@ -702,95 +677,6 @@ export function AccountPage({
         </div>
       )}
 
-      {/* POP-UP MODAL: ADD SPENDING COLUMN */}
-      {isColModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsColModalOpen(false)}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <h2>Add Spending Category Column</h2>
-            <p>Create a manual column for the ledger grid.</p>
-            <div className="modal-form">
-              <label className="field">
-                <span>Category Name</span>
-                <input
-                  value={newColName}
-                  onChange={(e) => setNewColName(e.target.value)}
-                  placeholder="e.g. American Express - Platinum"
-                  autoFocus
-                />
-              </label>
-
-              <label className="field">
-                <span>Category Icon</span>
-                <select
-                  value={newColIcon}
-                  onChange={(e) => setNewColIcon(e.target.value)}
-                  style={{ border: '1.5px solid var(--md-sys-color-outline)', borderRadius: 'var(--md-sys-shape-corner-s)', height: '48px', color: 'var(--md-sys-color-on-surface)', backgroundColor: 'transparent', padding: '10px' }}
-                >
-                  {iconOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value} style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={() => setIsColModalOpen(false)}>
-                Cancel
-              </button>
-              <button
-                className="primary-action"
-                type="button"
-                onClick={handleAddColumn}
-                disabled={!newColName.trim()}
-              >
-                Add Column
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* POP-UP MODAL: DOUBLE-SURE DELETE COLUMN CONFIRM */}
-      {colToDelete && (
-        <div className="modal-overlay" onClick={() => setColToDelete(null)}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ color: 'var(--md-sys-color-error)' }}>Doubly-Sure Column Deletion</h2>
-            <p>
-              Are you sure you want to soft-delete <strong>"{colToDelete.name}"</strong>? 
-              Its historical values will be retained, but it will be hidden from the ledger layout and excluded from expenses sum calculations.
-            </p>
-            <div className="modal-form">
-              <label className="field">
-                <span>Type the category name exact matching <strong>"{colToDelete.name}"</strong> to confirm:</span>
-                <input
-                  value={colDeleteConfirmInput}
-                  onChange={(e) => setColDeleteConfirmInput(e.target.value)}
-                  placeholder={colToDelete.name}
-                  autoFocus
-                />
-              </label>
-            </div>
-
-            <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={() => setColToDelete(null)}>
-                Cancel
-              </button>
-              <button
-                className="primary-action"
-                type="button"
-                onClick={confirmSoftDeleteColumn}
-                disabled={colDeleteConfirmInput !== colToDelete.name}
-                style={{ backgroundColor: 'var(--md-sys-color-error)', color: '#ffffff' }}
-              >
-                Confirm Soft-Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {draftAccount ? (
         <>
           {/* WORKSPACE DETAIL WORKSPACE WITH INLINE SPENDING COLUMN CONFIGURATOR */}
@@ -855,86 +741,48 @@ export function AccountPage({
                 </div>
               </div>
 
-              {/* Spending categories columns inline editor */}
+              {/* Spending categories columns display */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Spending Columns Order & Categories</span>
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    onClick={() => setIsColModalOpen(true)}
-                    style={{ minHeight: '26px', padding: '0 8px', fontSize: '0.75rem', borderRadius: 'var(--md-sys-shape-corner-s)' }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>add</span>
-                    Add Category Column
-                  </button>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                    Active Budget Categories (driven by Budget configuration)
+                  </span>
                 </div>
 
-                {/* Compact inline chips for category list with Order Controls */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px', maxHeight: '110px', overflowY: 'auto' }}>
-                  {draftAccount.columns.filter(c => !c.isDeleted).length === 0 ? (
+                  {budgetCategories.length === 0 ? (
                     <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                      No active columns. Click Add Category Column.
+                      No active budget categories. Add categories in the Budget panel.
                     </span>
                   ) : (
-                    draftAccount.columns.map((col, idx) => {
-                      if (col.isDeleted) return null;
-                      return (
+                    budgetCategories.map((cat) => (
+                      <span
+                        key={cat.id}
+                        className="status-badge"
+                        style={{
+                          backgroundColor: 'var(--md-sys-color-surface-container-high)',
+                          border: '1px solid var(--md-sys-color-outline)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '4px 8px',
+                          fontSize: '0.75rem',
+                          borderRadius: 'var(--md-sys-shape-corner-xs)',
+                          textTransform: 'none',
+                          color: 'var(--md-sys-color-on-surface)',
+                        }}
+                      >
                         <span
-                          key={col.id}
-                          className="status-badge"
                           style={{
-                            backgroundColor: 'var(--md-sys-color-surface-container-high)',
-                            border: '1px solid var(--md-sys-color-outline)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '2px 6px',
-                            fontSize: '0.75rem',
-                            borderRadius: 'var(--md-sys-shape-corner-xs)',
-                            textTransform: 'none',
-                            color: 'var(--md-sys-color-on-surface)',
+                            width: '8px',
+                            height: '8px',
+                            borderRadius: '50%',
+                            backgroundColor: cat.colorHex || 'var(--md-sys-color-outline)',
                           }}
-                        >
-                          {col.icon && (
-                            <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
-                              {col.icon}
-                            </span>
-                          )}
-                          <strong style={{ marginRight: '4px' }}>{col.name}</strong>
-
-                          {/* Reordering Up/Down controls */}
-                          <button
-                            type="button"
-                            onClick={() => moveColumn(idx, 'up')}
-                            disabled={idx === 0}
-                            style={{ background: 'transparent', border: 'none', padding: 0, opacity: idx === 0 ? 0.3 : 0.7, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                            title="Move Left"
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>arrow_back</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveColumn(idx, 'down')}
-                            disabled={idx === draftAccount.columns.length - 1}
-                            style={{ background: 'transparent', border: 'none', padding: 0, opacity: idx === draftAccount.columns.length - 1 ? 0.3 : 0.7, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-                            title="Move Right"
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>arrow_forward</span>
-                          </button>
-
-                          {/* Soft delete confirmation prompt */}
-                          <button
-                            type="button"
-                            onClick={() => triggerSoftDeleteColumn(col)}
-                            style={{ background: 'transparent', border: 'none', padding: 0, display: 'flex', alignItems: 'center', cursor: 'pointer', marginLeft: '2px' }}
-                            title="Soft Delete Column"
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: '13px', color: 'var(--md-sys-color-error)' }}>close</span>
-                          </button>
-                        </span>
-                      );
-                    })
+                        />
+                        <strong>{cat.name}</strong>
+                      </span>
+                    ))
                   )}
                 </div>
               </div>
@@ -1014,11 +862,9 @@ export function AccountPage({
                             <span className="excel-cell-val">{formatMoney(row.start)}</span>
                           </td>
                           <td className="excel-col-credit">
-                            <ExcelCellInput
-                              value={row.credit}
-                              onChange={(val) => updateCell(m, 'credit', val)}
-                              className="excel-col-credit"
-                            />
+                            <span className="excel-cell-val excel-bold-col" style={{ color: '#34d399' }}>
+                              {formatMoney(row.credit)}
+                            </span>
                           </td>
                           {activeColumns.map((col) => (
                             <td key={col.id}>
