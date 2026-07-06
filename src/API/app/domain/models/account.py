@@ -20,3 +20,12 @@ class Account:
     created_at: str
     updated_at: str
     savings_account_id: str | None = None
+    investment_account_type: str | None = None
+    investment_brokerage: str | None = None
+    yearly_contribution: float | None = None
+    employer_income_source_id: str | None = None
+    employer_match_rate_percent: float | None = None
+    employer_match_cap_percent: float | None = None
+    employer_match_start_date: str | None = None
+    employer_match_amount: float | None = None
+    employer_match_percent: float | None = None

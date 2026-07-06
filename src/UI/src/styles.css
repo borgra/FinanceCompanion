@@ -648,6 +648,244 @@ p {
   color: var(--md-sys-color-on-surface-variant);
 }
 
+.funding-schedule-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.funding-schedule-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  max-width: 1180px;
+}
+
+.funding-schedule-summary div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: rgba(255, 255, 255, 0.018);
+}
+
+.funding-schedule-summary span,
+.funding-payroll-cell span {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.funding-schedule-summary strong {
+  font-family: var(--md-sys-font-display);
+  font-size: 1rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.funding-schedule-summary p {
+  font-size: 0.76rem;
+}
+
+.funding-schedule-table {
+  margin: 0;
+}
+
+.funding-schedule-table .excel-table th {
+  min-width: 132px;
+}
+
+.funding-schedule-table .excel-table th,
+.funding-schedule-table .excel-table td {
+  padding: 4px 6px;
+}
+
+.funding-payroll-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  padding: 4px 8px;
+}
+
+.funding-payroll-cell strong {
+  font-size: 0.82rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.funding-schedule-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.investment-workspace {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.investment-account-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 980px;
+}
+
+.investment-account-manager-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  padding-bottom: 8px;
+}
+
+.investment-account-manager-header h2 {
+  font-size: 1.05rem;
+}
+
+.investment-account-empty {
+  padding: 12px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: rgba(255, 255, 255, 0.018);
+}
+
+.investment-account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.investment-account-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.investment-account-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.investment-account-group-header h3 {
+  font-size: 0.95rem;
+}
+
+.investment-account-group-header p {
+  margin-top: 2px;
+  font-size: 0.78rem;
+}
+
+.investment-account-row {
+  cursor: default;
+}
+
+.investment-account-row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.investment-account-row-main .material-symbols-outlined {
+  color: #38bdf8;
+  font-size: 1.25rem;
+}
+
+.brokerage-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  font-family: var(--md-sys-font-display);
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #ffffff;
+  flex: 0 0 auto;
+}
+
+.brokerage-fidelity {
+  background-color: #0f766e;
+}
+
+.brokerage-etrade {
+  background-color: #5b21b6;
+}
+
+.brokerage-robinhood {
+  background-color: #00c805;
+  color: #04130a;
+}
+
+.investment-account-row-labels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.investment-account-row-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 150px;
+}
+
+.investment-account-row-meta span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.investment-account-row-meta strong {
+  font-size: 0.82rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+.funding-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.investment-list-actions,
+.table-save-actions {
+  justify-content: flex-end;
+}
+
+.table-save-actions {
+  margin-bottom: -4px;
+}
+
+.funding-section-actions .primary-action {
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: var(--md-sys-shape-corner-s);
+  font-size: 0.75rem;
+}
+
+.compact-add-action {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--md-sys-shape-corner-s);
+  font-size: 0.75rem;
+}
+
+.investment-account-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* Read Only / Static Form Value Display */
 .read-only-field {
   display: flex;

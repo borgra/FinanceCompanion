@@ -99,6 +99,15 @@ def _account_from_dict(data: dict) -> Account:
         created_at=data["createdAt"],
         updated_at=data["updatedAt"],
         savings_account_id=data.get("savingsAccountId"),
+        investment_account_type=data.get("investmentAccountType"),
+        investment_brokerage=data.get("investmentBrokerage"),
+        yearly_contribution=data.get("yearlyContribution"),
+        employer_income_source_id=data.get("employerIncomeSourceId"),
+        employer_match_rate_percent=data.get("employerMatchRatePercent"),
+        employer_match_cap_percent=data.get("employerMatchCapPercent"),
+        employer_match_start_date=data.get("employerMatchStartDate"),
+        employer_match_amount=data.get("employerMatchAmount"),
+        employer_match_percent=data.get("employerMatchPercent"),
     )
 
 

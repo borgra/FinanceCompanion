@@ -142,6 +142,49 @@ describe('AccountPage', () => {
     expect(accounts.find((account) => account.name === 'Travel Savings')?.columns).toEqual([]);
   });
 
+  it('hides investment accounts from the bank account workspace', async () => {
+    const accounts: Account[] = [
+      {
+        id: 'acc-checking',
+        name: 'Primary Checking',
+        type: 'Checking',
+        startingBalance: 1000,
+        startDate: '2026-01-01',
+        yieldRate: 0,
+        assignedIncomeSourceIds: [],
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '2026-06-30T00:00:00.000Z',
+        updatedAt: '2026-06-30T00:00:00.000Z',
+      },
+      {
+        id: 'acc-investment',
+        name: 'Brokerage',
+        type: 'Investment',
+        investmentAccountType: 'Taxable',
+        startingBalance: 10000,
+        startDate: '2026-01-01',
+        yieldRate: 0,
+        assignedIncomeSourceIds: [],
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '2026-06-30T00:00:00.000Z',
+        updatedAt: '2026-06-30T00:00:00.000Z',
+      },
+    ];
+
+    renderPage(accounts);
+
+    expect(await screen.findByText('Primary Checking')).toBeInTheDocument();
+    expect(screen.queryByText('Brokerage')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^add account$/i }));
+
+    expect(screen.getByRole('option', { name: 'Checking' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Savings' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Investment' })).not.toBeInTheDocument();
+  });
+
   it('shows account metadata as read-only labels in the workspace', async () => {
     renderPage();
 

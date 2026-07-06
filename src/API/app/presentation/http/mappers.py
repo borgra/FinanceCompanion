@@ -133,6 +133,15 @@ def to_account(account_id: str, payload: AccountUpsertRequest, created_at: str, 
         created_at=created_at,
         updated_at=updated_at,
         savings_account_id=payload.savings_account_id,
+        investment_account_type=payload.investment_account_type,
+        investment_brokerage=payload.investment_brokerage,
+        yearly_contribution=payload.yearly_contribution,
+        employer_income_source_id=payload.employer_income_source_id,
+        employer_match_rate_percent=payload.employer_match_rate_percent,
+        employer_match_cap_percent=payload.employer_match_cap_percent,
+        employer_match_start_date=payload.employer_match_start_date,
+        employer_match_amount=payload.employer_match_amount,
+        employer_match_percent=payload.employer_match_percent,
     )
 
 
@@ -146,6 +155,15 @@ def to_account_payload(item: Account) -> AccountPayload:
         yield_rate=item.yield_rate,
         assigned_income_source_ids=item.assigned_income_source_ids,
         savings_account_id=item.savings_account_id,
+        investment_account_type=item.investment_account_type,
+        investment_brokerage=item.investment_brokerage,
+        yearly_contribution=item.yearly_contribution,
+        employer_income_source_id=item.employer_income_source_id,
+        employer_match_rate_percent=item.employer_match_rate_percent,
+        employer_match_cap_percent=item.employer_match_cap_percent,
+        employer_match_start_date=item.employer_match_start_date,
+        employer_match_amount=item.employer_match_amount,
+        employer_match_percent=item.employer_match_percent,
         columns=[
             AccountColumnPayload(
                 id=column.id,

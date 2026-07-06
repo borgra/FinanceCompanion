@@ -29,6 +29,18 @@ const maxAccountBalance = 999_999_999.99;
 const accountTypeOrder: Record<AccountType, number> = {
   Checking: 0,
   Savings: 1,
+  Investment: 2,
+};
+const accountTypeIcon = (type: AccountType) => {
+  if (type === 'Checking') return 'payments';
+  if (type === 'Investment') return 'show_chart';
+  return 'savings';
+};
+
+const accountTypeIconColor = (type: AccountType) => {
+  if (type === 'Checking') return '#d97706';
+  if (type === 'Investment') return '#38bdf8';
+  return '#a78bfa';
 };
 
 const toMonthInputValue = (dateValue: string) => dateValue.slice(0, 7);
@@ -318,7 +330,10 @@ export function AccountPage({
   const [selectedBudgetSubCategoryId, setSelectedBudgetSubCategoryId] = useState('');
 
   const isEditingAccount = modalAccountId !== null;
-  const sortedAccounts = useMemo(() => sortAccounts(accounts), [accounts]);
+  const sortedAccounts = useMemo(
+    () => sortAccounts(accounts).filter((account) => account.type !== 'Investment'),
+    [accounts],
+  );
   const assignedIncomeAccountBySourceId = useMemo(() => {
     const assignments = new Map<string, Account>();
     accounts.forEach((account) => {
@@ -526,6 +541,15 @@ export function AccountPage({
         yieldRate: String(draftAccount.yieldRate),
         assignedIncomeSourceIds: draftAccount.assignedIncomeSourceIds || [],
         savingsAccountId: draftAccount.savingsAccountId || '',
+        investmentAccountType: draftAccount.investmentAccountType || 'Taxable',
+        investmentBrokerage: draftAccount.investmentBrokerage || 'Fidelity',
+        yearlyContribution: String(draftAccount.yearlyContribution || 0),
+        employerIncomeSourceId: draftAccount.employerIncomeSourceId || '',
+        employerMatchRatePercent: String(draftAccount.employerMatchRatePercent || 0),
+        employerMatchCapPercent: String(draftAccount.employerMatchCapPercent || 0),
+        employerMatchStartDate: draftAccount.employerMatchStartDate || '',
+        employerMatchAmount: String(draftAccount.employerMatchAmount || 0),
+        employerMatchPercent: String(draftAccount.employerMatchPercent || 0),
         columns: columnsPayload,
         monthlyRecords: recordsPayload,
       };
@@ -622,8 +646,29 @@ export function AccountPage({
         startingBalance: String(balanceNum),
         startDate: modalDraft.startDate || '2026-01-01',
         yieldRate: String(Number(modalDraft.yieldRate) || 0),
-        assignedIncomeSourceIds: modalDraft.assignedIncomeSourceIds,
-        savingsAccountId: modalDraft.savingsAccountId || '',
+        assignedIncomeSourceIds:
+          modalDraft.type === 'Investment' ? [] : modalDraft.assignedIncomeSourceIds,
+        savingsAccountId: modalDraft.type === 'Checking' ? modalDraft.savingsAccountId || '' : '',
+        investmentAccountType:
+          modalDraft.type === 'Investment' ? modalDraft.investmentAccountType : 'Taxable',
+        investmentBrokerage:
+          modalDraft.type === 'Investment' ? modalDraft.investmentBrokerage : 'Fidelity',
+        yearlyContribution:
+          modalDraft.type === 'Investment' ? String(Number(modalDraft.yearlyContribution) || 0) : '',
+        employerIncomeSourceId:
+          modalDraft.type === 'Investment' ? modalDraft.employerIncomeSourceId || '' : '',
+        employerMatchRatePercent:
+          modalDraft.type === 'Investment' ? String(Number(modalDraft.employerMatchRatePercent) || 0) : '',
+        employerMatchCapPercent:
+          modalDraft.type === 'Investment' ? String(Number(modalDraft.employerMatchCapPercent) || 0) : '',
+        employerMatchStartDate:
+          modalDraft.type === 'Investment' ? modalDraft.employerMatchStartDate || '' : '',
+        employerMatchAmount:
+          modalDraft.type === 'Investment' ? String(Number(modalDraft.employerMatchAmount) || 0) : '',
+        employerMatchPercent:
+          modalDraft.type === 'Investment'
+            ? String(Math.min(Math.max(Number(modalDraft.employerMatchPercent) || 0, 0), 50))
+            : '0',
         columns: columnsPayload,
         monthlyRecords: recordsPayload,
       };
@@ -986,8 +1031,8 @@ export function AccountPage({
                   style={{ cursor: 'pointer' }}
                 >
                   <div className="account-selector-item-left">
-                    <span className="material-symbols-outlined" style={{ fontSize: '1.25rem', color: acc.type === 'Checking' ? '#d97706' : '#a78bfa' }}>
-                      {acc.type === 'Checking' ? 'payments' : 'savings'}
+                    <span className="material-symbols-outlined" style={{ fontSize: '1.25rem', color: accountTypeIconColor(acc.type) }}>
+                      {accountTypeIcon(acc.type)}
                     </span>
                     <span className="account-selector-item-name">{acc.name}</span>
                     <span className="account-selector-item-type">({acc.type})</span>
@@ -1047,9 +1092,15 @@ export function AccountPage({
                 <span>Account Type</span>
                 <select
                   value={modalDraft.type}
-                  onChange={(e) =>
-                    setModalDraft({ ...modalDraft, type: e.target.value as AccountType })
-                  }
+                  onChange={(e) => {
+                    const nextType = e.target.value as AccountType;
+                    setModalDraft({
+                      ...modalDraft,
+                      type: nextType,
+                      savingsAccountId:
+                        nextType === 'Checking' ? modalDraft.savingsAccountId : '',
+                    });
+                  }}
                   style={{ border: '1.5px solid var(--md-sys-color-outline)', borderRadius: 'var(--md-sys-shape-corner-s)', height: '48px', color: 'var(--md-sys-color-on-surface)', backgroundColor: 'transparent', padding: '10px' }}
                 >
                   <option value="Checking" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>Checking</option>

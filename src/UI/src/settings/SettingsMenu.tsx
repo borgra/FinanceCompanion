@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 export type SettingsMenuSection = {
   id: string;
   label: string;
+  icon: string;
 };
 
 export type SettingsMenuProps = {
@@ -25,7 +26,6 @@ export function SettingsMenu({
       <div className="settings-tablist" role="tablist" aria-label="Dashboard sections">
         {sections.map((section) => {
           const isSelected = section.id === activeSectionId;
-          const icon = section.id === 'income' ? 'tune' : 'account_balance_wallet';
           return (
             <button
               key={section.id}
@@ -36,7 +36,7 @@ export function SettingsMenu({
               onClick={() => onActiveSectionChange(section.id)}
             >
               <span className="material-symbols-outlined settings-tab-icon" aria-hidden="true">
-                {icon}
+                {section.icon}
               </span>
               <span className="settings-tab-label">{section.label}</span>
             </button>

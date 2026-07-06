@@ -164,6 +164,35 @@ def _account_from_entity(entity: dict) -> Account:
         created_at=entity["createdAt"],
         updated_at=entity["updatedAt"],
         savings_account_id=entity.get("savingsAccountId"),
+        investment_account_type=entity.get("investmentAccountType"),
+        investment_brokerage=entity.get("investmentBrokerage"),
+        yearly_contribution=(
+            float(entity["yearlyContribution"])
+            if entity.get("yearlyContribution") is not None
+            else None
+        ),
+        employer_income_source_id=entity.get("employerIncomeSourceId"),
+        employer_match_rate_percent=(
+            float(entity["employerMatchRatePercent"])
+            if entity.get("employerMatchRatePercent") is not None
+            else None
+        ),
+        employer_match_cap_percent=(
+            float(entity["employerMatchCapPercent"])
+            if entity.get("employerMatchCapPercent") is not None
+            else None
+        ),
+        employer_match_start_date=entity.get("employerMatchStartDate"),
+        employer_match_amount=(
+            float(entity["employerMatchAmount"])
+            if entity.get("employerMatchAmount") is not None
+            else None
+        ),
+        employer_match_percent=(
+            float(entity["employerMatchPercent"])
+            if entity.get("employerMatchPercent") is not None
+            else None
+        ),
     )
 
 
@@ -183,6 +212,15 @@ def _account_to_entity(user_id: str, account: Account) -> dict:
         "columnsJson": json.dumps([asdict(c) for c in account.columns]),
         "monthlyRecordsJson": json.dumps([asdict(r) for r in account.monthly_records]),
         "savingsAccountId": account.savings_account_id,
+        "investmentAccountType": account.investment_account_type,
+        "investmentBrokerage": account.investment_brokerage,
+        "yearlyContribution": account.yearly_contribution,
+        "employerIncomeSourceId": account.employer_income_source_id,
+        "employerMatchRatePercent": account.employer_match_rate_percent,
+        "employerMatchCapPercent": account.employer_match_cap_percent,
+        "employerMatchStartDate": account.employer_match_start_date,
+        "employerMatchAmount": account.employer_match_amount,
+        "employerMatchPercent": account.employer_match_percent,
     }
 
 
@@ -528,5 +566,14 @@ def seed_cosmos_database(client: TableClient, allowed_email: str) -> None:
                 created_at=raw_acc["createdAt"],
                 updated_at=raw_acc["updatedAt"],
                 savings_account_id=raw_acc.get("savingsAccountId"),
+                investment_account_type=raw_acc.get("investmentAccountType"),
+                investment_brokerage=raw_acc.get("investmentBrokerage"),
+                yearly_contribution=raw_acc.get("yearlyContribution"),
+                employer_income_source_id=raw_acc.get("employerIncomeSourceId"),
+                employer_match_rate_percent=raw_acc.get("employerMatchRatePercent"),
+                employer_match_cap_percent=raw_acc.get("employerMatchCapPercent"),
+                employer_match_start_date=raw_acc.get("employerMatchStartDate"),
+                employer_match_amount=raw_acc.get("employerMatchAmount"),
+                employer_match_percent=raw_acc.get("employerMatchPercent"),
             )
             client.upsert_entity(_account_to_entity(user_id, account))

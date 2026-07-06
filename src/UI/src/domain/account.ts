@@ -1,4 +1,7 @@
-export type AccountType = 'Checking' | 'Savings';
+export type AccountType = 'Checking' | 'Savings' | 'Investment';
+
+export type InvestmentAccountType = 'Taxable' | '401k' | 'IRA' | 'HSA';
+export type InvestmentBrokerage = 'Fidelity' | 'eTrade' | 'Robinhood';
 
 export type AccountColumn = {
   id: string;
@@ -24,6 +27,15 @@ export type Account = {
   yieldRate: number; // APY percentage
   assignedIncomeSourceIds: string[];
   savingsAccountId?: string;
+  investmentAccountType?: InvestmentAccountType;
+  investmentBrokerage?: InvestmentBrokerage;
+  yearlyContribution?: number;
+  employerIncomeSourceId?: string;
+  employerMatchRatePercent?: number;
+  employerMatchCapPercent?: number;
+  employerMatchStartDate?: string;
+  employerMatchAmount?: number;
+  employerMatchPercent?: number;
   columns: AccountColumn[];
   monthlyRecords: MonthlyRecord[];
   createdAt: string;
@@ -38,6 +50,15 @@ export type AccountDraft = {
   yieldRate: string;
   assignedIncomeSourceIds: string[];
   savingsAccountId: string;
+  investmentAccountType: InvestmentAccountType;
+  investmentBrokerage: InvestmentBrokerage;
+  yearlyContribution: string;
+  employerIncomeSourceId: string;
+  employerMatchRatePercent: string;
+  employerMatchCapPercent: string;
+  employerMatchStartDate: string;
+  employerMatchAmount: string;
+  employerMatchPercent: string;
   columns: AccountColumn[];
   monthlyRecords: MonthlyRecord[];
 };
@@ -74,6 +95,15 @@ export const emptyAccountDraft = (): AccountDraft => ({
   yieldRate: '',
   assignedIncomeSourceIds: [],
   savingsAccountId: '',
+  investmentAccountType: 'Taxable',
+  investmentBrokerage: 'Fidelity',
+  yearlyContribution: '',
+  employerIncomeSourceId: '',
+  employerMatchRatePercent: '100',
+  employerMatchCapPercent: '3',
+  employerMatchStartDate: '',
+  employerMatchAmount: '',
+  employerMatchPercent: '0',
   columns: [],
   monthlyRecords: defaultMonthlyRecords(),
 });
@@ -86,6 +116,24 @@ export const toAccountDraft = (account: Account): AccountDraft => ({
   yieldRate: account.yieldRate !== undefined ? String(account.yieldRate) : '',
   assignedIncomeSourceIds: [...(account.assignedIncomeSourceIds || [])],
   savingsAccountId: account.savingsAccountId || '',
+  investmentAccountType: account.investmentAccountType || 'Taxable',
+  investmentBrokerage: account.investmentBrokerage || 'Fidelity',
+  yearlyContribution:
+    account.yearlyContribution !== undefined ? String(account.yearlyContribution) : '',
+  employerIncomeSourceId: account.employerIncomeSourceId || '',
+  employerMatchRatePercent:
+    account.employerMatchRatePercent !== undefined
+      ? String(account.employerMatchRatePercent)
+      : '100',
+  employerMatchCapPercent:
+    account.employerMatchCapPercent !== undefined
+      ? String(account.employerMatchCapPercent)
+      : '3',
+  employerMatchStartDate: account.employerMatchStartDate || '',
+  employerMatchAmount:
+    account.employerMatchAmount !== undefined ? String(account.employerMatchAmount) : '',
+  employerMatchPercent:
+    account.employerMatchPercent !== undefined ? String(account.employerMatchPercent) : '0',
   columns: (account.columns || []).map((c) => ({ ...c })),
   monthlyRecords: account.monthlyRecords.map((r) => ({
     ...r,
