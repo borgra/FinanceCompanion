@@ -66,7 +66,6 @@ def build_container(
             CosmosBudgetRepository,
             CosmosIncomeSourceRepository,
             CosmosUserRepository,
-            seed_cosmos_database,
         )
 
         client = TableClient.from_connection_string(
@@ -77,8 +76,6 @@ def build_container(
             client.create_table()
         except ResourceExistsError:
             pass
-
-        seed_cosmos_database(client, settings.allowed_email)
 
         users = CosmosUserRepository(client)
         income_sources = CosmosIncomeSourceRepository(client)

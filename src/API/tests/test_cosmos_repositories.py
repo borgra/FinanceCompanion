@@ -17,7 +17,6 @@ from app.infrastructure.cosmos_repositories import (
     CosmosBudgetRepository,
     CosmosIncomeSourceRepository,
     CosmosUserRepository,
-    seed_cosmos_database,
 )
 
 
@@ -249,15 +248,3 @@ def test_account_create_and_update(mock_table_client):
     }
     repo.update_for_user("user-123", "acc-1", account)
     mock_table_client.upsert_entity.assert_called_once()
-
-
-# --- Database Seeding Test ---
-
-def test_seed_cosmos_database(mock_table_client):
-    # If user mapping doesn't exist, we must seed
-    mock_table_client.get_entity.side_effect = ResourceNotFoundError("Not found")
-    
-    seed_cosmos_database(mock_table_client, "steveborgra@gmail.com")
-    
-    # We expect upsert_entity to be called many times to write users, accounts, budgets, and income sources
-    assert mock_table_client.upsert_entity.call_count > 5

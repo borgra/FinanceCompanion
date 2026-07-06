@@ -72,11 +72,40 @@ def test_seeded_contracts_are_served_after_authentication():
 
     assert income_payload[0]["id"] == "income-source-primary"
     assert income_payload[1]["id"] == "income-source-side"
+    assert {source["id"] for source in income_payload} == {
+        "income-source-primary",
+        "income-source-side",
+        "income-source-bonus",
+        "income-source-dividends",
+    }
     assert budget_payload[0]["id"] == "cat-housing"
     assert budget_payload[0]["subCategories"][0]["id"] == "sub-house"
+    assert len(budget_payload) == 11
+    assert any(category["id"] == "cat-savings" for category in budget_payload)
     assert account_payload[0]["id"] == "acc-lfcu"
     assert account_payload[0]["assignedIncomeSourceIds"] == ["income-source-primary", "income-source-side"]
+    assert account_payload[0]["savingsAccountId"] == "acc-hys"
     assert account_payload[0]["monthlyRecords"][0]["month"] == "Jan-26"
+    investment_accounts = [account for account in account_payload if account["type"] == "Investment"]
+    assert {account["investmentAccountType"] for account in investment_accounts} == {
+        "Taxable",
+        "401k",
+        "IRA",
+        "HSA",
+    }
+    assert next(
+        account for account in investment_accounts if account["id"] == "acc-401k"
+    )["employerIncomeSourceId"] == "income-source-primary"
+    taxable_account = next(
+        account for account in investment_accounts if account["id"] == "acc-taxable-brokerage"
+    )
+    ira_account = next(account for account in investment_accounts if account["id"] == "acc-roth-ira")
+    assert taxable_account["monthlyRecords"][0]["invest"] == 1800
+    assert ira_account["monthlyRecords"][0]["invest"] == 900
+    assert (
+        taxable_account["monthlyRecords"][0]["invest"]
+        + ira_account["monthlyRecords"][0]["invest"]
+    ) == account_payload[0]["monthlyRecords"][0]["invest"]
     assert session_response.json()["email"] == "steveborgra@gmail.com"
 
 

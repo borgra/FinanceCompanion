@@ -3,6 +3,43 @@ from __future__ import annotations
 from copy import deepcopy
 
 
+SEED_TIMESTAMP = "2026-06-30T00:00:00.000Z"
+PROJECTION_MONTHS = [
+    "Jan-26",
+    "Feb-26",
+    "Mar-26",
+    "Apr-26",
+    "May-26",
+    "Jun-26",
+    "Jul-26",
+    "Aug-26",
+    "Sep-26",
+    "Oct-26",
+    "Nov-26",
+    "Dec-26",
+]
+
+
+def _empty_monthly_records():
+    return [
+        {"month": month, "credit": 0, "outflows": {}, "invest": 0, "savings": 0}
+        for month in PROJECTION_MONTHS
+    ]
+
+
+def _investment_allocation_records(monthly_amounts: list[float]):
+    return [
+        {
+            "month": month,
+            "credit": 0,
+            "outflows": {},
+            "invest": monthly_amounts[index],
+            "savings": 0,
+        }
+        for index, month in enumerate(PROJECTION_MONTHS)
+    ]
+
+
 SEED_USERS = [
     {
         "id": "user-steve",
@@ -31,12 +68,12 @@ SEED_INCOME_SOURCES = {
                 }
             ],
             "status": "Active",
-            "createdAt": "2026-06-30T00:00:00.000Z",
-            "updatedAt": "2026-06-30T00:00:00.000Z",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
         },
         {
             "id": "income-source-side",
-            "name": "Side income",
+            "name": "Consulting income",
             "type": "Salary",
             "cadence": "Bi-weekly",
             "periods": [
@@ -48,8 +85,42 @@ SEED_INCOME_SOURCES = {
                 }
             ],
             "status": "Active",
-            "createdAt": "2026-06-30T00:00:00.000Z",
-            "updatedAt": "2026-06-30T00:00:00.000Z",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+        },
+        {
+            "id": "income-source-bonus",
+            "name": "Annual performance bonus",
+            "type": "Bonus",
+            "cadence": "Annual",
+            "periods": [
+                {
+                    "id": "bonus-period",
+                    "startDate": "2026-04-01",
+                    "yearlyGrossAmount": 18000,
+                    "netPercentage": 62,
+                }
+            ],
+            "status": "Active",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+        },
+        {
+            "id": "income-source-dividends",
+            "name": "Dividend income",
+            "type": "Investment",
+            "cadence": "Monthly",
+            "periods": [
+                {
+                    "id": "dividend-period",
+                    "startDate": "2026-01-01",
+                    "yearlyGrossAmount": 3600,
+                    "netPercentage": 85,
+                }
+            ],
+            "status": "Active",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
         },
     ]
 }
@@ -214,6 +285,131 @@ SEED_BUDGET_CATEGORIES = {
                 },
             ],
         },
+        {
+            "id": "cat-debt",
+            "name": "Debt Payments",
+            "colorHex": "#ff6b6b",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+            "subCategories": [
+                {
+                    "id": "sub-student-loan",
+                    "categoryId": "cat-debt",
+                    "name": "Student loan",
+                    "monthlyAmountUsd": 325,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+                {
+                    "id": "sub-auto-loan",
+                    "categoryId": "cat-debt",
+                    "name": "Auto loan",
+                    "monthlyAmountUsd": 410,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+            ],
+        },
+        {
+            "id": "cat-insurance",
+            "name": "Insurance",
+            "colorHex": "#45b7d1",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+            "subCategories": [
+                {
+                    "id": "sub-auto-insurance",
+                    "categoryId": "cat-insurance",
+                    "name": "Auto insurance",
+                    "monthlyAmountUsd": 135,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+                {
+                    "id": "sub-life-insurance",
+                    "categoryId": "cat-insurance",
+                    "name": "Life insurance",
+                    "monthlyAmountUsd": 42,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+            ],
+        },
+        {
+            "id": "cat-subscriptions",
+            "name": "Subscriptions",
+            "colorHex": "#7c6cff",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+            "subCategories": [
+                {
+                    "id": "sub-streaming",
+                    "categoryId": "cat-subscriptions",
+                    "name": "Streaming",
+                    "monthlyAmountUsd": 55,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+                {
+                    "id": "sub-software",
+                    "categoryId": "cat-subscriptions",
+                    "name": "Software",
+                    "monthlyAmountUsd": 48,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+            ],
+        },
+        {
+            "id": "cat-savings",
+            "name": "Savings Goals",
+            "colorHex": "#35c759",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+            "subCategories": [
+                {
+                    "id": "sub-emergency-fund",
+                    "categoryId": "cat-savings",
+                    "name": "Emergency fund",
+                    "monthlyAmountUsd": 600,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+                {
+                    "id": "sub-travel-fund",
+                    "categoryId": "cat-savings",
+                    "name": "Travel fund",
+                    "monthlyAmountUsd": 250,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+            ],
+        },
+        {
+            "id": "cat-giving",
+            "name": "Giving",
+            "colorHex": "#f7b731",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+            "subCategories": [
+                {
+                    "id": "sub-charity",
+                    "categoryId": "cat-giving",
+                    "name": "Charity",
+                    "monthlyAmountUsd": 200,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+                {
+                    "id": "sub-family-support",
+                    "categoryId": "cat-giving",
+                    "name": "Family support",
+                    "monthlyAmountUsd": 150,
+                    "createdAt": SEED_TIMESTAMP,
+                    "updatedAt": SEED_TIMESTAMP,
+                },
+            ],
+        },
     ]
 }
 
@@ -227,6 +423,7 @@ SEED_ACCOUNTS = {
             "startDate": "2026-01-01",
             "yieldRate": 0,
             "assignedIncomeSourceIds": ["income-source-primary", "income-source-side"],
+            "savingsAccountId": "acc-hys",
             "columns": [
                 {"id": "house", "name": "House", "icon": "home"},
                 {"id": "chase", "name": "Chase", "icon": "credit_card"},
@@ -249,8 +446,8 @@ SEED_ACCOUNTS = {
                 {"month": "Nov-26", "credit": 10752, "outflows": {"house": 3030, "chase": 0, "amex-p": 3250, "amex-c": 1500, "rh": 1500, "misc": 500}, "invest": 2000, "savings": 0},
                 {"month": "Dec-26", "credit": 10752, "outflows": {"house": 3030, "chase": 0, "amex-p": 3250, "amex-c": 1500, "rh": 1500, "misc": 500}, "invest": 2000, "savings": 0},
             ],
-            "createdAt": "2026-06-30T00:00:00.000Z",
-            "updatedAt": "2026-06-30T00:00:00.000Z",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
         },
         {
             "id": "acc-secondary",
@@ -278,8 +475,8 @@ SEED_ACCOUNTS = {
                 {"month": "Nov-26", "credit": 0, "outflows": {}, "invest": 0, "savings": 0},
                 {"month": "Dec-26", "credit": 0, "outflows": {}, "invest": 0, "savings": 0},
             ],
-            "createdAt": "2026-06-30T00:00:00.000Z",
-            "updatedAt": "2026-06-30T00:00:00.000Z",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
         },
         {
             "id": "acc-hys",
@@ -304,8 +501,100 @@ SEED_ACCOUNTS = {
                 {"month": "Nov-26", "credit": 0, "outflows": {}, "invest": 0, "savings": 0},
                 {"month": "Dec-26", "credit": 0, "outflows": {}, "invest": 0, "savings": 0},
             ],
-            "createdAt": "2026-06-30T00:00:00.000Z",
-            "updatedAt": "2026-06-30T00:00:00.000Z",
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+        },
+        {
+            "id": "acc-taxable-brokerage",
+            "name": "Fidelity Taxable Brokerage",
+            "type": "Investment",
+            "startingBalance": 48500,
+            "startDate": "2026-01-01",
+            "yieldRate": 0,
+            "assignedIncomeSourceIds": [],
+            "investmentAccountType": "Taxable",
+            "investmentBrokerage": "Fidelity",
+            "yearlyContribution": 14400,
+            "employerIncomeSourceId": None,
+            "employerMatchRatePercent": 0,
+            "employerMatchCapPercent": 0,
+            "employerMatchStartDate": None,
+            "employerMatchAmount": 0,
+            "employerMatchPercent": 0,
+            "columns": [],
+            "monthlyRecords": _investment_allocation_records(
+                [1800, 1800, 1800, 1200, 1800, 1800, 1300, 1300, 1300, 1300, 1300, 1300]
+            ),
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+        },
+        {
+            "id": "acc-401k",
+            "name": "Employer 401k",
+            "type": "Investment",
+            "startingBalance": 126000,
+            "startDate": "2026-01-01",
+            "yieldRate": 0,
+            "assignedIncomeSourceIds": [],
+            "investmentAccountType": "401k",
+            "investmentBrokerage": "Fidelity",
+            "yearlyContribution": 23000,
+            "employerIncomeSourceId": "income-source-primary",
+            "employerMatchRatePercent": 100,
+            "employerMatchCapPercent": 4,
+            "employerMatchStartDate": "2026-01-01",
+            "employerMatchAmount": 0,
+            "employerMatchPercent": 0,
+            "columns": [],
+            "monthlyRecords": _empty_monthly_records(),
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+        },
+        {
+            "id": "acc-roth-ira",
+            "name": "Roth IRA",
+            "type": "Investment",
+            "startingBalance": 32500,
+            "startDate": "2026-01-01",
+            "yieldRate": 0,
+            "assignedIncomeSourceIds": [],
+            "investmentAccountType": "IRA",
+            "investmentBrokerage": "eTrade",
+            "yearlyContribution": 7000,
+            "employerIncomeSourceId": None,
+            "employerMatchRatePercent": 0,
+            "employerMatchCapPercent": 0,
+            "employerMatchStartDate": None,
+            "employerMatchAmount": 0,
+            "employerMatchPercent": 0,
+            "columns": [],
+            "monthlyRecords": _investment_allocation_records(
+                [900, 900, 900, 500, 900, 900, 700, 700, 700, 700, 700, 700]
+            ),
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
+        },
+        {
+            "id": "acc-hsa",
+            "name": "Health Savings Account",
+            "type": "Investment",
+            "startingBalance": 9200,
+            "startDate": "2026-01-01",
+            "yieldRate": 0,
+            "assignedIncomeSourceIds": [],
+            "investmentAccountType": "HSA",
+            "investmentBrokerage": "Fidelity",
+            "yearlyContribution": 4150,
+            "employerIncomeSourceId": "income-source-primary",
+            "employerMatchRatePercent": 0,
+            "employerMatchCapPercent": 0,
+            "employerMatchStartDate": "2026-01-01",
+            "employerMatchAmount": 1000,
+            "employerMatchPercent": 0,
+            "columns": [],
+            "monthlyRecords": _empty_monthly_records(),
+            "createdAt": SEED_TIMESTAMP,
+            "updatedAt": SEED_TIMESTAMP,
         },
     ]
 }
