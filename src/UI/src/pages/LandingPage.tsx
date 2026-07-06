@@ -28,7 +28,7 @@ export function LandingPage({ repository, budgetRepository, accountRepository }:
           sections={[
             { id: 'income', label: 'Configuration', icon: 'tune' },
             { id: 'budget', label: 'Budget', icon: 'account_balance_wallet' },
-            { id: 'accounts', label: 'Accounts', icon: 'account_balance' },
+            { id: 'accounts', label: 'Banking', icon: 'account_balance' },
             { id: 'investing', label: 'Investing', icon: 'show_chart' },
           ]}
           activeSectionId={activeSectionId}

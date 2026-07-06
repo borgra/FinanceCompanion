@@ -971,7 +971,7 @@ export function AccountPage({
     <main className="app-shell budget-shell">
       <header className="page-header compact-header">
         <div className="page-header-text">
-          <h1>Account Management</h1>
+          <h1>Bank Management</h1>
         </div>
       </header>
 
