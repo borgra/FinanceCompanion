@@ -1990,6 +1990,22 @@ p {
   justify-content: center;
 }
 
+.excel-table th.excel-col-editable-header {
+  background:
+    linear-gradient(180deg, rgba(56, 189, 248, 0.24), rgba(56, 189, 248, 0.11)),
+    var(--md-sys-color-surface-container-highest) !important;
+  border-bottom-color: rgba(56, 189, 248, 0.72);
+  box-shadow: inset 0 -2px 0 rgba(56, 189, 248, 0.48);
+}
+
+.excel-th-editable-content {
+  color: var(--md-sys-color-on-surface);
+}
+
+.excel-th-editable-content > span:not(.material-symbols-outlined) {
+  font-weight: 800;
+}
+
 .excel-filter-arrow {
   display: inline-flex;
   align-items: center;
@@ -2052,6 +2068,20 @@ p {
 
 
 /* Editable grid inputs */
+.excel-editable-cell {
+  position: relative;
+  min-width: 92px;
+  height: 100%;
+  border-radius: 4px;
+  background-color: rgba(56, 189, 248, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.2);
+}
+
+.excel-editable-cell:hover {
+  background-color: rgba(56, 189, 248, 0.13);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.36);
+}
+
 .excel-cell-input {
   width: 100%;
   height: 100%;
@@ -2061,7 +2091,7 @@ p {
   font-family: inherit;
   font-size: inherit;
   text-align: right;
-  padding: 0;
+  padding: 0 6px;
 }
 
 .excel-cell-input:focus {

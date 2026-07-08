@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import type { AccountRepository } from '../domain/accountRepository';
 import type { IncomeSource } from '../domain/incomeSource';
 import type { BudgetCategoryWithSubCategories } from '../domain/budget';
+import {
+  FinanceMoneyCellInput,
+  FinanceTable,
+  FinanceTableHeaderCell,
+} from '../components/FinanceTable';
 import {
   type Account,
   type AccountDraft,
@@ -75,6 +80,8 @@ const formatMoney = (amount: number) => {
   }
   return currencyFormatter.format(amount);
 };
+
+const parseMoneyInput = (value: string) => Number(value.replace(/[$,\s]/g, '')) || 0;
 
 const getMonthlyNetIncomeForMonth = (
   sources: IncomeSource[],
@@ -204,102 +211,6 @@ const computeAccountRecords = (
   });
 };
 
-type ExcelCellInputProps = {
-  value: number;
-  onChange: (val: string) => void;
-  className?: string;
-  disabled?: boolean;
-  focusId?: string;
-  nextFocusId?: string;
-  fillDownLabel?: string;
-  onFillDown?: (val: string) => void;
-};
-
-function ExcelCellInput({
-  value,
-  onChange,
-  className = '',
-  disabled = false,
-  focusId,
-  nextFocusId,
-  fillDownLabel,
-  onFillDown,
-}: ExcelCellInputProps) {
-  const [isFocused, setIsFocused] = useState(false);
-  const [tempValue, setTempValue] = useState(String(value));
-
-  // Sync state with parent when not active
-  useEffect(() => {
-    if (!isFocused) {
-      setTempValue(value === 0 ? '' : String(value));
-    }
-  }, [value, isFocused]);
-
-  const handleBlur = () => {
-    setIsFocused(false);
-    onChange(tempValue);
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    onChange(tempValue);
-    setIsFocused(false);
-
-    if (nextFocusId) {
-      window.requestAnimationFrame(() => {
-        const nextInput = document.querySelector<HTMLInputElement>(
-          `[data-ledger-cell="${nextFocusId}"]`,
-        );
-        nextInput?.focus();
-      });
-    }
-  };
-
-  const handleFillDown = () => {
-    onFillDown?.(tempValue);
-  };
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <input
-        type="text"
-        className={`excel-cell-input ${className}`}
-        data-ledger-cell={focusId}
-        value={isFocused ? tempValue : formatMoney(value)}
-        onChange={(e) => setTempValue(e.target.value)}
-        onFocus={() => setIsFocused(true)}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        disabled={disabled}
-        style={isFocused && onFillDown ? { paddingLeft: '22px' } : undefined}
-      />
-      {isFocused && onFillDown ? (
-        <button
-          type="button"
-          className="link-button"
-          aria-label={fillDownLabel}
-          title={fillDownLabel}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={handleFillDown}
-          style={{
-            position: 'absolute',
-            left: '2px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            minHeight: '18px',
-            width: '18px',
-            padding: 0,
-            color: 'var(--md-sys-color-primary)',
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>keyboard_double_arrow_down</span>
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 export function AccountPage({
   incomeRepository,
   budgetRepository,
@@ -324,7 +235,6 @@ export function AccountPage({
   const [modalDraft, setModalDraft] = useState<AccountDraft>(() => emptyAccountDraft());
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [columnModalMode, setColumnModalMode] = useState<ColumnModalMode>('custom');
-  const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
   const [newColumnName, setNewColumnName] = useState('');
   const [selectedBudgetCategoryId, setSelectedBudgetCategoryId] = useState('');
   const [selectedBudgetSubCategoryId, setSelectedBudgetSubCategoryId] = useState('');
@@ -741,7 +651,7 @@ export function AccountPage({
 
   const updateCell = (index: number, field: 'credit' | 'invest' | 'savings', value: string) => {
     if (!draftAccount) return;
-    const val = Number(value) || 0;
+    const val = parseMoneyInput(value);
     const nextRecords = draftAccount.monthlyRecords.map((r, idx) =>
       idx === index ? { ...r, [field]: val } : r,
     );
@@ -751,7 +661,7 @@ export function AccountPage({
 
   const updateOutflowCell = (index: number, colId: string, value: string) => {
     if (!draftAccount) return;
-    const val = Number(value) || 0;
+    const val = parseMoneyInput(value);
     const nextRecords = draftAccount.monthlyRecords.map((r, idx) =>
       idx === index
         ? {
@@ -773,7 +683,7 @@ export function AccountPage({
     value: string,
   ) => {
     if (!draftAccount) return;
-    const val = Number(value) || 0;
+    const val = parseMoneyInput(value);
     const nextRecords = draftAccount.monthlyRecords.map((record, rowIndex) =>
       rowIndex >= index ? { ...record, [field]: val } : record,
     );
@@ -783,7 +693,7 @@ export function AccountPage({
 
   const fillDownOutflowCell = (index: number, colId: string, value: string) => {
     if (!draftAccount) return;
-    const val = Number(value) || 0;
+    const val = parseMoneyInput(value);
     const nextRecords = draftAccount.monthlyRecords.map((record, rowIndex) =>
       rowIndex >= index
         ? {
@@ -899,7 +809,6 @@ export function AccountPage({
       };
     });
     setDraftAccount({ ...draftAccount, columns, monthlyRecords });
-    setHoveredColumnId((current) => (current === columnId ? null : current));
     setIsDirty(true);
   };
 
@@ -1426,99 +1335,64 @@ export function AccountPage({
                   Add
                 </button>
               </div>
-              <div className="excel-wrapper" style={{ margin: 0 }}>
-                <table className="excel-table">
+              <FinanceTable wrapperStyle={{ margin: 0 }}>
                   <thead>
                     <tr>
-                      <th><div className="excel-th-content">Month<span className="excel-filter-arrow">▾</span></div></th>
-                      <th><div className="excel-th-content">Start<span className="excel-filter-arrow">▾</span></div></th>
+                      <FinanceTableHeaderCell>Month</FinanceTableHeaderCell>
+                      <FinanceTableHeaderCell>Start</FinanceTableHeaderCell>
                       
                       {/* Credit Header: always green, has derivation tooltip */}
-                      <th title="Credit inflows, derivable from Income Management rules" style={{ borderBottom: '2.5px solid #34d399' }}>
-                        <div className="excel-th-content excel-col-credit">
-                          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>add_circle</span>
-                          <span>Credit</span>
-                          <span className="excel-filter-arrow">▾</span>
-                        </div>
-                      </th>
+                      <FinanceTableHeaderCell
+                        contentClassName="excel-col-credit"
+                        icon="add_circle"
+                        title="Credit inflows, derivable from Income Management rules"
+                        style={{ borderBottom: '2.5px solid #34d399' }}
+                      >
+                        Credit
+                      </FinanceTableHeaderCell>
 
                       {/* Active category columns */}
                       {activeColumns.map((col, index) => (
-                        <th
+                        <FinanceTableHeaderCell
                           key={col.id}
+                          icon={col.icon}
+                          isEditable
                           title={col.name}
-                          onMouseEnter={() => setHoveredColumnId(col.id)}
-                          onMouseLeave={() => setHoveredColumnId((current) => (current === col.id ? null : current))}
+                          isMoveLeftDisabled={index === 0}
+                          isMoveRightDisabled={index === activeColumns.length - 1}
+                          onMoveLeft={() => moveAccountColumn(col.id, -1)}
+                          onMoveRight={() => moveAccountColumn(col.id, 1)}
+                          onRemove={() => removeAccountColumn(col.id)}
                         >
-                          <div className="excel-th-content" style={{ gap: '4px' }}>
-                            <button
-                              className="link-button"
-                              type="button"
-                              aria-label={`Move ${col.name} left`}
-                              disabled={index === 0}
-                              onClick={() => moveAccountColumn(col.id, -1)}
-                              style={{
-                                minHeight: 'auto',
-                                padding: 0,
-                                visibility: hoveredColumnId === col.id ? 'visible' : 'hidden',
-                              }}
-                            >
-                              <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>chevron_left</span>
-                            </button>
-                            {col.icon && (
-                              <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
-                                {col.icon}
-                              </span>
-                            )}
-                            <span>{col.name.length > 15 ? `${col.name.slice(0, 12)}...` : col.name}</span>
-                            <button
-                              className="link-button"
-                              type="button"
-                              aria-label={`Remove ${col.name}`}
-                              onClick={() => removeAccountColumn(col.id)}
-                              style={{ minHeight: 'auto', padding: 0 }}
-                            >
-                              <span style={{ fontSize: '0.85rem', lineHeight: 1 }}>[x]</span>
-                            </button>
-                            <button
-                              className="link-button"
-                              type="button"
-                              aria-label={`Move ${col.name} right`}
-                              disabled={index === activeColumns.length - 1}
-                              onClick={() => moveAccountColumn(col.id, 1)}
-                              style={{
-                                minHeight: 'auto',
-                                padding: 0,
-                                visibility: hoveredColumnId === col.id ? 'visible' : 'hidden',
-                              }}
-                            >
-                              <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>chevron_right</span>
-                            </button>
-                          </div>
-                        </th>
+                          {col.name.length > 15 ? `${col.name.slice(0, 12)}...` : col.name}
+                        </FinanceTableHeaderCell>
                       ))}
-                      <th><div className="excel-th-content">Expenses<span className="excel-filter-arrow">▾</span></div></th>
-                      <th><div className="excel-th-content">SubTotal<span className="excel-filter-arrow">▾</span></div></th>
+                      <FinanceTableHeaderCell>Expenses</FinanceTableHeaderCell>
+                      <FinanceTableHeaderCell>SubTotal</FinanceTableHeaderCell>
                       
                       {/* Invest Column Header: Special style */}
-                      <th className="excel-col-special-header" title="Investment outflows">
-                        <div className="excel-th-content">
-                          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>trending_up</span>
-                          <span>Invest</span>
-                          <span className="excel-filter-arrow">▾</span>
-                        </div>
-                      </th>
+                      <FinanceTableHeaderCell
+                        className="excel-col-special-header"
+                        icon="trending_up"
+                        isEditable
+                        title="Investment outflows"
+                      >
+                        Invest
+                      </FinanceTableHeaderCell>
 
                       {/* Savings Column Header: Special style */}
-                      <th className="excel-col-special-header" title="Savings allocations">
-                        <div className="excel-th-content">
-                          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>savings</span>
-                          <span>Savings</span>
-                          <span className="excel-filter-arrow">▾</span>
-                        </div>
-                      </th>
+                      <FinanceTableHeaderCell
+                        className="excel-col-special-header"
+                        icon="savings"
+                        isEditable
+                        title="Savings allocations"
+                      >
+                        Savings
+                      </FinanceTableHeaderCell>
 
-                      <th style={{ color: 'var(--md-sys-color-primary)' }}><div className="excel-th-content">Net Total<span className="excel-filter-arrow">▾</span></div></th>
+                      <FinanceTableHeaderCell style={{ color: 'var(--md-sys-color-primary)' }}>
+                        Net Total
+                      </FinanceTableHeaderCell>
                     </tr>
                   </thead>
                   <tbody>
@@ -1545,9 +1419,10 @@ export function AccountPage({
                           </td>
                           {activeColumns.map((col) => (
                             <td key={col.id}>
-                              <ExcelCellInput
+                              <FinanceMoneyCellInput
                                 value={row.outflows[col.id] || 0}
-                                onChange={(val) => updateOutflowCell(m, col.id, val)}
+                                formatValue={formatMoney}
+                                onValueChange={(val) => updateOutflowCell(m, col.id, val)}
                                 focusId={`outflow-${col.id}-${m}`}
                                 nextFocusId={
                                   m < computedRecords.length - 1 ? `outflow-${col.id}-${m + 1}` : undefined
@@ -1566,9 +1441,10 @@ export function AccountPage({
                             <span className="excel-cell-val excel-bold-col">{formatMoney(row.subtotal)}</span>
                           </td>
                           <td className="excel-col-special">
-                            <ExcelCellInput
+                            <FinanceMoneyCellInput
                               value={row.invest}
-                              onChange={(val) => updateCell(m, 'invest', val)}
+                              formatValue={formatMoney}
+                              onValueChange={(val) => updateCell(m, 'invest', val)}
                               focusId={`invest-${m}`}
                               nextFocusId={m < computedRecords.length - 1 ? `invest-${m + 1}` : undefined}
                               fillDownLabel={`Auto-populate Invest from ${row.month} down`}
@@ -1576,9 +1452,10 @@ export function AccountPage({
                             />
                           </td>
                           <td className="excel-col-special">
-                            <ExcelCellInput
+                            <FinanceMoneyCellInput
                               value={row.savings}
-                              onChange={(val) => updateCell(m, 'savings', val)}
+                              formatValue={formatMoney}
+                              onValueChange={(val) => updateCell(m, 'savings', val)}
                               focusId={`savings-${m}`}
                               nextFocusId={m < computedRecords.length - 1 ? `savings-${m + 1}` : undefined}
                               fillDownLabel={`Auto-populate Savings from ${row.month} down`}
@@ -1598,8 +1475,7 @@ export function AccountPage({
                       );
                     })}
                   </tbody>
-                </table>
-              </div>
+              </FinanceTable>
             </div>
           </section>
         </>

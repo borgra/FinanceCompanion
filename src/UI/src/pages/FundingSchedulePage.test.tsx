@@ -203,4 +203,72 @@ describe('FundingSchedulePage', () => {
     ).toBe(3500);
     expect(accounts.find((item) => item.id === 'ira')?.monthlyRecords[8].invest).toBe(500);
   });
+
+  it('supports shared table column movement and allocation fill-down', async () => {
+    const checking = account({
+      id: 'checking-one',
+      name: 'Primary Checking',
+      type: 'Checking',
+    });
+    checking.monthlyRecords = defaultMonthlyRecords().map((record) => ({
+      ...record,
+      invest: 1200,
+    }));
+
+    const taxable = account({
+      id: 'taxable',
+      name: 'Brokerage',
+      type: 'Investment',
+      investmentAccountType: 'Taxable',
+    });
+    const ira = account({
+      id: 'ira',
+      name: 'Roth IRA',
+      type: 'Investment',
+      investmentAccountType: 'IRA',
+    });
+
+    const repository = createMockAccountRepository({
+      initialAccounts: [checking, taxable, ira],
+    });
+    const incomeRepository = createMockIncomeSourceRepository({
+      initialSources: [incomeSource()],
+    });
+
+    render(
+      <FundingSchedulePage
+        accountRepository={repository}
+        incomeRepository={incomeRepository}
+      />,
+    );
+
+    expect((await screen.findAllByText('Brokerage'))[0]).toBeInTheDocument();
+
+    let columnHeaders = screen.getAllByRole('columnheader');
+    expect(columnHeaders[2]).toHaveTextContent('Brokerage');
+    expect(columnHeaders[3]).toHaveTextContent('Roth IRA');
+
+    await userEvent.hover(columnHeaders[3]);
+    await userEvent.click(screen.getByRole('button', { name: /move roth ira left/i }));
+
+    columnHeaders = screen.getAllByRole('columnheader');
+    expect(columnHeaders[2]).toHaveTextContent('Roth IRA');
+    expect(columnHeaders[3]).toHaveTextContent('Brokerage');
+
+    const januaryBrokerageCell = screen.getByLabelText('Brokerage Jan-26 allocation');
+    await userEvent.click(januaryBrokerageCell);
+    await userEvent.clear(januaryBrokerageCell);
+    await userEvent.type(januaryBrokerageCell, '500');
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /auto-populate brokerage from jan-26 down/i,
+      }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const accounts = await repository.listAccounts();
+    expect(accounts.find((item) => item.id === 'taxable')?.monthlyRecords.map(
+      (record) => record.invest,
+    )).toEqual(Array(12).fill(500));
+  });
 });

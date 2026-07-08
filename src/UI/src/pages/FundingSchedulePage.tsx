@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  FinanceMoneyCellInput,
+  FinanceTable,
+  FinanceTableHeaderCell,
+} from '../components/FinanceTable';
 import type { AccountRepository } from '../domain/accountRepository';
 import type { IncomeSource } from '../domain/incomeSource';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
@@ -322,15 +327,29 @@ export function FundingSchedulePage({
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [accountDraft, setAccountDraft] =
     useState<InvestmentAccountDraft>(() => emptyInvestmentDraft());
+  const [investmentAccountOrder, setInvestmentAccountOrder] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<string>();
   const [saveError, setSaveError] = useState<string>();
   const [accountError, setAccountError] = useState<string>();
+
+  const syncInvestmentAccountOrder = useCallback((loadedAccounts: Account[]) => {
+    const investmentIds = loadedAccounts
+      .filter((account) => account.type === 'Investment')
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((account) => account.id);
+
+    setInvestmentAccountOrder((currentOrder) => [
+      ...currentOrder.filter((id) => investmentIds.includes(id)),
+      ...investmentIds.filter((id) => !currentOrder.includes(id)),
+    ]);
+  }, []);
 
   const refreshAccounts = useCallback(async () => {
     const loadedAccounts = await accountRepository.listAccounts();
     setAccounts(loadedAccounts);
     setDraftAccounts(loadedAccounts.map((account) => ({ ...account })));
-  }, [accountRepository]);
+    syncInvestmentAccountOrder(loadedAccounts);
+  }, [accountRepository, syncInvestmentAccountOrder]);
 
   useEffect(() => {
     void (async () => {
@@ -343,6 +362,7 @@ export function FundingSchedulePage({
         ]);
         setAccounts(loadedAccounts);
         setDraftAccounts(loadedAccounts.map((account) => ({ ...account })));
+        syncInvestmentAccountOrder(loadedAccounts);
         setIncomeSources(loadedIncomeSources.filter((source) => source.status === 'Active'));
       } catch {
         setLoadError('Investment accounts could not be loaded. Try again.');
@@ -350,18 +370,24 @@ export function FundingSchedulePage({
         setIsLoading(false);
       }
     })();
-  }, [accountRepository, incomeRepository]);
+  }, [accountRepository, incomeRepository, syncInvestmentAccountOrder]);
 
   const checkingAccounts = useMemo(
     () => accounts.filter((account) => account.type === 'Checking'),
     [accounts],
   );
   const investmentAccounts = useMemo(
-    () =>
-      draftAccounts
+    () => {
+      const orderIndex = new Map(investmentAccountOrder.map((id, index) => [id, index]));
+      return draftAccounts
         .filter((account) => account.type === 'Investment')
-        .sort((left, right) => left.name.localeCompare(right.name)),
-    [draftAccounts],
+        .sort((left, right) => {
+          const leftIndex = orderIndex.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+          const rightIndex = orderIndex.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+          return leftIndex - rightIndex || left.name.localeCompare(right.name);
+        });
+    },
+    [draftAccounts, investmentAccountOrder],
   );
   const investmentAccountsByGroup = useMemo(
     () => ({
@@ -418,6 +444,76 @@ export function FundingSchedulePage({
         return { ...account, monthlyRecords: records };
       }),
     );
+  };
+
+  const fillDownNonPayrollAllocation = (
+    accountId: string,
+    startMonthIndex: number,
+    value: string,
+  ) => {
+    const parsedValue = parseMoneyInput(value);
+
+    setDraftAccounts((currentAccounts) =>
+      currentAccounts.map((account) => {
+        if (account.id !== accountId) return account;
+
+        const records = ensureScheduleRecords(account).map((record, rowIndex) => {
+          if (rowIndex < startMonthIndex) return record;
+
+          const available = checkingAccounts.reduce(
+            (sum, checkingAccount) =>
+              sum + getRecordForMonth(checkingAccount, record.month).invest,
+            0,
+          );
+          const otherAssigned = currentAccounts
+            .filter(
+              (candidate) =>
+                candidate.id !== accountId && isAfterTaxAssignable(candidate),
+            )
+            .reduce(
+              (sum, candidate) =>
+                sum + getRecordForMonth(candidate, record.month).invest,
+              0,
+            );
+          const nextValue = Math.min(parsedValue, Math.max(0, available - otherAssigned));
+
+          return { ...record, invest: nextValue };
+        });
+
+        return { ...account, monthlyRecords: records };
+      }),
+    );
+  };
+
+  const moveInvestmentAccountColumn = (accountId: string, direction: -1 | 1) => {
+    const visibleIds = activeInvestmentAccounts.map((account) => account.id);
+    const visibleIndex = visibleIds.indexOf(accountId);
+    const nextVisibleIndex = visibleIndex + direction;
+    if (
+      visibleIndex < 0 ||
+      nextVisibleIndex < 0 ||
+      nextVisibleIndex >= visibleIds.length
+    ) {
+      return;
+    }
+
+    const swapWithId = visibleIds[nextVisibleIndex];
+    setInvestmentAccountOrder((currentOrder) => {
+      const knownIds = investmentAccounts.map((account) => account.id);
+      const nextOrder = [
+        ...currentOrder.filter((id) => knownIds.includes(id)),
+        ...knownIds.filter((id) => !currentOrder.includes(id)),
+      ];
+      const currentIndex = nextOrder.indexOf(accountId);
+      const swapIndex = nextOrder.indexOf(swapWithId);
+      if (currentIndex < 0 || swapIndex < 0) return currentOrder;
+
+      [nextOrder[currentIndex], nextOrder[swapIndex]] = [
+        nextOrder[swapIndex],
+        nextOrder[currentIndex],
+      ];
+      return nextOrder;
+    });
   };
 
   const openCreateAccountModal = () => {
@@ -526,6 +622,7 @@ export function FundingSchedulePage({
       const refreshed = await accountRepository.listAccounts();
       setAccounts(refreshed);
       setDraftAccounts(refreshed.map((account) => ({ ...account })));
+      syncInvestmentAccountOrder(refreshed);
     } catch {
       setSaveError('Funding schedule could not be saved. Try again.');
     } finally {
@@ -724,27 +821,32 @@ export function FundingSchedulePage({
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
-          <div className="excel-wrapper funding-schedule-table">
-            <table className="excel-table">
+          <div className="excel-table-fullwidth">
+            <FinanceTable wrapperStyle={{ margin: 0 }}>
               <thead>
                 <tr>
-                  <th>Month</th>
-                  <th>Budget</th>
-                  {activeInvestmentAccounts.map((account) => (
-                    <th key={account.id}>
-                      <div className="excel-th-content">
-                        <span>{account.name}</span>
-                      </div>
-                    </th>
+                  <FinanceTableHeaderCell>Month</FinanceTableHeaderCell>
+                  <FinanceTableHeaderCell>Budget</FinanceTableHeaderCell>
+                  {activeInvestmentAccounts.map((account, accountIndex) => (
+                    <FinanceTableHeaderCell
+                      key={account.id}
+                      isEditable
+                      isMoveLeftDisabled={accountIndex === 0}
+                      isMoveRightDisabled={accountIndex === activeInvestmentAccounts.length - 1}
+                      onMoveLeft={() => moveInvestmentAccountColumn(account.id, -1)}
+                      onMoveRight={() => moveInvestmentAccountColumn(account.id, 1)}
+                    >
+                      {account.name}
+                    </FinanceTableHeaderCell>
                   ))}
-                  <th>Total</th>
-                  <th>% Income (Gross)</th>
-                  <th>% Income (Net)</th>
-                  <th>Remaining</th>
+                  <FinanceTableHeaderCell>Total</FinanceTableHeaderCell>
+                  <FinanceTableHeaderCell>% Income (Gross)</FinanceTableHeaderCell>
+                  <FinanceTableHeaderCell>% Income (Net)</FinanceTableHeaderCell>
+                  <FinanceTableHeaderCell>Remaining</FinanceTableHeaderCell>
                 </tr>
               </thead>
               <tbody>
-                {projectionMonthsList.map((month) => {
+                {projectionMonthsList.map((month, monthIndex) => {
                   const available = checkingAccounts.reduce(
                     (sum, account) => sum + getRecordForMonth(account, month).invest,
                     0,
@@ -760,9 +862,15 @@ export function FundingSchedulePage({
                     'all',
                   );
                   const remaining = available - assignedNonPayroll;
+                  const rowClass =
+                    monthIndex === currentProjectionMonthIndex
+                      ? 'excel-row-current'
+                      : monthIndex > currentProjectionMonthIndex
+                        ? 'excel-row-forecast'
+                        : 'excel-row-actual';
 
                   return (
-                    <tr key={month}>
+                    <tr key={month} className={rowClass}>
                       <td className="excel-bold-col">{month}</td>
                       <td>
                         <span className="excel-cell-val excel-bold-col">
@@ -787,16 +895,29 @@ export function FundingSchedulePage({
                                 <span>{formatMoney(monthlyMatch)} match</span>
                               </div>
                             ) : (
-                              <input
+                              <FinanceMoneyCellInput
                                 aria-label={`${account.name} ${month} allocation`}
-                                className="excel-cell-input"
-                                inputMode="decimal"
-                                value={value === 0 ? '' : String(value)}
-                                onChange={(event) =>
+                                fillDownLabel={`Auto-populate ${account.name} from ${month} down`}
+                                focusId={`investment-${account.id}-${monthIndex}`}
+                                formatValue={formatMoney}
+                                nextFocusId={
+                                  monthIndex < projectionMonthsList.length - 1
+                                    ? `investment-${account.id}-${monthIndex + 1}`
+                                    : undefined
+                                }
+                                value={value}
+                                onFillDown={(nextValue) =>
+                                  fillDownNonPayrollAllocation(
+                                    account.id,
+                                    monthIndex,
+                                    nextValue,
+                                  )
+                                }
+                                onValueChange={(nextValue) =>
                                   updateNonPayrollAllocation(
                                     account.id,
                                     month,
-                                    event.target.value,
+                                    nextValue,
                                   )
                                 }
                               />
@@ -828,7 +949,7 @@ export function FundingSchedulePage({
                   );
                 })}
               </tbody>
-            </table>
+            </FinanceTable>
           </div>
 
         </>
