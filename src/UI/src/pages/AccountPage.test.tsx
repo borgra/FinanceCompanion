@@ -436,7 +436,7 @@ describe('AccountPage', () => {
     ).toEqual(Array(12).fill(1450));
   });
 
-  it('disables Savings column if Savings account or Checking account with no associated savings', async () => {
+  it('hides Savings column for Savings accounts and disables it for Checking without associated savings', async () => {
     const mockAccounts: Account[] = [
       {
         id: 'acc-checking-no-savings',
@@ -491,7 +491,8 @@ describe('AccountPage', () => {
 
     await userEvent.click(screen.getByText('Morgan Stanley Premium Savings'));
     const secondSavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
-    expect(secondSavingsCell).toBeDisabled();
+    expect(secondSavingsCell).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: /^savings$/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByText('Checking With Savings'));
     const thirdSavingsCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
@@ -522,6 +523,44 @@ describe('AccountPage', () => {
 
     expect(await screen.findByText('High Yield Savings')).toBeInTheDocument();
     expect(screen.getAllByText('$10,500.00').length).toBeGreaterThan(0);
+  });
+
+  it('uses an editable Interest column and hides Expenses and Savings columns for Savings accounts', async () => {
+    const mockAccounts: Account[] = [
+      {
+        id: 'acc-savings-interest',
+        name: 'Interest Savings',
+        type: 'Savings',
+        startingBalance: 10000,
+        startDate: '2026-01-01',
+        yieldRate: 4.5,
+        assignedIncomeSourceIds: [],
+        savingsAccountId: '',
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+    ];
+
+    const repository = renderPage(mockAccounts);
+
+    expect(await screen.findByText('Interest Savings')).toBeInTheDocument();
+
+    expect(screen.getByRole('columnheader', { name: /interest/i })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /^credit$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /expenses/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /^savings$/i })).not.toBeInTheDocument();
+
+    const januaryInterestCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="interest-0"]');
+    expect(januaryInterestCell).not.toBeNull();
+
+    await userEvent.clear(januaryInterestCell!);
+    await userEvent.type(januaryInterestCell!, '25');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const accounts = await repository.listAccounts();
+    expect(accounts.find((account) => account.id === 'acc-savings-interest')?.monthlyRecords[0].credit).toBe(25);
   });
 
   it('saves checking account savings amounts into the associated savings account savings column', async () => {
@@ -571,8 +610,9 @@ describe('AccountPage', () => {
     await userEvent.click(screen.getByText('Morgan Stanley Premium Savings'));
 
     const savingsCellSavingsAcc = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
-    expect(savingsCellSavingsAcc?.value).toBe('$400.00');
-    expect(savingsCellSavingsAcc).toBeDisabled();
+    expect(savingsCellSavingsAcc).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: /^savings$/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText('$5,400.00').length).toBeGreaterThan(0);
 
     const accounts = await repository.listAccounts();
     const updatedSavingsAcc = accounts.find((acc) => acc.id === 'acc-savings-test');
@@ -640,7 +680,8 @@ describe('AccountPage', () => {
     await userEvent.click(screen.getByText('Morgan Stanley Premium Savings'));
 
     const savingsCellSavingsAcc = document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]');
-    expect(savingsCellSavingsAcc?.value).toBe('$200.00');
+    expect(savingsCellSavingsAcc).toBeNull();
+    expect(screen.getAllByText('$5,200.00').length).toBeGreaterThan(0);
 
     const accounts = await repository.listAccounts();
     const updatedSavingsAcc = accounts.find((acc) => acc.id === 'acc-savings-test');

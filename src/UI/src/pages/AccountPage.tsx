@@ -180,7 +180,10 @@ const computeAccountRecords = (
       start = currentStart;
     }
 
-    credit = getMonthlyNetIncomeForMonth(incomeSources, monthCode, assignedIncomeSourceIds);
+    credit =
+      account.type === 'Savings'
+        ? Number(record.credit) || 0
+        : getMonthlyNetIncomeForMonth(incomeSources, monthCode, assignedIncomeSourceIds);
 
     account.columns.forEach((col) => {
       const val = Number(record.outflows[col.id]) || 0;
@@ -428,11 +431,14 @@ export function AccountPage({
 
       const recordsPayload = draftAccount.monthlyRecords.map((r, mIdx) => {
         const monthCode = projectionMonths[mIdx]?.dateCode || '2026-01';
-        const derivedCredit = getMonthlyNetIncomeForMonth(
-          incomeSources,
-          monthCode,
-          draftAccount.assignedIncomeSourceIds || [],
-        );
+        const derivedCredit =
+          draftAccount.type === 'Savings'
+            ? Number(r.credit) || 0
+            : getMonthlyNetIncomeForMonth(
+                incomeSources,
+                monthCode,
+                draftAccount.assignedIncomeSourceIds || [],
+              );
         return {
           ...r,
           credit: derivedCredit,
@@ -535,11 +541,14 @@ export function AccountPage({
 
       const recordsPayload = (modalDraft.monthlyRecords.length > 0 ? modalDraft.monthlyRecords : emptyAccountDraft().monthlyRecords).map((r, mIdx) => {
         const monthCode = projectionMonths[mIdx]?.dateCode || '2026-01';
-        const derivedCredit = getMonthlyNetIncomeForMonth(
-          incomeSources,
-          monthCode,
-          modalDraft.assignedIncomeSourceIds,
-        );
+        const derivedCredit =
+          modalDraft.type === 'Savings'
+            ? Number(r.credit) || 0
+            : getMonthlyNetIncomeForMonth(
+                incomeSources,
+                monthCode,
+                modalDraft.assignedIncomeSourceIds,
+              );
         return {
           ...r,
           credit: derivedCredit,
@@ -679,7 +688,7 @@ export function AccountPage({
 
   const fillDownCell = (
     index: number,
-    field: 'invest' | 'savings',
+    field: 'credit' | 'invest' | 'savings',
     value: string,
   ) => {
     if (!draftAccount) return;
@@ -826,6 +835,7 @@ export function AccountPage({
   const activeColumns = useMemo(() => {
     return (draftAccount?.columns || []).filter((col) => !col.isDeleted);
   }, [draftAccount]);
+  const isSavingsLedger = draftAccount?.type === 'Savings';
 
   // Simulation calculations with dynamic balance realization and cascading
   const computedRecords = useMemo((): ComputedRecord[] => {
@@ -1287,7 +1297,9 @@ export function AccountPage({
             {/* Outlined Summary Section containing the remaining four badges */}
             <div style={{ border: '1.5px solid var(--md-sys-color-outline-variant)', borderRadius: 'var(--md-sys-shape-corner-m)', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px', backgroundColor: 'rgba(255, 255, 255, 0.015)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Total Credits (Year)</span>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  {isSavingsLedger ? 'Total Interest (Year)' : 'Total Credits (Year)'}
+                </span>
                 <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: '#34d399' }}>{formatMoney(summaryTotals.creditSum)}</strong>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1341,14 +1353,19 @@ export function AccountPage({
                       <FinanceTableHeaderCell>Month</FinanceTableHeaderCell>
                       <FinanceTableHeaderCell>Start</FinanceTableHeaderCell>
                       
-                      {/* Credit Header: always green, has derivation tooltip */}
+                      {/* Credit/Interest Header: Savings interest is editable, checking credit is derived. */}
                       <FinanceTableHeaderCell
                         contentClassName="excel-col-credit"
                         icon="add_circle"
-                        title="Credit inflows, derivable from Income Management rules"
+                        isEditable={isSavingsLedger}
+                        title={
+                          isSavingsLedger
+                            ? 'Interest earned for this savings account'
+                            : 'Credit inflows, derivable from Income Management rules'
+                        }
                         style={{ borderBottom: '2.5px solid #34d399' }}
                       >
-                        Credit
+                        {isSavingsLedger ? 'Interest' : 'Credit'}
                       </FinanceTableHeaderCell>
 
                       {/* Active category columns */}
@@ -1367,7 +1384,9 @@ export function AccountPage({
                           {col.name.length > 15 ? `${col.name.slice(0, 12)}...` : col.name}
                         </FinanceTableHeaderCell>
                       ))}
-                      <FinanceTableHeaderCell>Expenses</FinanceTableHeaderCell>
+                      {!isSavingsLedger ? (
+                        <FinanceTableHeaderCell>Expenses</FinanceTableHeaderCell>
+                      ) : null}
                       <FinanceTableHeaderCell>SubTotal</FinanceTableHeaderCell>
                       
                       {/* Invest Column Header: Special style */}
@@ -1381,14 +1400,16 @@ export function AccountPage({
                       </FinanceTableHeaderCell>
 
                       {/* Savings Column Header: Special style */}
-                      <FinanceTableHeaderCell
-                        className="excel-col-special-header"
-                        icon="savings"
-                        isEditable
-                        title="Savings allocations"
-                      >
-                        Savings
-                      </FinanceTableHeaderCell>
+                      {!isSavingsLedger ? (
+                        <FinanceTableHeaderCell
+                          className="excel-col-special-header"
+                          icon="savings"
+                          isEditable
+                          title="Savings allocations"
+                        >
+                          Savings
+                        </FinanceTableHeaderCell>
+                      ) : null}
 
                       <FinanceTableHeaderCell style={{ color: 'var(--md-sys-color-primary)' }}>
                         Net Total
@@ -1413,9 +1434,23 @@ export function AccountPage({
                             <span className="excel-cell-val">{formatMoney(row.start)}</span>
                           </td>
                           <td className="excel-col-credit">
-                            <span className="excel-cell-val excel-bold-col" style={{ color: '#34d399' }}>
-                              {formatMoney(row.credit)}
-                            </span>
+                            {isSavingsLedger ? (
+                              <FinanceMoneyCellInput
+                                value={row.credit}
+                                formatValue={formatMoney}
+                                onValueChange={(val) => updateCell(m, 'credit', val)}
+                                focusId={`interest-${m}`}
+                                nextFocusId={
+                                  m < computedRecords.length - 1 ? `interest-${m + 1}` : undefined
+                                }
+                                fillDownLabel={`Auto-populate Interest from ${row.month} down`}
+                                onFillDown={(val) => fillDownCell(m, 'credit', val)}
+                              />
+                            ) : (
+                              <span className="excel-cell-val excel-bold-col" style={{ color: '#34d399' }}>
+                                {formatMoney(row.credit)}
+                              </span>
+                            )}
                           </td>
                           {activeColumns.map((col) => (
                             <td key={col.id}>
@@ -1432,11 +1467,13 @@ export function AccountPage({
                               />
                             </td>
                           ))}
-                          <td>
-                            <span className="excel-cell-val excel-bold-col" style={{ color: 'var(--md-sys-color-error)' }}>
-                              {row.expenses > 0 ? `-${formatMoney(row.expenses)}` : (row.expenses < 0 ? formatMoney(Math.abs(row.expenses)) : '$   -   ')}
-                            </span>
-                          </td>
+                          {!isSavingsLedger ? (
+                            <td>
+                              <span className="excel-cell-val excel-bold-col" style={{ color: 'var(--md-sys-color-error)' }}>
+                                {row.expenses > 0 ? `-${formatMoney(row.expenses)}` : (row.expenses < 0 ? formatMoney(Math.abs(row.expenses)) : '$   -   ')}
+                              </span>
+                            </td>
+                          ) : null}
                           <td>
                             <span className="excel-cell-val excel-bold-col">{formatMoney(row.subtotal)}</span>
                           </td>
@@ -1451,21 +1488,20 @@ export function AccountPage({
                               onFillDown={(val) => fillDownCell(m, 'invest', val)}
                             />
                           </td>
-                          <td className="excel-col-special">
-                            <FinanceMoneyCellInput
-                              value={row.savings}
-                              formatValue={formatMoney}
-                              onValueChange={(val) => updateCell(m, 'savings', val)}
-                              focusId={`savings-${m}`}
-                              nextFocusId={m < computedRecords.length - 1 ? `savings-${m + 1}` : undefined}
-                              fillDownLabel={`Auto-populate Savings from ${row.month} down`}
-                              onFillDown={(val) => fillDownCell(m, 'savings', val)}
-                              disabled={
-                                draftAccount?.type === 'Savings' ||
-                                (draftAccount?.type === 'Checking' && !draftAccount?.savingsAccountId)
-                              }
-                            />
-                          </td>
+                          {!isSavingsLedger ? (
+                            <td className="excel-col-special">
+                              <FinanceMoneyCellInput
+                                value={row.savings}
+                                formatValue={formatMoney}
+                                onValueChange={(val) => updateCell(m, 'savings', val)}
+                                focusId={`savings-${m}`}
+                                nextFocusId={m < computedRecords.length - 1 ? `savings-${m + 1}` : undefined}
+                                fillDownLabel={`Auto-populate Savings from ${row.month} down`}
+                                onFillDown={(val) => fillDownCell(m, 'savings', val)}
+                                disabled={draftAccount?.type === 'Checking' && !draftAccount?.savingsAccountId}
+                              />
+                            </td>
+                          ) : null}
                           <td>
                             <span className="excel-cell-val excel-bold-col" style={{ color: 'var(--md-sys-color-primary)', fontWeight: '800' }}>
                               {formatMoney(row.net)}
