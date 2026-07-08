@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   FinanceMoneyCellInput,
+  FinanceMoneyCellValue,
   FinanceTable,
   FinanceTableHeaderCell,
 } from '../components/FinanceTable';
@@ -407,6 +408,7 @@ export function FundingSchedulePage({
   const monthlyNetIncome = annualNetIncome / 12;
   const activeGroup = investmentGroups.find((group) => group.id === activeGroupId) ?? investmentGroups[0];
   const activeInvestmentAccounts = investmentAccountsByGroup[activeGroup.id];
+  const showsRemainingColumn = activeGroup.id === 'taxable';
 
   const yearlyMetrics = useMemo(() => {
     const totalByScope = (scope: ScheduleMetricScope) =>
@@ -827,22 +829,44 @@ export function FundingSchedulePage({
                 <tr>
                   <FinanceTableHeaderCell>Month</FinanceTableHeaderCell>
                   <FinanceTableHeaderCell>Budget</FinanceTableHeaderCell>
-                  {activeInvestmentAccounts.map((account, accountIndex) => (
-                    <FinanceTableHeaderCell
-                      key={account.id}
-                      isEditable
-                      isMoveLeftDisabled={accountIndex === 0}
-                      isMoveRightDisabled={accountIndex === activeInvestmentAccounts.length - 1}
-                      onMoveLeft={() => moveInvestmentAccountColumn(account.id, -1)}
-                      onMoveRight={() => moveInvestmentAccountColumn(account.id, 1)}
-                    >
-                      {account.name}
-                    </FinanceTableHeaderCell>
-                  ))}
+                  {activeInvestmentAccounts.flatMap((account, accountIndex) => {
+                    const columnActions = {
+                      isMoveLeftDisabled: accountIndex === 0,
+                      isMoveRightDisabled: accountIndex === activeInvestmentAccounts.length - 1,
+                      onMoveLeft: () => moveInvestmentAccountColumn(account.id, -1),
+                      onMoveRight: () => moveInvestmentAccountColumn(account.id, 1),
+                    };
+
+                    if (isPayrollDeductible(account)) {
+                      return [
+                        <FinanceTableHeaderCell
+                          key={`${account.id}-employee`}
+                          {...columnActions}
+                        >
+                          {`${account.name} Employee`}
+                        </FinanceTableHeaderCell>,
+                        <FinanceTableHeaderCell key={`${account.id}-employer`}>
+                          {`${account.name} Employer Match`}
+                        </FinanceTableHeaderCell>,
+                      ];
+                    }
+
+                    return [
+                      <FinanceTableHeaderCell
+                        key={account.id}
+                        isEditable
+                        {...columnActions}
+                      >
+                        {account.name}
+                      </FinanceTableHeaderCell>,
+                    ];
+                  })}
                   <FinanceTableHeaderCell>Total</FinanceTableHeaderCell>
                   <FinanceTableHeaderCell>% Income (Gross)</FinanceTableHeaderCell>
                   <FinanceTableHeaderCell>% Income (Net)</FinanceTableHeaderCell>
-                  <FinanceTableHeaderCell>Remaining</FinanceTableHeaderCell>
+                  {showsRemainingColumn ? (
+                    <FinanceTableHeaderCell>Remaining</FinanceTableHeaderCell>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -877,7 +901,7 @@ export function FundingSchedulePage({
                           {formatMoney(available)}
                         </span>
                       </td>
-                      {activeInvestmentAccounts.map((account) => {
+                      {activeInvestmentAccounts.flatMap((account) => {
                         const payrollAccount = isPayrollDeductible(account);
                         const monthlyContribution =
                           payrollAccount ? (account.yearlyContribution || 0) / 12 : 0;
@@ -887,14 +911,26 @@ export function FundingSchedulePage({
                             : 0;
                         const value = getRecordForMonth(account, month).invest;
 
-                        return (
+                        if (payrollAccount) {
+                          return [
+                            <td key={`${account.id}-employee`}>
+                              <FinanceMoneyCellValue
+                                className="excel-bold-col"
+                                formatValue={formatMoney}
+                                value={monthlyContribution}
+                              />
+                            </td>,
+                            <td key={`${account.id}-employer`}>
+                              <FinanceMoneyCellValue
+                                formatValue={formatMoney}
+                                value={monthlyMatch}
+                              />
+                            </td>,
+                          ];
+                        }
+
+                        return [
                           <td key={account.id}>
-                            {payrollAccount ? (
-                              <div className="funding-payroll-cell">
-                                <strong>{formatMoney(monthlyContribution)}</strong>
-                                <span>{formatMoney(monthlyMatch)} match</span>
-                              </div>
-                            ) : (
                               <FinanceMoneyCellInput
                                 aria-label={`${account.name} ${month} allocation`}
                                 fillDownLabel={`Auto-populate ${account.name} from ${month} down`}
@@ -921,30 +957,31 @@ export function FundingSchedulePage({
                                   )
                                 }
                               />
-                            )}
-                          </td>
-                        );
+                          </td>,
+                        ];
                       })}
                       <td><span className="excel-cell-val excel-bold-col">{formatMoney(activeGroupTotal)}</span></td>
                       <td><span className="excel-cell-val">{formatPercent(monthlyGrossIncome > 0 ? (activeGroupTotal / monthlyGrossIncome) * 100 : undefined)}</span></td>
                       <td><span className="excel-cell-val">{formatPercent(monthlyNetIncome > 0 && activeGroup.id !== 'retirement' && activeGroup.id !== 'hsa' ? (activeGroupTotal / monthlyNetIncome) * 100 : undefined)}</span></td>
-                      <td>
-                        <span
-                          className="excel-cell-val excel-bold-col"
-                          style={{
-                            color:
-                              remaining === available
-                                ? 'var(--md-sys-color-primary)'
-                                : remaining > 0 && remaining < available
-                                  ? 'var(--md-sys-color-warning)'
-                                  : remaining === 0
-                                    ? 'var(--md-sys-color-on-surface-variant)'
-                                    : 'var(--md-sys-color-error)',
-                          }}
-                        >
-                          {formatMoney(remaining)}
-                        </span>
-                      </td>
+                      {showsRemainingColumn ? (
+                        <td>
+                          <span
+                            className="excel-cell-val excel-bold-col"
+                            style={{
+                              color:
+                                remaining === available
+                                  ? 'var(--md-sys-color-primary)'
+                                  : remaining > 0 && remaining < available
+                                    ? 'var(--md-sys-color-warning)'
+                                    : remaining === 0
+                                      ? 'var(--md-sys-color-on-surface-variant)'
+                                      : 'var(--md-sys-color-error)',
+                            }}
+                          >
+                            {formatMoney(remaining)}
+                          </span>
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })}

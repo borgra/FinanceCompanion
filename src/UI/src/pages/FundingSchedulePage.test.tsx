@@ -180,6 +180,7 @@ describe('FundingSchedulePage', () => {
     expect(screen.getByRole('heading', { name: 'Before-Tax Accounts' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Roth IRA Sep-26 allocation')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Brokerage Sep-26 allocation')).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /remaining/i })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'HSA' }));
     expect(screen.getByRole('heading', { name: 'HSA Accounts' })).toBeInTheDocument();
@@ -188,8 +189,15 @@ describe('FundingSchedulePage', () => {
         element?.textContent === 'Current Contributions: $3,150.00',
       ),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: /health hsa employee/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: /health hsa employer match/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /remaining/i })).not.toBeInTheDocument();
     expect(screen.getAllByText('$300.00')[0]).toBeInTheDocument();
-    expect(screen.getAllByText('$150.00 match')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('$150.00')[0]).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -270,5 +278,45 @@ describe('FundingSchedulePage', () => {
     expect(accounts.find((item) => item.id === 'taxable')?.monthlyRecords.map(
       (record) => record.invest,
     )).toEqual(Array(12).fill(500));
+  });
+
+  it('splits before-tax payroll accounts into employee and employer match columns', async () => {
+    const payroll401k = account({
+      id: 'payroll-401k',
+      name: 'Company 401k',
+      type: 'Investment',
+      investmentAccountType: '401k',
+      yearlyContribution: 12000,
+      employerIncomeSourceId: 'income-source-primary',
+      employerMatchRatePercent: 50,
+      employerMatchCapPercent: 6,
+      employerMatchStartDate: '2026-01-01',
+    });
+
+    const repository = createMockAccountRepository({
+      initialAccounts: [payroll401k],
+    });
+    const incomeRepository = createMockIncomeSourceRepository({
+      initialSources: [incomeSource()],
+    });
+
+    render(
+      <FundingSchedulePage
+        accountRepository={repository}
+        incomeRepository={incomeRepository}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Before-Tax Accounts' }));
+
+    expect(
+      screen.getByRole('columnheader', { name: /company 401k employee/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: /company 401k employer match/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /remaining/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText('$1,000.00')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('$200.00')[0]).toBeInTheDocument();
   });
 });

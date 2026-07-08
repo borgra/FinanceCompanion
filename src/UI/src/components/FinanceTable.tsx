@@ -42,6 +42,12 @@ type FinanceMoneyCellInputProps = Omit<
   value: number;
 };
 
+type FinanceMoneyCellValueProps = {
+  className?: string;
+  formatValue: (value: number) => string;
+  value: number;
+};
+
 const joinClassNames = (...classNames: Array<string | undefined>) =>
   classNames.filter(Boolean).join(' ');
 
@@ -255,5 +261,17 @@ export function FinanceMoneyCellInput({
         </button>
       ) : null}
     </div>
+  );
+}
+
+export function FinanceMoneyCellValue({
+  className,
+  formatValue,
+  value,
+}: FinanceMoneyCellValueProps) {
+  return (
+    <span className={joinClassNames('excel-cell-val', className)}>
+      {formatValue(value)}
+    </span>
   );
 }
