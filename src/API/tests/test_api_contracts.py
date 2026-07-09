@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.application.use_cases.security_search import SearchSecurities
 from app.domain.models import VerifiedIdentity
 from app.infrastructure.settings import Settings
 from app.main import create_app
@@ -19,6 +20,24 @@ class FakeVerifier:
         )
 
 
+class FakeSecuritySearchProvider:
+    def search(self, query: str):
+        if query.casefold() != "vti":
+            return []
+
+        from app.domain.models import SecurityMetadata
+
+        return [
+            SecurityMetadata(
+                symbol="VTI",
+                name="Vanguard Total Stock Market ETF",
+                exchange="United States",
+                asset_type="ETF",
+                currency="USD",
+            )
+        ]
+
+
 def build_test_client() -> TestClient:
     settings = Settings(
         allowed_email="steveborgra@gmail.com",
@@ -29,6 +48,7 @@ def build_test_client() -> TestClient:
     )
     app = create_app(settings)
     app.state.container = build_container(settings, verifier=FakeVerifier())
+    app.state.container.search_securities = SearchSecurities(FakeSecuritySearchProvider())
     return TestClient(app)
 
 
@@ -96,6 +116,12 @@ def test_seeded_contracts_are_served_after_authentication():
     assert next(
         account for account in investment_accounts if account["id"] == "acc-401k"
     )["employerIncomeSourceId"] == "income-source-primary"
+    assert next(
+        account for account in investment_accounts if account["id"] == "acc-401k"
+    )["manageHoldings"] is False
+    assert next(
+        account for account in investment_accounts if account["id"] == "acc-taxable-brokerage"
+    )["manageHoldings"] is True
     taxable_account = next(
         account for account in investment_accounts if account["id"] == "acc-taxable-brokerage"
     )
@@ -129,6 +155,42 @@ def test_income_source_can_only_be_assigned_to_one_account():
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Income source is already assigned to another account."
+
+
+def test_security_can_be_searched_and_added_to_multiple_accounts():
+    client = build_test_client()
+    authenticate(client)
+
+    search_response = client.get("/api/v1/securities/search?q=vti")
+
+    assert search_response.status_code == 200
+    security = search_response.json()[0]
+    assert security["symbol"] == "VTI"
+    assert security["assetType"] == "ETF"
+
+    create_response = client.post(
+        "/api/v1/holdings",
+        json={
+            "security": security,
+            "accountPositions": [
+                {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},
+                {"accountId": "acc-roth-ira", "quantity": 4, "costBasis": 990},
+            ],
+        },
+    )
+
+    assert create_response.status_code == 201
+    payload = create_response.json()
+    assert payload["security"]["symbol"] == "VTI"
+    assert payload["security"]["name"] == "Vanguard Total Stock Market ETF"
+    assert [item["accountId"] for item in payload["accountPositions"]] == [
+        "acc-taxable-brokerage",
+        "acc-roth-ira",
+    ]
+
+    holdings_response = client.get("/api/v1/holdings")
+    assert holdings_response.status_code == 200
+    assert holdings_response.json()[0]["security"]["symbol"] == "VTI"
 
 
 def test_logout_clears_the_cookie_session():

@@ -37,6 +37,8 @@ const draftToAccountFields = (draft: AccountDraft) => ({
     draft.type === 'Investment' ? draft.investmentAccountType : undefined,
   investmentBrokerage:
     draft.type === 'Investment' ? draft.investmentBrokerage : undefined,
+  manageHoldings:
+    draft.type === 'Investment' ? draft.manageHoldings : false,
   yearlyContribution:
     draft.type === 'Investment' ? Number(draft.yearlyContribution) || 0 : undefined,
   employerIncomeSourceId:

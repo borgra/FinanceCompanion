@@ -14,9 +14,12 @@ from app.domain.models import (
     AccountColumn,
     BudgetCategory,
     BudgetSubCategory,
+    Holding,
+    HoldingAccountPosition,
     IncomePeriod,
     IncomeSource,
     MonthlyRecord,
+    SecurityMetadata,
     User,
 )
 
@@ -165,6 +168,7 @@ def _account_from_entity(entity: dict) -> Account:
         savings_account_id=entity.get("savingsAccountId"),
         investment_account_type=entity.get("investmentAccountType"),
         investment_brokerage=entity.get("investmentBrokerage"),
+        manage_holdings=bool(entity.get("manageHoldings", False)),
         yearly_contribution=(
             float(entity["yearlyContribution"])
             if entity.get("yearlyContribution") is not None
@@ -213,6 +217,7 @@ def _account_to_entity(user_id: str, account: Account) -> dict:
         "savingsAccountId": account.savings_account_id,
         "investmentAccountType": account.investment_account_type,
         "investmentBrokerage": account.investment_brokerage,
+        "manageHoldings": account.manage_holdings,
         "yearlyContribution": account.yearly_contribution,
         "employerIncomeSourceId": account.employer_income_source_id,
         "employerMatchRatePercent": account.employer_match_rate_percent,
@@ -220,6 +225,79 @@ def _account_to_entity(user_id: str, account: Account) -> dict:
         "employerMatchStartDate": account.employer_match_start_date,
         "employerMatchAmount": account.employer_match_amount,
         "employerMatchPercent": account.employer_match_percent,
+    }
+
+
+def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
+    return SecurityMetadata(
+        symbol=data["symbol"],
+        name=data["name"],
+        exchange=data["exchange"],
+        asset_type=data["assetType"],
+        currency=data["currency"],
+        price=float(data["price"]) if data.get("price") is not None else None,
+        sector=data.get("sector"),
+        industry=data.get("industry"),
+    )
+
+
+def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
+    return {
+        "symbol": security.symbol,
+        "name": security.name,
+        "exchange": security.exchange,
+        "assetType": security.asset_type,
+        "currency": security.currency,
+        "price": security.price,
+        "sector": security.sector,
+        "industry": security.industry,
+    }
+
+
+def _holding_account_position_from_dict(data: dict) -> HoldingAccountPosition:
+    return HoldingAccountPosition(
+        account_id=data["accountId"],
+        quantity=float(data["quantity"]),
+        cost_basis=float(data["costBasis"]) if data.get("costBasis") is not None else None,
+    )
+
+
+def _holding_account_position_to_dict(position: HoldingAccountPosition) -> dict:
+    return {
+        "accountId": position.account_id,
+        "quantity": position.quantity,
+        "costBasis": position.cost_basis,
+    }
+
+
+def _holding_from_entity(entity: dict) -> Holding:
+    security_data = json.loads(entity["securityJson"])
+    positions_data = json.loads(entity.get("accountPositionsJson", "[]"))
+    return Holding(
+        id=entity.get("entityId") or entity.get("id") or entity["RowKey"].split(":", 1)[1],
+        security=_security_metadata_from_dict(security_data),
+        account_positions=[
+            _holding_account_position_from_dict(item)
+            for item in positions_data
+        ],
+        created_at=entity["createdAt"],
+        updated_at=entity["updatedAt"],
+    )
+
+
+def _holding_to_entity(user_id: str, holding: Holding) -> dict:
+    return {
+        "PartitionKey": user_id,
+        "RowKey": f"holding:{holding.id}",
+        "entityId": holding.id,
+        "securitySymbol": holding.security.symbol,
+        "createdAt": holding.created_at,
+        "updatedAt": holding.updated_at,
+        "securityJson": json.dumps(_security_metadata_to_dict(holding.security)),
+        "accountPositionsJson": json.dumps([
+            _holding_account_position_to_dict(item)
+            for item in holding.account_positions
+        ]),
     }
 
 
@@ -440,3 +518,31 @@ class CosmosAccountRepository:
             self._client.delete_entity(user_id, f"account:{account_id}")
         except ResourceNotFoundError as exc:
             raise NotFoundError("Account not found.") from exc
+
+
+class CosmosHoldingRepository:
+    def __init__(self, client: TableClient) -> None:
+        self._client = client
+
+    def list_for_user(self, user_id: str) -> list[Holding]:
+        entities = self._client.query_entities(f"PartitionKey eq '{user_id}'")
+        return [
+            _holding_from_entity(e)
+            for e in entities
+            if e["RowKey"].startswith("holding:")
+        ]
+
+    def create_for_user(self, user_id: str, holding: Holding) -> Holding:
+        entity = _holding_to_entity(user_id, holding)
+        self._client.create_entity(entity)
+        return deepcopy(holding)
+
+    def update_for_user(self, user_id: str, holding_id: str, holding: Holding) -> Holding:
+        try:
+            self._client.get_entity(user_id, f"holding:{holding_id}")
+        except ResourceNotFoundError as exc:
+            raise NotFoundError("Holding not found.") from exc
+
+        entity = _holding_to_entity(user_id, holding)
+        self._client.upsert_entity(entity)
+        return deepcopy(holding)

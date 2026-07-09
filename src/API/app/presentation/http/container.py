@@ -17,15 +17,19 @@ from app.application.use_cases.income_sources import (
     SetIncomeSourceStatus,
     UpdateIncomeSource,
 )
+from app.application.use_cases.holdings import CreateHolding, ListHoldings, UpdateHolding
+from app.application.use_cases.security_search import SearchSecurities
 from app.domain.protocols import IdentityTokenVerifier
 from app.infrastructure.entra_identity import EntraIdentityTokenVerifier
 from app.infrastructure.in_memory_repositories import (
     InMemoryAccountRepository,
     InMemoryBudgetRepository,
     InMemoryDataStore,
+    InMemoryHoldingRepository,
     InMemoryIncomeSourceRepository,
     InMemoryUserRepository,
 )
+from app.infrastructure.yahoo_finance_security_search import YahooFinanceSecuritySearchProvider
 from app.infrastructure.security import JwtSessionTokenService
 from app.infrastructure.settings import Settings
 
@@ -50,6 +54,10 @@ class Container:
     create_account: CreateAccount
     update_account: UpdateAccount
     delete_account: DeleteAccount
+    list_holdings: ListHoldings
+    create_holding: CreateHolding
+    update_holding: UpdateHolding
+    search_securities: SearchSecurities
     session_tokens: JwtSessionTokenService
 
 
@@ -64,6 +72,7 @@ def build_container(
         from app.infrastructure.cosmos_repositories import (
             CosmosAccountRepository,
             CosmosBudgetRepository,
+            CosmosHoldingRepository,
             CosmosIncomeSourceRepository,
             CosmosUserRepository,
         )
@@ -81,12 +90,14 @@ def build_container(
         income_sources = CosmosIncomeSourceRepository(client)
         budgets = CosmosBudgetRepository(client)
         accounts = CosmosAccountRepository(client)
+        holdings = CosmosHoldingRepository(client)
     else:
         store = InMemoryDataStore(allowed_email=settings.allowed_email)
         users = InMemoryUserRepository(store)
         income_sources = InMemoryIncomeSourceRepository(store)
         budgets = InMemoryBudgetRepository(store)
         accounts = InMemoryAccountRepository(store)
+        holdings = InMemoryHoldingRepository(store)
 
     verifier = verifier or EntraIdentityTokenVerifier()
     session_tokens = JwtSessionTokenService(
@@ -120,5 +131,9 @@ def build_container(
         create_account=CreateAccount(accounts),
         update_account=UpdateAccount(accounts),
         delete_account=DeleteAccount(accounts),
+        list_holdings=ListHoldings(holdings),
+        create_holding=CreateHolding(holdings),
+        update_holding=UpdateHolding(holdings),
+        search_securities=SearchSecurities(YahooFinanceSecuritySearchProvider()),
         session_tokens=session_tokens,
     )

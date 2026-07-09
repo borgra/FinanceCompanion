@@ -66,6 +66,7 @@ type InvestmentAccountDraft = {
   name: string;
   investmentAccountType: InvestmentAccountType;
   investmentBrokerage: InvestmentBrokerage;
+  manageHoldings: boolean;
   startingBalance: string;
   startDate: string;
   yieldRate: string;
@@ -152,6 +153,7 @@ const emptyInvestmentDraft = (): InvestmentAccountDraft => ({
   name: '',
   investmentAccountType: 'Taxable',
   investmentBrokerage: 'Fidelity',
+  manageHoldings: true,
   startingBalance: '',
   startDate: '2026-01-01',
   yieldRate: '',
@@ -168,6 +170,7 @@ const accountToInvestmentDraft = (account: Account): InvestmentAccountDraft => (
   name: account.name,
   investmentAccountType: account.investmentAccountType || 'Taxable',
   investmentBrokerage: account.investmentBrokerage || 'Fidelity',
+  manageHoldings: account.manageHoldings ?? account.investmentAccountType !== '401k',
   startingBalance: String(account.startingBalance),
   startDate: account.startDate || '2026-01-01',
   yieldRate: String(account.yieldRate || 0),
@@ -203,6 +206,7 @@ const draftToAccountDraft = (draft: InvestmentAccountDraft): AccountDraft => ({
   savingsAccountId: '',
   investmentAccountType: draft.investmentAccountType,
   investmentBrokerage: draft.investmentBrokerage,
+  manageHoldings: draft.manageHoldings,
   yearlyContribution: String(Number(draft.yearlyContribution) || 0),
   employerIncomeSourceId: draft.employerIncomeSourceId,
   employerMatchRatePercent: String(Number(draft.employerMatchRatePercent) || 0),
@@ -1014,12 +1018,15 @@ export function FundingSchedulePage({
                 <span>Investment Account Type</span>
                 <select
                   value={accountDraft.investmentAccountType}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const nextType = event.target.value as InvestmentAccountType;
                     setAccountDraft({
                       ...accountDraft,
-                      investmentAccountType: event.target.value as InvestmentAccountType,
-                    })
-                  }
+                      investmentAccountType: nextType,
+                      manageHoldings:
+                        nextType === '401k' ? false : accountDraft.manageHoldings,
+                    });
+                  }}
                   style={{ border: '1.5px solid var(--md-sys-color-outline)', borderRadius: 'var(--md-sys-shape-corner-s)', height: '48px', color: 'var(--md-sys-color-on-surface)', backgroundColor: 'transparent', padding: '10px' }}
                 >
                   <option value="Taxable" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>Taxable</option>
@@ -1027,6 +1034,21 @@ export function FundingSchedulePage({
                   <option value="IRA" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>IRA</option>
                   <option value="HSA" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>HSA</option>
                 </select>
+              </label>
+
+              <label className={`column-mode-option${accountDraft.manageHoldings ? ' selected' : ''}`}>
+                <input
+                  className="income-credit-checkbox"
+                  type="checkbox"
+                  checked={accountDraft.manageHoldings}
+                  onChange={(event) =>
+                    setAccountDraft({
+                      ...accountDraft,
+                      manageHoldings: event.target.checked,
+                    })
+                  }
+                />
+                <span>Manage Holdings</span>
               </label>
 
               <label className="field">

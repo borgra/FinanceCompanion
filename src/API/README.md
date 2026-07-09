@@ -23,6 +23,8 @@ uvicorn app.main:app --reload --port 8000
 
 The API also reads the repo-level `.env.local` file created for local full-stack startup. If you prefer API-only overrides, copy [.env.example](.env.example) to `.env`.
 
+Security search uses Yahoo Finance search without an API key. The adapter is isolated behind the security search use case because Yahoo Finance does not provide the same formal public API contract as paid or key-based market-data providers.
+
 ## One-shot local startup
 
 From the repository root:

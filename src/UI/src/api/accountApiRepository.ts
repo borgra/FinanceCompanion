@@ -14,6 +14,8 @@ const draftToPayload = (draft: AccountDraft) => ({
     draft.type === 'Investment' ? draft.investmentAccountType : null,
   investmentBrokerage:
     draft.type === 'Investment' ? draft.investmentBrokerage : null,
+  manageHoldings:
+    draft.type === 'Investment' ? draft.manageHoldings : false,
   yearlyContribution:
     draft.type === 'Investment' ? Number(draft.yearlyContribution) || 0 : null,
   employerIncomeSourceId:

@@ -3,6 +3,7 @@ import { createAccountApiRepository } from './api/accountApiRepository';
 import { loadSessionUser, logout } from './api/authApi';
 import { createBudgetApiRepository } from './api/budgetApiRepository';
 import { HttpClient } from './api/httpClient';
+import { createHoldingApiRepository } from './api/holdingApiRepository';
 import { createIncomeSourceApiRepository } from './api/incomeSourceApiRepository';
 import { AuthPage } from './auth/AuthPage';
 import type { AuthSession } from './auth/authTypes';
@@ -52,6 +53,7 @@ export function App() {
   const incomeSourceRepository = createIncomeSourceApiRepository(client);
   const budgetRepository = createBudgetApiRepository(client);
   const accountRepository = createAccountApiRepository(client);
+  const holdingRepository = createHoldingApiRepository(client);
 
   return (
     <>
@@ -73,6 +75,7 @@ export function App() {
         repository={incomeSourceRepository}
         budgetRepository={budgetRepository}
         accountRepository={accountRepository}
+        holdingRepository={holdingRepository}
       />
     </>
   );

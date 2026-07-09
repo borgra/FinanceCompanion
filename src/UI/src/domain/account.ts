@@ -29,6 +29,7 @@ export type Account = {
   savingsAccountId?: string;
   investmentAccountType?: InvestmentAccountType;
   investmentBrokerage?: InvestmentBrokerage;
+  manageHoldings?: boolean;
   yearlyContribution?: number;
   employerIncomeSourceId?: string;
   employerMatchRatePercent?: number;
@@ -52,6 +53,7 @@ export type AccountDraft = {
   savingsAccountId: string;
   investmentAccountType: InvestmentAccountType;
   investmentBrokerage: InvestmentBrokerage;
+  manageHoldings: boolean;
   yearlyContribution: string;
   employerIncomeSourceId: string;
   employerMatchRatePercent: string;
@@ -97,6 +99,7 @@ export const emptyAccountDraft = (): AccountDraft => ({
   savingsAccountId: '',
   investmentAccountType: 'Taxable',
   investmentBrokerage: 'Fidelity',
+  manageHoldings: true,
   yearlyContribution: '',
   employerIncomeSourceId: '',
   employerMatchRatePercent: '100',
@@ -118,6 +121,10 @@ export const toAccountDraft = (account: Account): AccountDraft => ({
   savingsAccountId: account.savingsAccountId || '',
   investmentAccountType: account.investmentAccountType || 'Taxable',
   investmentBrokerage: account.investmentBrokerage || 'Fidelity',
+  manageHoldings:
+    account.type === 'Investment'
+      ? account.manageHoldings ?? account.investmentAccountType !== '401k'
+      : false,
   yearlyContribution:
     account.yearlyContribution !== undefined ? String(account.yearlyContribution) : '',
   employerIncomeSourceId: account.employerIncomeSourceId || '',

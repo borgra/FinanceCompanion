@@ -120,6 +120,7 @@ class AccountPayload(CamelModel):
     savings_account_id: str | None = Field(default=None, serialization_alias="savingsAccountId")
     investment_account_type: str | None = Field(default=None, serialization_alias="investmentAccountType")
     investment_brokerage: str | None = Field(default=None, serialization_alias="investmentBrokerage")
+    manage_holdings: bool = Field(default=False, serialization_alias="manageHoldings")
     yearly_contribution: float | None = Field(default=None, serialization_alias="yearlyContribution")
     employer_income_source_id: str | None = Field(default=None, serialization_alias="employerIncomeSourceId")
     employer_match_rate_percent: float | None = Field(default=None, serialization_alias="employerMatchRatePercent")
@@ -143,6 +144,7 @@ class AccountUpsertRequest(CamelModel):
     savings_account_id: str | None = Field(default=None, serialization_alias="savingsAccountId")
     investment_account_type: str | None = Field(default=None, serialization_alias="investmentAccountType")
     investment_brokerage: str | None = Field(default=None, serialization_alias="investmentBrokerage")
+    manage_holdings: bool = Field(default=False, serialization_alias="manageHoldings")
     yearly_contribution: float | None = Field(default=None, serialization_alias="yearlyContribution")
     employer_income_source_id: str | None = Field(default=None, serialization_alias="employerIncomeSourceId")
     employer_match_rate_percent: float | None = Field(default=None, serialization_alias="employerMatchRatePercent")
@@ -152,3 +154,33 @@ class AccountUpsertRequest(CamelModel):
     employer_match_percent: float | None = Field(default=None, serialization_alias="employerMatchPercent")
     columns: list[AccountColumnPayload] = Field(default_factory=list)
     monthly_records: list[MonthlyRecordPayload] = Field(default_factory=list, serialization_alias="monthlyRecords")
+
+
+class SecurityMetadataPayload(CamelModel):
+    symbol: str
+    name: str
+    exchange: str
+    asset_type: str = Field(serialization_alias="assetType")
+    currency: str
+    price: float | None = None
+    sector: str | None = None
+    industry: str | None = None
+
+
+class HoldingAccountPositionPayload(CamelModel):
+    account_id: str = Field(serialization_alias="accountId")
+    quantity: float
+    cost_basis: float | None = Field(default=None, serialization_alias="costBasis")
+
+
+class HoldingPayload(CamelModel):
+    id: str
+    security: SecurityMetadataPayload
+    account_positions: list[HoldingAccountPositionPayload] = Field(serialization_alias="accountPositions")
+    created_at: str = Field(serialization_alias="createdAt")
+    updated_at: str = Field(serialization_alias="updatedAt")
+
+
+class HoldingCreateRequest(CamelModel):
+    security: SecurityMetadataPayload
+    account_positions: list[HoldingAccountPositionPayload] = Field(serialization_alias="accountPositions")

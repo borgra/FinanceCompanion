@@ -22,6 +22,7 @@ class Account:
     savings_account_id: str | None = None
     investment_account_type: str | None = None
     investment_brokerage: str | None = None
+    manage_holdings: bool = False
     yearly_contribution: float | None = None
     employer_income_source_id: str | None = None
     employer_match_rate_percent: float | None = None

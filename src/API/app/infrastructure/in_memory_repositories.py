@@ -9,9 +9,12 @@ from app.domain.models import (
     AccountColumn,
     BudgetCategory,
     BudgetSubCategory,
+    Holding,
+    HoldingAccountPosition,
     IncomePeriod,
     IncomeSource,
     MonthlyRecord,
+    SecurityMetadata,
     User,
 )
 from app.infrastructure.seed_data import clone_seed_data
@@ -101,6 +104,7 @@ def _account_from_dict(data: dict) -> Account:
         savings_account_id=data.get("savingsAccountId"),
         investment_account_type=data.get("investmentAccountType"),
         investment_brokerage=data.get("investmentBrokerage"),
+        manage_holdings=bool(data.get("manageHoldings", False)),
         yearly_contribution=data.get("yearlyContribution"),
         employer_income_source_id=data.get("employerIncomeSourceId"),
         employer_match_rate_percent=data.get("employerMatchRatePercent"),
@@ -108,6 +112,40 @@ def _account_from_dict(data: dict) -> Account:
         employer_match_start_date=data.get("employerMatchStartDate"),
         employer_match_amount=data.get("employerMatchAmount"),
         employer_match_percent=data.get("employerMatchPercent"),
+    )
+
+
+def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
+    return SecurityMetadata(
+        symbol=data["symbol"],
+        name=data["name"],
+        exchange=data["exchange"],
+        asset_type=data["assetType"],
+        currency=data["currency"],
+        price=float(data["price"]) if data.get("price") is not None else None,
+        sector=data.get("sector"),
+        industry=data.get("industry"),
+    )
+
+
+def _holding_account_position_from_dict(data: dict) -> HoldingAccountPosition:
+    return HoldingAccountPosition(
+        account_id=data["accountId"],
+        quantity=float(data["quantity"]),
+        cost_basis=float(data["costBasis"]) if data.get("costBasis") is not None else None,
+    )
+
+
+def _holding_from_dict(data: dict) -> Holding:
+    return Holding(
+        id=data["id"],
+        security=_security_metadata_from_dict(data["security"]),
+        account_positions=[
+            _holding_account_position_from_dict(item)
+            for item in data.get("accountPositions", [])
+        ],
+        created_at=data["createdAt"],
+        updated_at=data["updatedAt"],
     )
 
 
@@ -137,6 +175,10 @@ class InMemoryDataStore:
         self.accounts = {
             user_id: [_account_from_dict(item) for item in items]
             for user_id, items in data["accounts"].items()
+        }
+        self.holdings = {
+            user_id: [_holding_from_dict(item) for item in items]
+            for user_id, items in data["holdings"].items()
         }
 
 
@@ -272,3 +314,24 @@ class InMemoryAccountRepository:
     def delete_for_user(self, user_id: str, account_id: str) -> None:
         items = self._store.accounts.setdefault(user_id, [])
         self._store.accounts[user_id] = [item for item in items if item.id != account_id]
+
+
+class InMemoryHoldingRepository:
+    def __init__(self, store: InMemoryDataStore) -> None:
+        self._store = store
+
+    def list_for_user(self, user_id: str) -> list[Holding]:
+        return deepcopy(self._store.holdings.get(user_id, []))
+
+    def create_for_user(self, user_id: str, holding: Holding) -> Holding:
+        items = self._store.holdings.setdefault(user_id, [])
+        items.append(deepcopy(holding))
+        return deepcopy(holding)
+
+    def update_for_user(self, user_id: str, holding_id: str, holding: Holding) -> Holding:
+        items = self._store.holdings.setdefault(user_id, [])
+        for index, item in enumerate(items):
+            if item.id == holding_id:
+                items[index] = deepcopy(holding)
+                return deepcopy(holding)
+        raise NotFoundError("Holding not found.")

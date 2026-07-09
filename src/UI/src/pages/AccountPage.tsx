@@ -459,6 +459,7 @@ export function AccountPage({
         savingsAccountId: draftAccount.savingsAccountId || '',
         investmentAccountType: draftAccount.investmentAccountType || 'Taxable',
         investmentBrokerage: draftAccount.investmentBrokerage || 'Fidelity',
+        manageHoldings: draftAccount.manageHoldings ?? draftAccount.investmentAccountType !== '401k',
         yearlyContribution: String(draftAccount.yearlyContribution || 0),
         employerIncomeSourceId: draftAccount.employerIncomeSourceId || '',
         employerMatchRatePercent: String(draftAccount.employerMatchRatePercent || 0),
@@ -572,6 +573,10 @@ export function AccountPage({
           modalDraft.type === 'Investment' ? modalDraft.investmentAccountType : 'Taxable',
         investmentBrokerage:
           modalDraft.type === 'Investment' ? modalDraft.investmentBrokerage : 'Fidelity',
+        manageHoldings:
+          modalDraft.type === 'Investment'
+            ? modalDraft.manageHoldings
+            : false,
         yearlyContribution:
           modalDraft.type === 'Investment' ? String(Number(modalDraft.yearlyContribution) || 0) : '',
         employerIncomeSourceId:

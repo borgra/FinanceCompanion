@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { AccountRepository } from '../domain/accountRepository';
+import type { HoldingRepository } from '../domain/holdingRepository';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import { FundingSchedulePage } from './FundingSchedulePage';
+import { HoldingsPage } from './HoldingsPage';
 
 type InvestingSectionId =
   | 'funding-schedule'
@@ -45,10 +47,11 @@ const investingSections: InvestingSection[] = [
 
 type InvestingPageProps = {
   accountRepository: AccountRepository;
+  holdingRepository: HoldingRepository;
   incomeRepository: IncomeSourceRepository;
 };
 
-export function InvestingPage({ accountRepository, incomeRepository }: InvestingPageProps) {
+export function InvestingPage({ accountRepository, holdingRepository, incomeRepository }: InvestingPageProps) {
   const [activeSectionId, setActiveSectionId] =
     useState<InvestingSectionId>('funding-schedule');
 
@@ -96,6 +99,17 @@ export function InvestingPage({ accountRepository, incomeRepository }: Investing
           <FundingSchedulePage
             accountRepository={accountRepository}
             incomeRepository={incomeRepository}
+          />
+        </section>
+      ) : activeSection.id === 'holdings' ? (
+        <section
+          aria-labelledby={`investing-tab-${activeSection.id}`}
+          id={`investing-panel-${activeSection.id}`}
+          role="tabpanel"
+        >
+          <HoldingsPage
+            accountRepository={accountRepository}
+            holdingRepository={holdingRepository}
           />
         </section>
       ) : (

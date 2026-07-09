@@ -8,13 +8,17 @@ from app.domain.models import (
     Account,
     AccountColumn,
     BudgetSubCategory,
+    Holding,
+    HoldingAccountPosition,
     IncomePeriod,
     IncomeSource,
     MonthlyRecord,
+    SecurityMetadata,
 )
 from app.infrastructure.cosmos_repositories import (
     CosmosAccountRepository,
     CosmosBudgetRepository,
+    CosmosHoldingRepository,
     CosmosIncomeSourceRepository,
     CosmosUserRepository,
 )
@@ -248,3 +252,43 @@ def test_account_create_and_update(mock_table_client):
     }
     repo.update_for_user("user-123", "acc-1", account)
     mock_table_client.upsert_entity.assert_called_once()
+
+
+def test_holding_uses_security_metadata_and_account_positions_json(mock_table_client):
+    repo = CosmosHoldingRepository(mock_table_client)
+    holding = Holding(
+        id="holding-1",
+        security=SecurityMetadata(
+            symbol="VTI",
+            name="Vanguard Total Stock Market ETF",
+            exchange="NYSE Arca",
+            asset_type="ETF",
+            currency="USD",
+            price=315.12,
+            sector="Diversified",
+            industry="Broad Market",
+        ),
+        account_positions=[
+            HoldingAccountPosition("acc-taxable-brokerage", 12.5, 3100),
+            HoldingAccountPosition("acc-roth-ira", 4, 990),
+        ],
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+    )
+
+    created = repo.create_for_user("user-123", holding)
+
+    assert created.id == "holding-1"
+    mock_table_client.create_entity.assert_called_once()
+    entity = mock_table_client.create_entity.call_args[0][0]
+    assert entity["PartitionKey"] == "user-123"
+    assert entity["RowKey"] == "holding:holding-1"
+    assert entity["securitySymbol"] == "VTI"
+    security = json.loads(entity["securityJson"])
+    assert security["name"] == "Vanguard Total Stock Market ETF"
+    assert security["price"] == 315.12
+    positions = json.loads(entity["accountPositionsJson"])
+    assert positions == [
+        {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},
+        {"accountId": "acc-roth-ira", "quantity": 4, "costBasis": 990},
+    ]

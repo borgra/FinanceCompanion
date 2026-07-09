@@ -514,6 +514,7 @@ SEED_ACCOUNTS = {
             "assignedIncomeSourceIds": [],
             "investmentAccountType": "Taxable",
             "investmentBrokerage": "Fidelity",
+            "manageHoldings": True,
             "yearlyContribution": 14400,
             "employerIncomeSourceId": None,
             "employerMatchRatePercent": 0,
@@ -538,6 +539,7 @@ SEED_ACCOUNTS = {
             "assignedIncomeSourceIds": [],
             "investmentAccountType": "401k",
             "investmentBrokerage": "Fidelity",
+            "manageHoldings": False,
             "yearlyContribution": 23000,
             "employerIncomeSourceId": "income-source-primary",
             "employerMatchRatePercent": 100,
@@ -560,6 +562,7 @@ SEED_ACCOUNTS = {
             "assignedIncomeSourceIds": [],
             "investmentAccountType": "IRA",
             "investmentBrokerage": "eTrade",
+            "manageHoldings": True,
             "yearlyContribution": 7000,
             "employerIncomeSourceId": None,
             "employerMatchRatePercent": 0,
@@ -584,6 +587,7 @@ SEED_ACCOUNTS = {
             "assignedIncomeSourceIds": [],
             "investmentAccountType": "HSA",
             "investmentBrokerage": "Fidelity",
+            "manageHoldings": True,
             "yearlyContribution": 4150,
             "employerIncomeSourceId": "income-source-primary",
             "employerMatchRatePercent": 0,
@@ -599,6 +603,10 @@ SEED_ACCOUNTS = {
     ]
 }
 
+SEED_HOLDINGS = {
+    "user-steve": []
+}
+
 
 def clone_seed_data(allowed_email: str | None = None):
     users = deepcopy(SEED_USERS)
@@ -610,4 +618,5 @@ def clone_seed_data(allowed_email: str | None = None):
         "income_sources": deepcopy(SEED_INCOME_SOURCES),
         "budget_categories": deepcopy(SEED_BUDGET_CATEGORIES),
         "accounts": deepcopy(SEED_ACCOUNTS),
+        "holdings": deepcopy(SEED_HOLDINGS),
     }

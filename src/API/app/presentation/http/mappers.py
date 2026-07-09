@@ -5,9 +5,12 @@ from app.domain.models import (
     AccountColumn,
     BudgetCategory,
     BudgetSubCategory,
+    Holding,
+    HoldingAccountPosition,
     IncomePeriod,
     IncomeSource,
     MonthlyRecord,
+    SecurityMetadata,
     User,
 )
 from app.presentation.http.schemas import (
@@ -16,10 +19,14 @@ from app.presentation.http.schemas import (
     AccountUpsertRequest,
     BudgetCategoryPayload,
     BudgetSubCategoryPayload,
+    HoldingAccountPositionPayload,
+    HoldingCreateRequest,
+    HoldingPayload,
     IncomePeriodPayload,
     IncomeSourcePayload,
     IncomeSourceUpsertRequest,
     MonthlyRecordPayload,
+    SecurityMetadataPayload,
     UserResponse,
 )
 
@@ -135,6 +142,7 @@ def to_account(account_id: str, payload: AccountUpsertRequest, created_at: str, 
         savings_account_id=payload.savings_account_id,
         investment_account_type=payload.investment_account_type,
         investment_brokerage=payload.investment_brokerage,
+        manage_holdings=payload.manage_holdings,
         yearly_contribution=payload.yearly_contribution,
         employer_income_source_id=payload.employer_income_source_id,
         employer_match_rate_percent=payload.employer_match_rate_percent,
@@ -157,6 +165,7 @@ def to_account_payload(item: Account) -> AccountPayload:
         savings_account_id=item.savings_account_id,
         investment_account_type=item.investment_account_type,
         investment_brokerage=item.investment_brokerage,
+        manage_holdings=item.manage_holdings,
         yearly_contribution=item.yearly_contribution,
         employer_income_source_id=item.employer_income_source_id,
         employer_match_rate_percent=item.employer_match_rate_percent,
@@ -182,6 +191,79 @@ def to_account_payload(item: Account) -> AccountPayload:
                 savings=record.savings,
             )
             for record in item.monthly_records
+        ],
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
+
+
+def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
+    return SecurityMetadata(
+        symbol=payload.symbol.strip().upper(),
+        name=payload.name,
+        exchange=payload.exchange,
+        asset_type=payload.asset_type,
+        currency=payload.currency,
+        price=payload.price,
+        sector=payload.sector,
+        industry=payload.industry,
+    )
+
+
+def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayload:
+    return SecurityMetadataPayload(
+        symbol=item.symbol,
+        name=item.name,
+        exchange=item.exchange,
+        asset_type=item.asset_type,
+        currency=item.currency,
+        price=item.price,
+        sector=item.sector,
+        industry=item.industry,
+    )
+
+
+def to_holding_account_position(item: HoldingAccountPositionPayload) -> HoldingAccountPosition:
+    return HoldingAccountPosition(
+        account_id=item.account_id,
+        quantity=item.quantity,
+        cost_basis=item.cost_basis,
+    )
+
+
+def to_holding_account_position_payload(item: HoldingAccountPosition) -> HoldingAccountPositionPayload:
+    return HoldingAccountPositionPayload(
+        account_id=item.account_id,
+        quantity=item.quantity,
+        cost_basis=item.cost_basis,
+    )
+
+
+def to_holding(
+    holding_id: str,
+    payload: HoldingCreateRequest,
+    created_at: str,
+    updated_at: str,
+) -> Holding:
+    return Holding(
+        id=holding_id,
+        security=to_security_metadata(payload.security),
+        account_positions=[
+            to_holding_account_position(item)
+            for item in payload.account_positions
+        ],
+        created_at=created_at,
+        updated_at=updated_at,
+    )
+
+
+def to_holding_payload(item: Holding) -> HoldingPayload:
+    return HoldingPayload(
+        id=item.id,
+        security=to_security_metadata_payload(item.security),
+        account_positions=[
+            to_holding_account_position_payload(position)
+            for position in item.account_positions
         ],
         created_at=item.created_at,
         updated_at=item.updated_at,

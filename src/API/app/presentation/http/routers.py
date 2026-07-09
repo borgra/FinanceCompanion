@@ -5,6 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.domain.exceptions import AuthenticationError, DomainError, NotFoundError
+from app.infrastructure.yahoo_finance_security_search import SecuritySearchUnavailableError
 from app.domain.models import Account, BudgetCategory, BudgetSubCategory
 from app.infrastructure.in_memory_repositories import now_iso
 from app.presentation.http.dependencies import get_container, require_session_user
@@ -13,8 +14,11 @@ from app.presentation.http.mappers import (
     to_account_payload,
     to_budget_category_payload,
     to_budget_sub_category_payload,
+    to_holding,
+    to_holding_payload,
     to_income_source,
     to_income_source_payload,
+    to_security_metadata_payload,
     to_user_response,
 )
 from app.presentation.http.schemas import (
@@ -28,9 +32,12 @@ from app.presentation.http.schemas import (
     BudgetSubCategoryCreateRequest,
     BudgetSubCategoryPayload,
     BudgetSubCategoryUpdateRequest,
+    HoldingCreateRequest,
+    HoldingPayload,
     IncomeSourcePayload,
     IncomeSourceStatusRequest,
     IncomeSourceUpsertRequest,
+    SecurityMetadataPayload,
     UserResponse,
 )
 
@@ -253,3 +260,73 @@ def update_account(account_id: str, request: AccountUpsertRequest, user=Depends(
 def delete_account(account_id: str, user=Depends(require_session_user), container=Depends(get_container)) -> Response:
     container.delete_account.execute(user.user_id, account_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/securities/search", response_model=list[SecurityMetadataPayload])
+def search_securities(q: str, user=Depends(require_session_user), container=Depends(get_container)) -> list[SecurityMetadataPayload]:
+    try:
+        return [to_security_metadata_payload(item) for item in container.search_securities.execute(q)]
+    except SecuritySearchUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+
+@router.get("/holdings", response_model=list[HoldingPayload])
+def list_holdings(user=Depends(require_session_user), container=Depends(get_container)) -> list[HoldingPayload]:
+    return [to_holding_payload(item) for item in container.list_holdings.execute(user.user_id)]
+
+
+@router.post("/holdings", response_model=HoldingPayload, status_code=status.HTTP_201_CREATED)
+def create_holding(request: HoldingCreateRequest, user=Depends(require_session_user), container=Depends(get_container)) -> HoldingPayload:
+    if not request.account_positions:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one account.")
+
+    account_ids = {account.id for account in container.list_accounts.execute(user.user_id)}
+    unknown_account_ids = [
+        position.account_id
+        for position in request.account_positions
+        if position.account_id not in account_ids
+    ]
+    if unknown_account_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected account was not found.")
+
+    if any(position.quantity < 0 for position in request.account_positions):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity must be zero or greater.")
+
+    timestamp = now_iso()
+    holding = to_holding(
+        holding_id=f"holding-{uuid.uuid4().hex[:8]}",
+        payload=request,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+    return to_holding_payload(container.create_holding.execute(user.user_id, holding))
+
+
+@router.put("/holdings/{holding_id}", response_model=HoldingPayload)
+def update_holding(holding_id: str, request: HoldingCreateRequest, user=Depends(require_session_user), container=Depends(get_container)) -> HoldingPayload:
+    existing = next((item for item in container.list_holdings.execute(user.user_id) if item.id == holding_id), None)
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Holding not found.")
+
+    if not request.account_positions:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one account.")
+
+    account_ids = {account.id for account in container.list_accounts.execute(user.user_id)}
+    unknown_account_ids = [
+        position.account_id
+        for position in request.account_positions
+        if position.account_id not in account_ids
+    ]
+    if unknown_account_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected account was not found.")
+
+    if any(position.quantity < 0 for position in request.account_positions):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity must be zero or greater.")
+
+    holding = to_holding(
+        holding_id=holding_id,
+        payload=request,
+        created_at=existing.created_at,
+        updated_at=now_iso(),
+    )
+    return to_holding_payload(container.update_holding.execute(user.user_id, holding_id, holding))

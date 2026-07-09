@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import type { AccountRepository } from '../domain/accountRepository';
+import type { HoldingRepository } from '../domain/holdingRepository';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { SettingsConfigurationPanel } from './SettingsConfigurationPanel';
 import { SettingsBudgetPanel } from './SettingsBudgetPanel';
@@ -12,9 +13,10 @@ export type LandingPageProps = {
   repository: IncomeSourceRepository;
   budgetRepository: BudgetRepository;
   accountRepository: AccountRepository;
+  holdingRepository: HoldingRepository;
 };
 
-export function LandingPage({ repository, budgetRepository, accountRepository }: LandingPageProps) {
+export function LandingPage({ repository, budgetRepository, accountRepository, holdingRepository }: LandingPageProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [activeSectionId, setActiveSectionId] =
     useState<'income' | 'budget' | 'accounts' | 'investing'>('budget');
@@ -57,6 +59,7 @@ export function LandingPage({ repository, budgetRepository, accountRepository }:
               return (
                 <InvestingPage
                   accountRepository={accountRepository}
+                  holdingRepository={holdingRepository}
                   incomeRepository={repository}
                 />
               );
