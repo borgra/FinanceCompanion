@@ -13,3 +13,16 @@ class SecurityMetadata:
     price: float | None = None
     sector: str | None = None
     industry: str | None = None
+    pe_ratio: float | None = None
+    thirty_day_yield: float | None = None
+    fifty_two_week_low: float | None = None
+    fifty_two_week_high: float | None = None
+    dividend_previous_year: float | None = None
+    dividend_current_year: float | None = None
+    dividend_growth_rate: float | None = None
+    estimated_future_payout: float | None = None
+    sma20: float | None = None
+    sma50: float | None = None
+    sma200: float | None = None
+    details_updated_at: str | None = None
+    details_status: str | None = None

@@ -32,6 +32,44 @@ const formatMoney = (value: number) => (value === 0 ? '$   -   ' : currencyForma
 
 const parseQuantity = (value: string) => Number(value.replace(/[,\s]/g, '')) || 0;
 
+const formatNullableNumber = (value?: number | null) =>
+  value == null ? '-' : numberFormatter.format(value);
+
+const formatPercent = (value?: number | null) =>
+  value == null
+    ? '-'
+    : new Intl.NumberFormat('en-US', {
+        style: 'percent',
+        maximumFractionDigits: 2,
+      }).format(value);
+
+const formatRange = (low?: number | null, high?: number | null) => {
+  if (low == null || high == null) {
+    return '-';
+  }
+  return `${formatMoney(low)} - ${formatMoney(high)}`;
+};
+
+const mergeRefreshedSecurityDetails = (
+  current: Holding[],
+  refreshed: Holding[],
+) => {
+  const refreshedById = new Map(refreshed.map((holding) => [holding.id, holding]));
+
+  return current.map((holding) => {
+    const next = refreshedById.get(holding.id);
+    if (!next) {
+      return holding;
+    }
+
+    return {
+      ...holding,
+      security: next.security,
+      updatedAt: next.updatedAt,
+    };
+  });
+};
+
 export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsPageProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -39,9 +77,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SecurityMetadata[]>([]);
   const [selectedSecurity, setSelectedSecurity] = useState<SecurityMetadata | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [refreshingHoldingIds, setRefreshingHoldingIds] = useState<Set<string>>(() => new Set());
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -56,6 +96,17 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         ]);
         setAccounts(nextAccounts.filter((account) => account.type === 'Investment'));
         setHoldings(nextHoldings);
+        void (async () => {
+          try {
+            setRefreshingHoldingIds(new Set(nextHoldings.map((holding) => holding.id)));
+            const result = await holdingRepository.refreshHeldSecurityDetails();
+            setHoldings((current) => mergeRefreshedSecurityDetails(current, result.holdings));
+          } catch {
+            // Keep saved holdings visible when the detail refresh is unavailable.
+          } finally {
+            setRefreshingHoldingIds(new Set());
+          }
+        })();
       } catch {
         setError('Unable to load holdings.');
       } finally {
@@ -72,6 +123,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
 
     if (query.trim().length < 1) {
       setResults([]);
+      setSearchError(null);
       setIsSearching(false);
       return;
     }
@@ -84,10 +136,12 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           const nextResults = await holdingRepository.searchSecurities(query);
           if (isCurrent) {
             setResults(nextResults);
+            setSearchError(null);
           }
         } catch {
           if (isCurrent) {
             setResults([]);
+            setSearchError('Security search is unavailable. Check Alpha Vantage configuration and try again.');
           }
         } finally {
           if (isCurrent) {
@@ -118,6 +172,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setQuery('');
     setResults([]);
     setSelectedSecurity(null);
+    setSearchError(null);
     setIsSearching(false);
   };
 
@@ -151,6 +206,34 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setSuccessMessage(null);
   };
 
+  const refreshHoldingDetails = async (holdingId: string) => {
+    setRefreshingHoldingIds((current) => new Set(current).add(holdingId));
+    try {
+      const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holdingId);
+      setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
+    } catch {
+      setHoldings((current) =>
+        current.map((holding) =>
+          holding.id === holdingId
+            ? {
+                ...holding,
+                security: {
+                  ...holding.security,
+                  detailsStatus: 'unavailable',
+                },
+              }
+            : holding,
+        ),
+      );
+    } finally {
+      setRefreshingHoldingIds((current) => {
+        const next = new Set(current);
+        next.delete(holdingId);
+        return next;
+      });
+    }
+  };
+
   const addHoldingRow = async (event: FormEvent) => {
     event.preventDefault();
     if (!selectedSecurity || managedAccounts.length === 0) {
@@ -169,9 +252,19 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           costBasis: null,
         })),
       });
-      setHoldings((current) => [...current, created]);
+      setHoldings((current) => [
+        ...current,
+        {
+          ...created,
+          security: {
+            ...created.security,
+            detailsStatus: 'refreshing',
+          },
+        },
+      ]);
       setSuccessMessage(`${created.security.symbol} was added.`);
       closeAddDialog();
+      void refreshHoldingDetails(created.id);
     } catch {
       setError('Unable to add holding.');
     } finally {
@@ -259,6 +352,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
               <FinanceTableHeaderCell>Total Qty</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Price</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Value</FinanceTableHeaderCell>
+              <FinanceTableHeaderCell>P/E</FinanceTableHeaderCell>
+              <FinanceTableHeaderCell>30-day yield</FinanceTableHeaderCell>
+              <FinanceTableHeaderCell>52-week range</FinanceTableHeaderCell>
+              <FinanceTableHeaderCell>Div growth</FinanceTableHeaderCell>
+              <FinanceTableHeaderCell>SMA20</FinanceTableHeaderCell>
               {managedAccounts.map((account) => (
                 <FinanceTableHeaderCell key={account.id} icon="account_balance">
                   {account.name.length > 18 ? `${account.name.slice(0, 15)}...` : account.name}
@@ -269,7 +367,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           <tbody>
             {holdings.length === 0 ? (
               <tr>
-                <td colSpan={4 + managedAccounts.length}>
+                <td colSpan={9 + managedAccounts.length}>
                   <span className="excel-cell-val">No holdings have been added yet.</span>
                 </td>
               </tr>
@@ -286,6 +384,10 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                     <td className="holdings-security-cell">
                       <strong>{holding.security.symbol}</strong>
                       <span>{holding.security.name}</span>
+                      {refreshingHoldingIds.has(holding.id) ? <small>Refreshing details</small> : null}
+                      {holding.security.detailsStatus === 'unavailable' ? (
+                        <small>Details unavailable</small>
+                      ) : null}
                     </td>
                     <td>
                       <FinanceMoneyCellValue
@@ -299,6 +401,35 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                     <td>
                       <FinanceMoneyCellValue
                         value={totalQuantity * price}
+                        formatValue={formatMoney}
+                      />
+                    </td>
+                    <td>
+                      <span className="excel-cell-val">
+                        {formatNullableNumber(holding.security.peRatio)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="excel-cell-val">
+                        {formatPercent(holding.security.thirtyDayYield)}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="excel-cell-val">
+                        {formatRange(
+                          holding.security.fiftyTwoWeekLow,
+                          holding.security.fiftyTwoWeekHigh,
+                        )}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="excel-cell-val">
+                        {formatPercent(holding.security.dividendGrowthRate)}
+                      </span>
+                    </td>
+                    <td>
+                      <FinanceMoneyCellValue
+                        value={holding.security.sma20 ?? 0}
                         formatValue={formatMoney}
                       />
                     </td>
@@ -340,6 +471,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setSelectedSecurity(null);
+                    setSearchError(null);
                     setSuccessMessage(null);
                   }}
                 />
@@ -354,6 +486,8 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   </div>
                 ) : isSearching ? (
                   <p className="status-copy">Searching...</p>
+                ) : searchError ? (
+                  <p className="form-error" role="alert">{searchError}</p>
                 ) : results.length > 0 ? (
                   results.map((security) => (
                     <button

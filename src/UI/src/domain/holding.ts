@@ -7,6 +7,19 @@ export type SecurityMetadata = {
   price?: number | null;
   sector?: string | null;
   industry?: string | null;
+  peRatio?: number | null;
+  thirtyDayYield?: number | null;
+  fiftyTwoWeekLow?: number | null;
+  fiftyTwoWeekHigh?: number | null;
+  dividendPreviousYear?: number | null;
+  dividendCurrentYear?: number | null;
+  dividendGrowthRate?: number | null;
+  estimatedFuturePayout?: number | null;
+  sma20?: number | null;
+  sma50?: number | null;
+  sma200?: number | null;
+  detailsUpdatedAt?: string | null;
+  detailsStatus?: string | null;
 };
 
 export type HoldingAccountPosition = {
@@ -26,4 +39,9 @@ export type Holding = {
 export type HoldingDraft = {
   security: SecurityMetadata;
   accountPositions: HoldingAccountPosition[];
+};
+
+export type SecurityDetailsRefreshResult = {
+  holdings: Holding[];
+  failedSymbols: string[];
 };

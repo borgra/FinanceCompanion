@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 function Get-LocalConfig {
     $envPath = Join-Path $PSScriptRoot '.env.local'
     if (-not (Test-Path $envPath)) {
-        throw "Missing $envPath. Copy .env.local.example to .env.local and set your Entra app values."
+        throw "Missing $envPath. Create .env.local with your local API, UI, Entra, and Alpha Vantage settings."
     }
 
     $config = @{}
@@ -47,6 +47,7 @@ function Test-RequiredKeys {
     $required = @(
         'FINANCE_COMPANION_ALLOWED_EMAIL',
         'FINANCE_COMPANION_SESSION_SECRET',
+        'FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY',
         'VITE_API_BASE_URL',
         'FINANCE_COMPANION_ENTRA_CLIENT_ID',
         'FINANCE_COMPANION_ENTRA_TENANT_ID',

@@ -21,3 +21,11 @@ def test_session_secret_must_be_strong_enough():
 
     with pytest.raises(ValueError):
         settings.validate_security()
+
+
+def test_alpha_vantage_key_can_use_github_secret_name(monkeypatch):
+    monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "test-alpha-key")
+
+    settings = Settings()
+
+    assert settings.alpha_vantage_api_key == "test-alpha-key"

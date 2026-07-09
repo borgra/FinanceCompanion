@@ -18,6 +18,10 @@ from app.application.use_cases.income_sources import (
     UpdateIncomeSource,
 )
 from app.application.use_cases.holdings import CreateHolding, ListHoldings, UpdateHolding
+from app.application.use_cases.security_details import (
+    RefreshHeldSecurityDetails,
+    RefreshHoldingSecurityDetails,
+)
 from app.application.use_cases.security_search import SearchSecurities
 from app.domain.protocols import IdentityTokenVerifier
 from app.infrastructure.entra_identity import EntraIdentityTokenVerifier
@@ -29,7 +33,8 @@ from app.infrastructure.in_memory_repositories import (
     InMemoryIncomeSourceRepository,
     InMemoryUserRepository,
 )
-from app.infrastructure.yahoo_finance_security_search import YahooFinanceSecuritySearchProvider
+from app.infrastructure.alpha_vantage_security_details import AlphaVantageSecurityDetailsProvider
+from app.infrastructure.alpha_vantage_security_search import AlphaVantageSecuritySearchProvider
 from app.infrastructure.security import JwtSessionTokenService
 from app.infrastructure.settings import Settings
 
@@ -58,6 +63,8 @@ class Container:
     create_holding: CreateHolding
     update_holding: UpdateHolding
     search_securities: SearchSecurities
+    refresh_holding_security_details: RefreshHoldingSecurityDetails
+    refresh_held_security_details: RefreshHeldSecurityDetails
     session_tokens: JwtSessionTokenService
 
 
@@ -106,6 +113,7 @@ def build_container(
         issuer=settings.session_issuer,
         audience=settings.session_audience,
     )
+    security_details = AlphaVantageSecurityDetailsProvider(settings.alpha_vantage_api_key)
 
     return Container(
         settings=settings,
@@ -134,6 +142,16 @@ def build_container(
         list_holdings=ListHoldings(holdings),
         create_holding=CreateHolding(holdings),
         update_holding=UpdateHolding(holdings),
-        search_securities=SearchSecurities(YahooFinanceSecuritySearchProvider()),
+        search_securities=SearchSecurities(
+            AlphaVantageSecuritySearchProvider(settings.alpha_vantage_api_key)
+        ),
+        refresh_holding_security_details=RefreshHoldingSecurityDetails(
+            holdings,
+            security_details,
+        ),
+        refresh_held_security_details=RefreshHeldSecurityDetails(
+            holdings,
+            security_details,
+        ),
         session_tokens=session_tokens,
     )

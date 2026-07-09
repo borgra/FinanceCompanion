@@ -111,6 +111,7 @@ For the runtime API tranche, set these repository values:
 | `AZURE_ALLOWED_EMAIL` | Variable | Primary allowed user email for the placeholder seeded user. |
 | `AZURE_API_ENVIRONMENT` | Variable | API environment string, typically `production`. |
 | `AZURE_API_SESSION_SECRET` | Secret | Session signing secret for the API cookie/JWT. |
+| `ALPHA_VANTAGE_API_KEY` | Secret | Alpha Vantage key used by the API to refresh security details. |
 
 ### Workflow Defaults
 

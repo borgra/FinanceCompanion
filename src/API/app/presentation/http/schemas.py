@@ -165,6 +165,19 @@ class SecurityMetadataPayload(CamelModel):
     price: float | None = None
     sector: str | None = None
     industry: str | None = None
+    pe_ratio: float | None = Field(default=None, serialization_alias="peRatio")
+    thirty_day_yield: float | None = Field(default=None, serialization_alias="thirtyDayYield")
+    fifty_two_week_low: float | None = Field(default=None, serialization_alias="fiftyTwoWeekLow")
+    fifty_two_week_high: float | None = Field(default=None, serialization_alias="fiftyTwoWeekHigh")
+    dividend_previous_year: float | None = Field(default=None, serialization_alias="dividendPreviousYear")
+    dividend_current_year: float | None = Field(default=None, serialization_alias="dividendCurrentYear")
+    dividend_growth_rate: float | None = Field(default=None, serialization_alias="dividendGrowthRate")
+    estimated_future_payout: float | None = Field(default=None, serialization_alias="estimatedFuturePayout")
+    sma20: float | None = None
+    sma50: float | None = None
+    sma200: float | None = None
+    details_updated_at: str | None = Field(default=None, serialization_alias="detailsUpdatedAt")
+    details_status: str | None = Field(default=None, serialization_alias="detailsStatus")
 
 
 class HoldingAccountPositionPayload(CamelModel):
@@ -184,3 +197,8 @@ class HoldingPayload(CamelModel):
 class HoldingCreateRequest(CamelModel):
     security: SecurityMetadataPayload
     account_positions: list[HoldingAccountPositionPayload] = Field(serialization_alias="accountPositions")
+
+
+class SecurityDetailsRefreshResultPayload(CamelModel):
+    holdings: list[HoldingPayload]
+    failed_symbols: list[str] = Field(default_factory=list, serialization_alias="failedSymbols")

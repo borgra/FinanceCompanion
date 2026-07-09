@@ -23,7 +23,7 @@ uvicorn app.main:app --reload --port 8000
 
 The API also reads the repo-level `.env.local` file created for local full-stack startup. If you prefer API-only overrides, copy [.env.example](.env.example) to `.env`.
 
-Security search uses Yahoo Finance search without an API key. The adapter is isolated behind the security search use case because Yahoo Finance does not provide the same formal public API contract as paid or key-based market-data providers.
+Security search and security detail refresh use Alpha Vantage. Set `FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY` in `.env.local` for local startup, or map the GitHub secret `ALPHA_VANTAGE_API_KEY` in deployment workflows.
 
 ## One-shot local startup
 

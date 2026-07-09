@@ -5,7 +5,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.domain.exceptions import AuthenticationError, DomainError, NotFoundError
-from app.infrastructure.yahoo_finance_security_search import SecuritySearchUnavailableError
+from app.infrastructure.alpha_vantage_security_details import SecurityDetailsUnavailableError
+from app.infrastructure.alpha_vantage_security_search import SecuritySearchUnavailableError
 from app.domain.models import Account, BudgetCategory, BudgetSubCategory
 from app.infrastructure.in_memory_repositories import now_iso
 from app.presentation.http.dependencies import get_container, require_session_user
@@ -18,6 +19,7 @@ from app.presentation.http.mappers import (
     to_holding_payload,
     to_income_source,
     to_income_source_payload,
+    to_security_details_refresh_result_payload,
     to_security_metadata_payload,
     to_user_response,
 )
@@ -37,6 +39,7 @@ from app.presentation.http.schemas import (
     IncomeSourcePayload,
     IncomeSourceStatusRequest,
     IncomeSourceUpsertRequest,
+    SecurityDetailsRefreshResultPayload,
     SecurityMetadataPayload,
     UserResponse,
 )
@@ -300,6 +303,27 @@ def create_holding(request: HoldingCreateRequest, user=Depends(require_session_u
         updated_at=timestamp,
     )
     return to_holding_payload(container.create_holding.execute(user.user_id, holding))
+
+
+@router.post("/holdings/security-details/refresh", response_model=SecurityDetailsRefreshResultPayload)
+def refresh_held_security_details(user=Depends(require_session_user), container=Depends(get_container)) -> SecurityDetailsRefreshResultPayload:
+    result = container.refresh_held_security_details.execute(user.user_id)
+    return to_security_details_refresh_result_payload(
+        result.holdings,
+        result.failed_symbols,
+    )
+
+
+@router.post("/holdings/{holding_id}/security-details/refresh", response_model=HoldingPayload)
+def refresh_holding_security_details(holding_id: str, user=Depends(require_session_user), container=Depends(get_container)) -> HoldingPayload:
+    try:
+        return to_holding_payload(
+            container.refresh_holding_security_details.execute(user.user_id, holding_id)
+        )
+    except SecurityDetailsUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except DomainError as exc:
+        raise _domain_error_to_http(exc) from exc
 
 
 @router.put("/holdings/{holding_id}", response_model=HoldingPayload)

@@ -35,6 +35,10 @@ param allowedEmail string = 'steveborgra@gmail.com'
 @secure()
 param sessionSecret string = ''
 
+@description('Alpha Vantage API key used to refresh security details.')
+@secure()
+param alphaVantageApiKey string = ''
+
 @description('The application environment setting (e.g. production, development).')
 param environment string = 'production'
 
@@ -95,6 +99,10 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
           value: empty(sessionSecret) ? 'local-dev-session-secret-change-me-longer-32-chars' : sessionSecret
         }
         {
+          name: 'alpha-vantage-api-key'
+          value: empty(alphaVantageApiKey) ? 'not-configured' : alphaVantageApiKey
+        }
+        {
           name: 'acr-password'
           value: acr.listCredentials().passwords[0].value
         }
@@ -117,6 +125,10 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'FINANCE_COMPANION_SESSION_SECRET'
               secretRef: 'session-secret'
+            }
+            {
+              name: 'FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY'
+              secretRef: 'alpha-vantage-api-key'
             }
             {
               name: 'FINANCE_COMPANION_ENVIRONMENT'
@@ -165,4 +177,3 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
 
 output containerAppName string = apiContainerApp.name
 output containerAppUrl string = 'https://${apiContainerApp.properties.configuration.ingress.fqdn}'
-

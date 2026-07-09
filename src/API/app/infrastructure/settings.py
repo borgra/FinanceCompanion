@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _env_files = []
@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     allowed_email: str = "steveborgra@gmail.com"
     cosmos_table_connection_string: str | None = None
     cosmos_table_name: str = "finance"
+    alpha_vantage_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY",
+            "ALPHA_VANTAGE_API_KEY",
+        ),
+    )
     entra_client_id: str | None = None
     entra_tenant_id: str | None = None
     session_secret: str = Field(default="local-dev-session-secret-change-me", min_length=16)

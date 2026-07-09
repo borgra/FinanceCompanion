@@ -163,6 +163,7 @@ jobs:
                            entraTenantId="${{ vars.AZURE_ENTRA_TENANT_ID }}" \
                            allowedEmail="${{ vars.AZURE_ALLOWED_EMAIL || 'steveborgra@gmail.com' }}" \
                            sessionSecret="${{ secrets.AZURE_API_SESSION_SECRET }}" \
+                           alphaVantageApiKey="${{ secrets.ALPHA_VANTAGE_API_KEY }}" \
                            environment="${{ vars.AZURE_API_ENVIRONMENT || 'production' }}" \
               --only-show-errors \
               --output json > runtime-api-outputs.json

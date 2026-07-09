@@ -27,6 +27,7 @@ from app.presentation.http.schemas import (
     IncomeSourceUpsertRequest,
     MonthlyRecordPayload,
     SecurityMetadataPayload,
+    SecurityDetailsRefreshResultPayload,
     UserResponse,
 )
 
@@ -207,6 +208,19 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
         price=payload.price,
         sector=payload.sector,
         industry=payload.industry,
+        pe_ratio=payload.pe_ratio,
+        thirty_day_yield=payload.thirty_day_yield,
+        fifty_two_week_low=payload.fifty_two_week_low,
+        fifty_two_week_high=payload.fifty_two_week_high,
+        dividend_previous_year=payload.dividend_previous_year,
+        dividend_current_year=payload.dividend_current_year,
+        dividend_growth_rate=payload.dividend_growth_rate,
+        estimated_future_payout=payload.estimated_future_payout,
+        sma20=payload.sma20,
+        sma50=payload.sma50,
+        sma200=payload.sma200,
+        details_updated_at=payload.details_updated_at,
+        details_status=payload.details_status,
     )
 
 
@@ -220,6 +234,19 @@ def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayl
         price=item.price,
         sector=item.sector,
         industry=item.industry,
+        pe_ratio=item.pe_ratio,
+        thirty_day_yield=item.thirty_day_yield,
+        fifty_two_week_low=item.fifty_two_week_low,
+        fifty_two_week_high=item.fifty_two_week_high,
+        dividend_previous_year=item.dividend_previous_year,
+        dividend_current_year=item.dividend_current_year,
+        dividend_growth_rate=item.dividend_growth_rate,
+        estimated_future_payout=item.estimated_future_payout,
+        sma20=item.sma20,
+        sma50=item.sma50,
+        sma200=item.sma200,
+        details_updated_at=item.details_updated_at,
+        details_status=item.details_status,
     )
 
 
@@ -267,4 +294,14 @@ def to_holding_payload(item: Holding) -> HoldingPayload:
         ],
         created_at=item.created_at,
         updated_at=item.updated_at,
+    )
+
+
+def to_security_details_refresh_result_payload(
+    holdings: list[Holding],
+    failed_symbols: list[str],
+) -> SecurityDetailsRefreshResultPayload:
+    return SecurityDetailsRefreshResultPayload(
+        holdings=[to_holding_payload(item) for item in holdings],
+        failed_symbols=failed_symbols,
     )

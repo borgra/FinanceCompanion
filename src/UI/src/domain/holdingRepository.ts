@@ -1,10 +1,17 @@
-import type { Holding, HoldingDraft, SecurityMetadata } from './holding';
+import type {
+  Holding,
+  HoldingDraft,
+  SecurityDetailsRefreshResult,
+  SecurityMetadata,
+} from './holding';
 
 export type HoldingRepository = {
   searchSecurities: (query: string) => Promise<SecurityMetadata[]>;
   listHoldings: () => Promise<Holding[]>;
   createHolding: (draft: HoldingDraft) => Promise<Holding>;
   updateHolding: (id: string, draft: HoldingDraft) => Promise<Holding>;
+  refreshHoldingSecurityDetails: (id: string) => Promise<Holding>;
+  refreshHeldSecurityDetails: () => Promise<SecurityDetailsRefreshResult>;
 };
 
 const nowIso = () => new Date().toISOString();
@@ -49,6 +56,17 @@ const securityCatalog: SecurityMetadata[] = [
     price: 315,
     sector: 'Diversified',
     industry: 'Broad Market',
+    peRatio: 24.2,
+    thirtyDayYield: 0.013,
+    fiftyTwoWeekLow: 255,
+    fiftyTwoWeekHigh: 320,
+    dividendPreviousYear: 3.55,
+    dividendCurrentYear: 3.72,
+    dividendGrowthRate: 0.0479,
+    estimatedFuturePayout: 3.72,
+    sma20: 312,
+    sma50: 307,
+    sma200: 291,
   },
   {
     symbol: 'SCHD',
@@ -108,6 +126,60 @@ export function createMockHoldingRepository(): HoldingRepository {
       };
       holdings = holdings.map((holding) => (holding.id === id ? updated : holding));
       return { ...updated };
+    },
+    refreshHoldingSecurityDetails: async (id) => {
+      const existing = holdings.find((holding) => holding.id === id);
+      if (!existing) {
+        throw new Error('Holding not found.');
+      }
+      const catalogSecurity = securityCatalog.find(
+        (item) => item.symbol === existing.security.symbol,
+      );
+      const updated: Holding = {
+        ...existing,
+        security: {
+          ...existing.security,
+          ...catalogSecurity,
+          detailsStatus: 'fresh',
+          detailsUpdatedAt: nowIso(),
+        },
+        updatedAt: nowIso(),
+      };
+      holdings = holdings.map((holding) => (holding.id === id ? updated : holding));
+      return {
+        ...updated,
+        security: { ...updated.security },
+        accountPositions: updated.accountPositions.map((position) => ({ ...position })),
+      };
+    },
+    refreshHeldSecurityDetails: async () => {
+      const refreshed = await Promise.all(
+        holdings.map((holding) => {
+          const catalogSecurity = securityCatalog.find(
+            (item) => item.symbol === holding.security.symbol,
+          );
+          const updated: Holding = {
+            ...holding,
+            security: {
+              ...holding.security,
+              ...catalogSecurity,
+              detailsStatus: 'fresh',
+              detailsUpdatedAt: nowIso(),
+            },
+            updatedAt: nowIso(),
+          };
+          return updated;
+        }),
+      );
+      holdings = refreshed;
+      return {
+        holdings: refreshed.map((holding) => ({
+          ...holding,
+          security: { ...holding.security },
+          accountPositions: holding.accountPositions.map((position) => ({ ...position })),
+        })),
+        failedSymbols: [],
+      };
     },
   };
 }

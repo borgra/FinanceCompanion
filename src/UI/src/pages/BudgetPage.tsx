@@ -108,7 +108,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
   }, [derivedCategoriesForTotals, incomeTotals]);
 
   const monthlyMargin = incomeTotals.monthlyNet - totals.totalMonth;
-  const yearlyMargin = monthlyMargin * 12;
   const allocationRate = totals.percentNet ?? 0;
   const isOverBudget = monthlyMargin < 0;
   const budgetHealthLabel = isOverBudget

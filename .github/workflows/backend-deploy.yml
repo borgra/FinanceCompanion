@@ -120,6 +120,7 @@ jobs:
               --secrets \
                 cosmos-table-connection-string="${COSMOS_TABLE_CONNECTION_STRING}" \
                 session-secret="${{ secrets.ENV_PROD_SESSION_SECRET }}" \
+                alpha-vantage-api-key="${{ secrets.ALPHA_VANTAGE_API_KEY }}" \
               --only-show-errors
 
       - name: Deploy API image
@@ -134,6 +135,7 @@ jobs:
                 FINANCE_COMPANION_COSMOS_TABLE_CONNECTION_STRING=secretref:cosmos-table-connection-string \
                 FINANCE_COMPANION_COSMOS_TABLE_NAME="${COSMOS_TABLE_NAME}" \
                 FINANCE_COMPANION_SESSION_SECRET=secretref:session-secret \
+                FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY=secretref:alpha-vantage-api-key \
                 FINANCE_COMPANION_ENTRA_CLIENT_ID="${{ vars.ENV_PROD_ENTRA_CLIENT_ID }}" \
                 FINANCE_COMPANION_ENTRA_TENANT_ID="${{ vars.ENV_PROD_ENTRA_TENANT_ID }}" \
                 FINANCE_COMPANION_ALLOWED_EMAIL="${{ vars.ENV_PROD_ALLOWED_EMAIL }}" \

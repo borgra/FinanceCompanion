@@ -24,6 +24,10 @@ def now_iso() -> str:
     return datetime.now(tz=UTC).isoformat().replace("+00:00", "Z")
 
 
+def _optional_float(value) -> float | None:
+    return float(value) if value is not None else None
+
+
 def _income_period_from_dict(data: dict) -> IncomePeriod:
     return IncomePeriod(
         id=data["id"],
@@ -122,9 +126,22 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         exchange=data["exchange"],
         asset_type=data["assetType"],
         currency=data["currency"],
-        price=float(data["price"]) if data.get("price") is not None else None,
+        price=_optional_float(data.get("price")),
         sector=data.get("sector"),
         industry=data.get("industry"),
+        pe_ratio=_optional_float(data.get("peRatio")),
+        thirty_day_yield=_optional_float(data.get("thirtyDayYield")),
+        fifty_two_week_low=_optional_float(data.get("fiftyTwoWeekLow")),
+        fifty_two_week_high=_optional_float(data.get("fiftyTwoWeekHigh")),
+        dividend_previous_year=_optional_float(data.get("dividendPreviousYear")),
+        dividend_current_year=_optional_float(data.get("dividendCurrentYear")),
+        dividend_growth_rate=_optional_float(data.get("dividendGrowthRate")),
+        estimated_future_payout=_optional_float(data.get("estimatedFuturePayout")),
+        sma20=_optional_float(data.get("sma20")),
+        sma50=_optional_float(data.get("sma50")),
+        sma200=_optional_float(data.get("sma200")),
+        details_updated_at=data.get("detailsUpdatedAt"),
+        details_status=data.get("detailsStatus"),
     )
 
 
