@@ -131,7 +131,11 @@ export function FinanceTableHeaderCell({
           </button>
         ) : null}
         {icon ? (
-          <span className="material-symbols-outlined" style={{ fontSize: '13px' }}>
+          <span
+            aria-hidden="true"
+            className="material-symbols-outlined"
+            style={{ fontSize: '13px' }}
+          >
             {icon}
           </span>
         ) : null}

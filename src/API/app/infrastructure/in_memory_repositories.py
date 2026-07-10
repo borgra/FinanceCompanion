@@ -15,6 +15,7 @@ from app.domain.models import (
     IncomeSource,
     MonthlyRecord,
     SecurityMetadata,
+    SecurityPayoutDetails,
     User,
 )
 from app.infrastructure.seed_data import clone_seed_data
@@ -142,6 +143,21 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         sma200=_optional_float(data.get("sma200")),
         details_updated_at=data.get("detailsUpdatedAt"),
         details_status=data.get("detailsStatus"),
+        payout_details=[
+            _security_payout_details_from_dict(item)
+            for item in data.get("payoutDetails", [])
+        ],
+    )
+
+
+def _security_payout_details_from_dict(data: dict) -> SecurityPayoutDetails:
+    return SecurityPayoutDetails(
+        ex_dividend_date=data["exDividendDate"],
+        amount=float(data["amount"]),
+        declaration_date=data.get("declarationDate"),
+        record_date=data.get("recordDate"),
+        payment_date=data.get("paymentDate"),
+        source=data.get("source"),
     )
 
 

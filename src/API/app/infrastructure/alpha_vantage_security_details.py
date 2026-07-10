@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import requests
 
 from app.domain.exceptions import DomainError
-from app.domain.models import SecurityMetadata
+from app.domain.models import SecurityMetadata, SecurityPayoutDetails
 
 
 class SecurityDetailsUnavailableError(DomainError):
@@ -23,46 +23,81 @@ def _to_float(value) -> float | None:
 
 
 def _latest_sma(payload: dict) -> float | None:
-    closes = _adjusted_closes(payload)
+    closes = _daily_closes(payload)
     if len(closes) < 20:
         return None
     return sum(closes[:20]) / 20
 
 
-def _adjusted_closes(payload: dict) -> list[float]:
+def _daily_closes(payload: dict) -> list[float]:
     values = payload.get("Time Series (Daily)")
     if not isinstance(values, dict) or not values:
         return []
 
     closes: list[float] = []
     for trade_date in sorted(values.keys(), reverse=True):
-        close = _to_float(values.get(trade_date, {}).get("5. adjusted close"))
+        item = values.get(trade_date, {})
+        close = _to_float(item.get("5. adjusted close")) or _to_float(item.get("4. close"))
         if close is not None:
             closes.append(close)
     return closes
 
 
-def _latest_adjusted_close(payload: dict) -> float | None:
+def _latest_close(payload: dict) -> float | None:
     values = payload.get("Time Series (Daily)")
     if not isinstance(values, dict) or not values:
         return None
 
     latest_date = sorted(values.keys(), reverse=True)[0]
-    return _to_float(values.get(latest_date, {}).get("5. adjusted close"))
+    latest = values.get(latest_date, {})
+    return _to_float(latest.get("5. adjusted close")) or _to_float(latest.get("4. close"))
 
 
-def _annual_adjusted_dividend_totals(payload: dict) -> dict[int, float]:
+def _payout_details_from_dividends(items: list[dict]) -> list[SecurityPayoutDetails]:
+    payouts: list[SecurityPayoutDetails] = []
+    for item in items:
+        ex_date = item.get("ex_dividend_date")
+        amount = _to_float(item.get("amount"))
+        if not ex_date or amount is None or amount <= 0:
+            continue
+        payouts.append(
+            SecurityPayoutDetails(
+                ex_dividend_date=ex_date,
+                amount=amount,
+                declaration_date=item.get("declaration_date") or None,
+                record_date=item.get("record_date") or None,
+                payment_date=item.get("payment_date") or None,
+                source="dividends",
+            )
+        )
+    return sorted(payouts, key=lambda payout: payout.ex_dividend_date, reverse=True)
+
+
+def _payout_details_from_daily_adjusted(payload: dict) -> list[SecurityPayoutDetails]:
     values = payload.get("Time Series (Daily)")
     if not isinstance(values, dict):
-        return {}
+        return []
 
-    totals: dict[int, float] = defaultdict(float)
+    payouts: list[SecurityPayoutDetails] = []
     for trade_date, item in values.items():
         dividend = _to_float(item.get("7. dividend amount"))
         if dividend is None or dividend <= 0:
             continue
+        payouts.append(
+            SecurityPayoutDetails(
+                ex_dividend_date=trade_date,
+                amount=dividend,
+                source="daily_adjusted",
+            )
+        )
+    return sorted(payouts, key=lambda payout: payout.ex_dividend_date, reverse=True)
+
+
+def _annual_payout_totals(payouts: list[SecurityPayoutDetails]) -> dict[int, float]:
+    totals: dict[int, float] = defaultdict(float)
+    for payout in payouts:
         try:
-            totals[int(trade_date[:4])] += dividend
+            totals[int(payout.ex_dividend_date[:4])] += payout.amount
         except ValueError:
             continue
     return dict(totals)
@@ -109,16 +144,29 @@ class AlphaVantageSecurityDetailsProvider:
 
         quote, quote_failed = self._try_get({"function": "GLOBAL_QUOTE", "symbol": symbol})
         overview, overview_failed = self._try_get({"function": "OVERVIEW", "symbol": symbol})
-        daily_adjusted, daily_adjusted_failed = self._try_get(
+        daily, daily_failed = self._try_get(
             {
-                "function": "TIME_SERIES_DAILY_ADJUSTED",
+                "function": "TIME_SERIES_DAILY",
                 "symbol": symbol,
-                "outputsize": "full",
+                "outputsize": "compact",
             }
         )
+        dividends, dividends_failed = self._try_get({"function": "DIVIDENDS", "symbol": symbol})
 
         current_year = datetime.now(tz=UTC).year
-        dividend_totals = _annual_adjusted_dividend_totals(daily_adjusted)
+        payout_details = _payout_details_from_dividends(dividends.get("data", []))
+        daily_adjusted: dict = {}
+        daily_adjusted_failed = False
+        if not payout_details:
+            daily_adjusted, daily_adjusted_failed = self._try_get(
+                {
+                    "function": "TIME_SERIES_DAILY_ADJUSTED",
+                    "symbol": symbol,
+                    "outputsize": "compact",
+                }
+            )
+            payout_details = _payout_details_from_daily_adjusted(daily_adjusted)
+        dividend_totals = _annual_payout_totals(payout_details)
         previous_dividend = dividend_totals.get(current_year - 1)
         current_dividend = dividend_totals.get(current_year)
         dividend_growth_rate = None
@@ -128,14 +176,18 @@ class AlphaVantageSecurityDetailsProvider:
         quote_data = quote.get("Global Quote", {})
         price = (
             _to_float(quote_data.get("05. price"))
-            or _latest_adjusted_close(daily_adjusted)
+            or _latest_close(daily)
+            or _latest_close(daily_adjusted)
             or security.price
         )
-        has_any_payload = any([overview, quote, daily_adjusted])
+        sma20 = _latest_sma(daily) or _latest_sma(daily_adjusted)
+        has_any_payload = any([overview, quote, daily_adjusted, daily, dividends])
         had_partial_failure = any([
             overview_failed,
             quote_failed,
             daily_adjusted_failed,
+            daily_failed,
+            dividends_failed,
         ])
         details_status = (
             "unavailable"
@@ -165,8 +217,9 @@ class AlphaVantageSecurityDetailsProvider:
             dividend_current_year=current_dividend,
             dividend_growth_rate=dividend_growth_rate,
             estimated_future_payout=current_dividend or previous_dividend,
-            sma20=_latest_sma(daily_adjusted),
+            sma20=sma20,
             sma50=_to_float(overview.get("50DayMovingAverage")),
             sma200=_to_float(overview.get("200DayMovingAverage")),
             details_status=details_status,
+            payout_details=payout_details,
         )

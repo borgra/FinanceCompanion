@@ -20,6 +20,7 @@ from app.domain.models import (
     IncomeSource,
     MonthlyRecord,
     SecurityMetadata,
+    SecurityPayoutDetails,
     User,
 )
 
@@ -255,7 +256,33 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         sma200=_optional_float(data.get("sma200")),
         details_updated_at=data.get("detailsUpdatedAt"),
         details_status=data.get("detailsStatus"),
+        payout_details=[
+            _security_payout_details_from_dict(item)
+            for item in data.get("payoutDetails", [])
+        ],
     )
+
+
+def _security_payout_details_from_dict(data: dict) -> SecurityPayoutDetails:
+    return SecurityPayoutDetails(
+        ex_dividend_date=data["exDividendDate"],
+        amount=float(data["amount"]),
+        declaration_date=data.get("declarationDate"),
+        record_date=data.get("recordDate"),
+        payment_date=data.get("paymentDate"),
+        source=data.get("source"),
+    )
+
+
+def _security_payout_details_to_dict(payout: SecurityPayoutDetails) -> dict:
+    return {
+        "exDividendDate": payout.ex_dividend_date,
+        "amount": payout.amount,
+        "declarationDate": payout.declaration_date,
+        "recordDate": payout.record_date,
+        "paymentDate": payout.payment_date,
+        "source": payout.source,
+    }
 
 
 def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
@@ -281,6 +308,10 @@ def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
         "sma200": security.sma200,
         "detailsUpdatedAt": security.details_updated_at,
         "detailsStatus": security.details_status,
+        "payoutDetails": [
+            _security_payout_details_to_dict(payout)
+            for payout in security.payout_details
+        ],
     }
 
 

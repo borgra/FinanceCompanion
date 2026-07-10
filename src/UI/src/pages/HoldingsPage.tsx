@@ -32,22 +32,27 @@ const formatMoney = (value: number) => (value === 0 ? '$   -   ' : currencyForma
 
 const parseQuantity = (value: string) => Number(value.replace(/[,\s]/g, '')) || 0;
 
-const formatNullableNumber = (value?: number | null) =>
-  value == null ? '-' : numberFormatter.format(value);
+const getLatestPayout = (holding: Holding) =>
+  [...(holding.security.payoutDetails ?? [])].sort((left, right) =>
+    right.exDividendDate.localeCompare(left.exDividendDate),
+  )[0];
 
-const formatPercent = (value?: number | null) =>
-  value == null
-    ? '-'
-    : new Intl.NumberFormat('en-US', {
-        style: 'percent',
-        maximumFractionDigits: 2,
-      }).format(value);
+const formatPayoutSummary = (holding: Holding) => {
+  const latestPayout = getLatestPayout(holding);
+  const estimatedPayout = holding.security.estimatedFuturePayout;
 
-const formatRange = (low?: number | null, high?: number | null) => {
-  if (low == null || high == null) {
-    return '-';
+  if (!latestPayout && estimatedPayout == null) {
+    return null;
   }
-  return `${formatMoney(low)} - ${formatMoney(high)}`;
+
+  const parts: string[] = [];
+  if (latestPayout) {
+    parts.push(`Last payout ${formatMoney(latestPayout.amount)} on ${latestPayout.exDividendDate}`);
+  }
+  if (estimatedPayout != null) {
+    parts.push(`Est. annual ${formatMoney(estimatedPayout)}`);
+  }
+  return parts.join(' · ');
 };
 
 const mergeRefreshedSecurityDetails = (
@@ -252,16 +257,23 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           costBasis: null,
         })),
       });
-      setHoldings((current) => [
-        ...current,
-        {
-          ...created,
-          security: {
-            ...created.security,
-            detailsStatus: 'refreshing',
-          },
+      const createdWithRefreshStatus = {
+        ...created,
+        security: {
+          ...created.security,
+          detailsStatus: 'refreshing',
         },
-      ]);
+      };
+      setHoldings((current) => {
+        const existingIndex = current.findIndex((holding) => holding.id === created.id);
+        if (existingIndex === -1) {
+          return [...current, createdWithRefreshStatus];
+        }
+
+        return current.map((holding) =>
+          holding.id === created.id ? createdWithRefreshStatus : holding,
+        );
+      });
       setSuccessMessage(`${created.security.symbol} was added.`);
       closeAddDialog();
       void refreshHoldingDetails(created.id);
@@ -349,16 +361,12 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           <thead>
             <tr>
               <FinanceTableHeaderCell icon="show_chart">Security</FinanceTableHeaderCell>
+              <FinanceTableHeaderCell>Ticker</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Total Qty</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Price</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Value</FinanceTableHeaderCell>
-              <FinanceTableHeaderCell>P/E</FinanceTableHeaderCell>
-              <FinanceTableHeaderCell>30-day yield</FinanceTableHeaderCell>
-              <FinanceTableHeaderCell>52-week range</FinanceTableHeaderCell>
-              <FinanceTableHeaderCell>Div growth</FinanceTableHeaderCell>
-              <FinanceTableHeaderCell>SMA20</FinanceTableHeaderCell>
               {managedAccounts.map((account) => (
-                <FinanceTableHeaderCell key={account.id} icon="account_balance">
+                <FinanceTableHeaderCell key={account.id} icon="account_balance" isEditable>
                   {account.name.length > 18 ? `${account.name.slice(0, 15)}...` : account.name}
                 </FinanceTableHeaderCell>
               ))}
@@ -367,7 +375,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           <tbody>
             {holdings.length === 0 ? (
               <tr>
-                <td colSpan={9 + managedAccounts.length}>
+                <td colSpan={5 + managedAccounts.length}>
                   <span className="excel-cell-val">No holdings have been added yet.</span>
                 </td>
               </tr>
@@ -378,16 +386,20 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   0,
                 );
                 const price = holding.security.price ?? 0;
+                const payoutSummary = formatPayoutSummary(holding);
 
                 return (
                   <tr key={holding.id}>
                     <td className="holdings-security-cell">
-                      <strong>{holding.security.symbol}</strong>
-                      <span>{holding.security.name}</span>
+                      <strong>{holding.security.name}</strong>
+                      {payoutSummary ? <small>{payoutSummary}</small> : null}
                       {refreshingHoldingIds.has(holding.id) ? <small>Refreshing details</small> : null}
                       {holding.security.detailsStatus === 'unavailable' ? (
                         <small>Details unavailable</small>
                       ) : null}
+                    </td>
+                    <td>
+                      <span className="excel-cell-val">{holding.security.symbol}</span>
                     </td>
                     <td>
                       <FinanceMoneyCellValue
@@ -401,35 +413,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                     <td>
                       <FinanceMoneyCellValue
                         value={totalQuantity * price}
-                        formatValue={formatMoney}
-                      />
-                    </td>
-                    <td>
-                      <span className="excel-cell-val">
-                        {formatNullableNumber(holding.security.peRatio)}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="excel-cell-val">
-                        {formatPercent(holding.security.thirtyDayYield)}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="excel-cell-val">
-                        {formatRange(
-                          holding.security.fiftyTwoWeekLow,
-                          holding.security.fiftyTwoWeekHigh,
-                        )}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="excel-cell-val">
-                        {formatPercent(holding.security.dividendGrowthRate)}
-                      </span>
-                    </td>
-                    <td>
-                      <FinanceMoneyCellValue
-                        value={holding.security.sma20 ?? 0}
                         formatValue={formatMoney}
                       />
                     </td>

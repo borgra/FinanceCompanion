@@ -52,6 +52,7 @@ def merge_security_details(
         sma200=_coalesce(details.sma200, current.sma200),
         details_updated_at=updated_at,
         details_status=details.details_status or status,
+        payout_details=details.payout_details or current.payout_details,
     )
 
 

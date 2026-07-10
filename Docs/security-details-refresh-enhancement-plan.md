@@ -2,7 +2,7 @@
 
 ## Objective
 
-Add a background security details refresh flow for holdings so that securities added to the Holdings grid automatically receive saved market and income attributes, existing securities refresh when the app opens, and the grid updates after refreshed data is persisted.
+Refine the background security details refresh flow for holdings so that securities added to the Holdings grid automatically receive saved market and income attributes, existing securities refresh when the app opens, and the grid updates after refreshed data is persisted.
 
 ## Requested Outcomes
 
@@ -20,21 +20,20 @@ Add a background security details refresh flow for holdings so that securities a
 - The backend domain model is `src/API/app/domain/models/security_metadata.py`.
 - The backend persists holdings by serializing `securityJson` in the holding entity.
 - Security search exists through `SearchSecurities` and should use the Alpha Vantage symbol search provider.
-- The Holdings page already loads holdings on screen open and updates local grid state after normal create/update calls.
+- The refresh use cases and HTTP endpoints already exist in the backend, and the UI repository already exposes refresh methods.
+- The Holdings page already loads holdings on screen open, triggers a background bulk refresh, and refreshes a newly added holding after create.
 
 ## Product Scope
 
 ### First Release Slice
 
-Ship a saved security detail refresh pipeline for held securities:
+Harden and finish the saved security detail refresh pipeline for held securities:
 
-1. Extend the security metadata contract with the requested fields.
-2. Add a backend provider/use case to retrieve richer security details by symbol.
-3. Add backend refresh endpoints for a single holding and for all held securities.
-4. Trigger single-security refresh after adding a holding.
-5. Trigger bulk refresh when the Holdings experience loads.
-6. Merge refreshed holdings into the grid without overwriting quantity edits.
-7. Show unavailable or stale values gracefully when a provider cannot return a metric.
+1. Keep the backend and frontend security metadata contracts in sync, including typed `detailsStatus` values.
+2. Preserve the existing backend provider/use case/route wiring and verify the refresh path still persists merged security data.
+3. Ensure the Holdings page surfaces background refresh state without blocking quantity edits or overwriting dirty rows.
+4. Show partial, unavailable, or stale values gracefully when a provider cannot return a metric.
+5. Add focused tests around provider mapping, refresh persistence, merge behavior, and UI status handling.
 
 ### Non-Goals
 
@@ -72,7 +71,7 @@ type SecurityMetadata = {
   sma50?: number | null;
   sma200?: number | null;
   detailsUpdatedAt?: string | null;
-  detailsStatus?: 'fresh' | 'stale' | 'unavailable' | 'refreshing';
+  detailsStatus?: 'fresh' | 'partial' | 'stale' | 'unavailable' | 'refreshing';
 };
 ```
 
@@ -87,7 +86,7 @@ type SecurityMetadata = {
 - `estimatedFuturePayout`: projected next-year annual payout. First release can use current indicated annual dividend or trailing twelve-month dividend as a conservative estimate.
 - `sma20`, `sma50`, `sma200`: simple moving averages calculated from historical close prices.
 - `detailsUpdatedAt`: ISO timestamp from the backend when details were successfully refreshed.
-- `detailsStatus`: UI/backend status indicator for freshness and failure states.
+- `detailsStatus`: UI/backend status indicator for freshness and failure states. Current backend values include `fresh`, `partial`, and `unavailable`; `refreshing` is a UI-only transient state.
 
 ## Backend Architecture Plan
 
@@ -97,10 +96,12 @@ Add a provider protocol near the security search use case:
 
 ```python
 class SecurityDetailsProvider(Protocol):
-    def get_details(self, symbol: str) -> SecurityMetadata: ...
+    def get_details(self, security: SecurityMetadata) -> SecurityMetadata: ...
 ```
 
-Implement it separately from search, for example:
+The backend already follows this shape in `src/API/app/infrastructure/alpha_vantage_security_details.py`.
+
+Provider behavior should remain isolated from search. If the implementation needs to change, keep it separate from the symbol search provider, for example:
 
 `src/API/app/infrastructure/alpha_vantage_security_details.py`
 
@@ -110,6 +111,7 @@ The provider should:
 - Fetch dividend history for previous/current year dividend totals.
 - Fetch historical close prices to calculate SMA20, SMA50, and SMA200.
 - Return null for unavailable fields instead of failing the whole refresh.
+- Mark the result as `partial` when some source calls fail but enough data exists to save a useful refresh.
 - Raise a provider-specific unavailable error only when the refresh cannot be served at all.
 
 ### New Use Cases
@@ -118,6 +120,8 @@ Add use cases under `src/API/app/application/use_cases/security_details.py`:
 
 - `RefreshHoldingSecurityDetails`
 - `RefreshHeldSecurityDetails`
+
+These use cases already exist; the remaining work is to confirm they keep the merged security contract stable and to add coverage for the failure modes.
 
 Single holding refresh:
 
@@ -143,6 +147,8 @@ First release can continue storing details in the existing `securityJson` embedd
 
 If duplicate symbols become common or security details need independent lifecycle management, introduce a separate `security:{symbol}` entity later and let holdings reference it.
 
+No schema split is needed for this slice.
+
 ### API Endpoints
 
 Add to `src/API/app/presentation/http/routers.py`:
@@ -151,6 +157,8 @@ Add to `src/API/app/presentation/http/routers.py`:
 POST /holdings/{holding_id}/security-details/refresh
 POST /holdings/security-details/refresh
 ```
+
+These endpoints already exist in the API.
 
 Return `HoldingPayload` for single refresh.
 
@@ -190,6 +198,8 @@ Update both:
 - `src/UI/src/api/holdingApiRepository.ts`
 - `src/UI/src/domain/holdingRepository.ts`
 
+These files already expose the refresh methods; keep the contract aligned with the backend response shape.
+
 ### Holdings Page Behavior
 
 On initial Holdings load:
@@ -199,6 +209,8 @@ On initial Holdings load:
 3. Start `refreshHeldSecurityDetails()` in the background.
 4. When the refresh resolves, merge returned security fields into the current holdings state.
 5. Preserve unsaved quantity edits for dirty rows.
+
+After a refresh failure, keep the saved row visible and mark the row as unavailable or partial rather than blocking the page.
 
 After adding a holding:
 
@@ -213,13 +225,14 @@ After adding a holding:
 
 When refreshed holdings return, merge only `security` and timestamp/status fields into local state. Do not blindly replace `accountPositions` for rows with unsaved quantity edits.
 
+Current UI merge behavior already avoids overwriting local quantity edits because it only replaces the security block and `updatedAt` field.
+
 Suggested helper:
 
 ```ts
 function mergeRefreshedSecurityDetails(
   current: Holding[],
   refreshed: Holding[],
-  dirtyHoldingIds: Set<string>,
 ): Holding[] {
   const refreshedById = new Map(refreshed.map((holding) => [holding.id, holding]));
 
@@ -233,9 +246,6 @@ function mergeRefreshedSecurityDetails(
       ...holding,
       security: next.security,
       updatedAt: next.updatedAt,
-      accountPositions: dirtyHoldingIds.has(holding.id)
-        ? holding.accountPositions
-        : next.accountPositions,
     };
   });
 }
@@ -261,6 +271,7 @@ Status behavior:
 
 - While refreshing: show saved values and a subtle "Refreshing" status for the row.
 - On success: update values in place and clear refreshing status.
+- On partial success: keep the updated values and indicate that some metrics may still be missing.
 - On partial unavailable metrics: show blank/dash for that metric only.
 - On provider failure: keep saved values and show "Details unavailable" without blocking quantity editing.
 
@@ -273,6 +284,7 @@ Status behavior:
 - Given a security already exists in the dataset, when it is part of the refresh set, then its saved details are updated automatically.
 - Given I am editing quantities while a refresh completes, then my unsaved quantity edits are not overwritten.
 - Given a detail field is unavailable for an asset type, then the UI shows an empty/dash state and does not fail the whole row.
+- Given the provider returns partial data, then the UI keeps the refreshed metrics and labels the row accordingly.
 - Given multiple holdings use the same symbol, when the symbol refreshes, then all matching saved holdings receive the refreshed details.
 
 ## Test Plan
@@ -285,6 +297,7 @@ Status behavior:
 - Unit test single holding refresh persists merged security details.
 - Unit test bulk refresh deduplicates symbols and updates matching holdings.
 - Unit test provider failure keeps existing saved data and reports failed symbols.
+- Unit test partial provider responses persist `partial` status without discarding available metrics.
 
 ### Frontend
 
@@ -293,23 +306,25 @@ Status behavior:
 - Test refreshed details update price/value in the grid.
 - Test dirty quantity edits survive a refresh response.
 - Test unavailable metrics render as dash/empty values.
+- Test partial status is surfaced without blocking the row.
 - Test refresh failure keeps the holding visible and reports a non-blocking status.
 
 ## Implementation Order
 
 1. Extend backend and frontend security metadata schemas.
-2. Add backend provider and calculation helpers for dividends and SMAs.
-3. Add refresh use cases and routes.
-4. Add API repository methods in the UI.
-5. Add Holdings page background refresh on load.
-6. Add after-create refresh behavior.
-7. Add grid columns/status display.
+2. Harden backend provider mapping and calculation helpers for dividends and SMAs.
+3. Verify refresh use cases and routes preserve holdings data correctly on save.
+4. Keep API repository methods aligned with the backend response shape.
+5. Verify Holdings page background refresh on load.
+6. Verify after-create refresh behavior.
+7. Tighten grid status display for `fresh`, `partial`, `unavailable`, and refresh states.
 8. Add focused backend and frontend tests.
 9. Run backend tests, UI tests, lint, and build.
 
 ## Risks
 
 - Alpha Vantage endpoints may not consistently expose all requested fields for every asset type. Keep provider code isolated so another market-data provider can replace it later.
+- Alpha Vantage can return some metrics while failing others. Treat those cases as partial success so the row still gets useful saved data.
 - 30-day yield is not applicable to every security type and may be missing for common stocks.
 - Dividend growth rate can be misleading if calculated from partial current-year data. Label or compute it carefully.
 - Refreshing every app open can hit provider rate limits. Add a freshness threshold, such as skip refresh when `detailsUpdatedAt` is less than 12 hours old.

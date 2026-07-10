@@ -1,3 +1,12 @@
+export type SecurityPayoutDetails = {
+  exDividendDate: string;
+  amount: number;
+  declarationDate?: string | null;
+  recordDate?: string | null;
+  paymentDate?: string | null;
+  source?: string | null;
+};
+
 export type SecurityMetadata = {
   symbol: string;
   name: string;
@@ -20,6 +29,7 @@ export type SecurityMetadata = {
   sma200?: number | null;
   detailsUpdatedAt?: string | null;
   detailsStatus?: string | null;
+  payoutDetails?: SecurityPayoutDetails[];
 };
 
 export type HoldingAccountPosition = {

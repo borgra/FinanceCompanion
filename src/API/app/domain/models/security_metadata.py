@@ -1,6 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass(slots=True)
+class SecurityPayoutDetails:
+    ex_dividend_date: str
+    amount: float
+    declaration_date: str | None = None
+    record_date: str | None = None
+    payment_date: str | None = None
+    source: str | None = None
 
 
 @dataclass(slots=True)
@@ -26,3 +36,4 @@ class SecurityMetadata:
     sma200: float | None = None
     details_updated_at: str | None = None
     details_status: str | None = None
+    payout_details: list[SecurityPayoutDetails] = field(default_factory=list)

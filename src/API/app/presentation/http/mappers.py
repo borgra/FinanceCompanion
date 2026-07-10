@@ -11,6 +11,7 @@ from app.domain.models import (
     IncomeSource,
     MonthlyRecord,
     SecurityMetadata,
+    SecurityPayoutDetails,
     User,
 )
 from app.presentation.http.schemas import (
@@ -27,6 +28,7 @@ from app.presentation.http.schemas import (
     IncomeSourceUpsertRequest,
     MonthlyRecordPayload,
     SecurityMetadataPayload,
+    SecurityPayoutDetailsPayload,
     SecurityDetailsRefreshResultPayload,
     UserResponse,
 )
@@ -198,6 +200,28 @@ def to_account_payload(item: Account) -> AccountPayload:
     )
 
 
+def to_security_payout_details(payload: SecurityPayoutDetailsPayload) -> SecurityPayoutDetails:
+    return SecurityPayoutDetails(
+        ex_dividend_date=payload.ex_dividend_date,
+        amount=payload.amount,
+        declaration_date=payload.declaration_date,
+        record_date=payload.record_date,
+        payment_date=payload.payment_date,
+        source=payload.source,
+    )
+
+
+def to_security_payout_details_payload(item: SecurityPayoutDetails) -> SecurityPayoutDetailsPayload:
+    return SecurityPayoutDetailsPayload(
+        ex_dividend_date=item.ex_dividend_date,
+        amount=item.amount,
+        declaration_date=item.declaration_date,
+        record_date=item.record_date,
+        payment_date=item.payment_date,
+        source=item.source,
+    )
+
+
 def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
     return SecurityMetadata(
         symbol=payload.symbol.strip().upper(),
@@ -221,6 +245,10 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
         sma200=payload.sma200,
         details_updated_at=payload.details_updated_at,
         details_status=payload.details_status,
+        payout_details=[
+            to_security_payout_details(item)
+            for item in payload.payout_details
+        ],
     )
 
 
@@ -247,6 +275,10 @@ def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayl
         sma200=item.sma200,
         details_updated_at=item.details_updated_at,
         details_status=item.details_status,
+        payout_details=[
+            to_security_payout_details_payload(payout)
+            for payout in item.payout_details
+        ],
     )
 
 

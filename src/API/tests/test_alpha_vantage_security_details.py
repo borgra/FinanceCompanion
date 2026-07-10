@@ -135,10 +135,54 @@ def test_details_provider_uses_daily_adjusted_for_price_and_dividends(monkeypatc
     assert details.dividend_current_year == 0.45
     assert details.dividend_previous_year == 0.4
     assert details.dividend_growth_rate == 0.12499999999999997
+    assert details.payout_details[0].ex_dividend_date == "2026-06-28"
+    assert details.payout_details[0].amount == 0.45
+    assert details.payout_details[0].source == "daily_adjusted"
     assert details.details_status == "partial"
 
 
-def test_details_provider_populates_voo_with_three_alpha_vantage_calls(monkeypatch):
+def test_details_provider_uses_daily_prices_when_quote_and_adjusted_are_unavailable(monkeypatch):
+    def fake_get(url, params, timeout, headers):
+        function = params["function"]
+        if function == "OVERVIEW":
+            return FakeResponse(
+                {
+                    "Name": "Microsoft Corporation",
+                    "AssetType": "Common Stock",
+                    "Exchange": "NASDAQ",
+                    "PERatio": "23.04",
+                    "DividendYield": "0.0092",
+                    "52WeekLow": "349.20",
+                    "52WeekHigh": "551.05",
+                    "50DayMovingAverage": "406.13",
+                    "200DayMovingAverage": "444.22",
+                }
+            )
+        if function == "TIME_SERIES_DAILY":
+            return FakeResponse(
+                {
+                    "Time Series (Daily)": {
+                        f"2026-07-{day:02d}": {
+                            "4. close": str(450 + day),
+                        }
+                        for day in range(1, 22)
+                    }
+                }
+            )
+        return FakeResponse({"Information": "endpoint unavailable"})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    details = AlphaVantageSecurityDetailsProvider("test-key").get_details(security("MSFT"))
+
+    assert details.price == 471
+    assert details.sma20 is not None
+    assert details.pe_ratio == 23.04
+    assert details.thirty_day_yield == 0.0092
+    assert details.details_status == "partial"
+
+
+def test_details_provider_populates_voo_without_premium_adjusted_daily_call(monkeypatch):
     requested_functions = []
 
     def fake_get(url, params, timeout, headers):
@@ -160,16 +204,29 @@ def test_details_provider_populates_voo_with_three_alpha_vantage_calls(monkeypat
             )
         if function == "GLOBAL_QUOTE":
             return FakeResponse({"Global Quote": {"05. price": "551.23"}})
-        if function == "TIME_SERIES_DAILY_ADJUSTED":
+        if function == "TIME_SERIES_DAILY":
             return FakeResponse(
                 {
                     "Time Series (Daily)": {
                         f"2026-07-{day:02d}": {
-                            "5. adjusted close": str(530 + day),
-                            "7. dividend amount": "0.0000",
+                            "4. close": str(530 + day),
                         }
                         for day in range(1, 22)
                     }
+                }
+            )
+        if function == "DIVIDENDS":
+            return FakeResponse(
+                {
+                    "data": [
+                        {
+                            "ex_dividend_date": "2026-06-28",
+                            "declaration_date": "2026-06-10",
+                            "record_date": "2026-06-29",
+                            "payment_date": "2026-07-02",
+                            "amount": "1.25",
+                        }
+                    ]
                 }
             )
         return FakeResponse({"Information": "unexpected endpoint"})
@@ -181,7 +238,8 @@ def test_details_provider_populates_voo_with_three_alpha_vantage_calls(monkeypat
     assert requested_functions == [
         "GLOBAL_QUOTE",
         "OVERVIEW",
-        "TIME_SERIES_DAILY_ADJUSTED",
+        "TIME_SERIES_DAILY",
+        "DIVIDENDS",
     ]
     assert details.name == "Vanguard S&P 500 ETF"
     assert details.price == 551.23
@@ -192,4 +250,7 @@ def test_details_provider_populates_voo_with_three_alpha_vantage_calls(monkeypat
     assert details.sma20 is not None
     assert details.sma50 == 535.1
     assert details.sma200 == 508.4
+    assert details.dividend_current_year == 1.25
+    assert details.payout_details[0].payment_date == "2026-07-02"
+    assert details.payout_details[0].source == "dividends"
     assert details.details_status == "fresh"

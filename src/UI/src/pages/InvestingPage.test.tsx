@@ -81,10 +81,46 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('Holdings saved.')).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: /VTI/ })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Security' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Ticker' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: 'Fidelity Taxabl...' }),
+    ).toHaveClass('excel-col-editable-header');
+    expect(screen.getByRole('cell', { name: /^Vanguard Total Stock Market ETF/ })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'VTI' })).toBeInTheDocument();
     expect(screen.getByLabelText('VTI quantity for Fidelity Taxable Brokerage')).toHaveValue(
       '12.5',
     );
     expect(screen.getByRole('cell', { name: '$3,937.50' })).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Last payout \$0.45 on 2026-06-28/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Est\. annual \$3.72/)).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'P/E' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'SMA200' })).not.toBeInTheDocument();
+  });
+
+  it('reuses an existing holding when the same security is added again', async () => {
+    render(
+      <InvestingPage
+        accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
+        holdingRepository={createMockHoldingRepository()}
+        incomeRepository={createMockIncomeSourceRepository()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
+
+    for (let index = 0; index < 2; index += 1) {
+      await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
+      await userEvent.type(screen.getByLabelText('Security'), 'vti');
+      await userEvent.click(
+        await screen.findByRole('button', { name: /VTI/i }, { timeout: 3000 }),
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
+      await screen.findByText('VTI was added.');
+    }
+
+    expect(screen.getAllByRole('cell', { name: 'VTI' })).toHaveLength(1);
   });
 });

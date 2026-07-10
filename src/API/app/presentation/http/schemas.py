@@ -156,6 +156,15 @@ class AccountUpsertRequest(CamelModel):
     monthly_records: list[MonthlyRecordPayload] = Field(default_factory=list, serialization_alias="monthlyRecords")
 
 
+class SecurityPayoutDetailsPayload(CamelModel):
+    ex_dividend_date: str = Field(serialization_alias="exDividendDate")
+    amount: float
+    declaration_date: str | None = Field(default=None, serialization_alias="declarationDate")
+    record_date: str | None = Field(default=None, serialization_alias="recordDate")
+    payment_date: str | None = Field(default=None, serialization_alias="paymentDate")
+    source: str | None = None
+
+
 class SecurityMetadataPayload(CamelModel):
     symbol: str
     name: str
@@ -178,6 +187,10 @@ class SecurityMetadataPayload(CamelModel):
     sma200: float | None = None
     details_updated_at: str | None = Field(default=None, serialization_alias="detailsUpdatedAt")
     details_status: str | None = Field(default=None, serialization_alias="detailsStatus")
+    payout_details: list[SecurityPayoutDetailsPayload] = Field(
+        default_factory=list,
+        serialization_alias="payoutDetails",
+    )
 
 
 class HoldingAccountPositionPayload(CamelModel):

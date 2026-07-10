@@ -14,6 +14,7 @@ from app.domain.models import (
     IncomeSource,
     MonthlyRecord,
     SecurityMetadata,
+    SecurityPayoutDetails,
 )
 from app.infrastructure.cosmos_repositories import (
     CosmosAccountRepository,
@@ -267,6 +268,14 @@ def test_holding_uses_security_metadata_and_account_positions_json(mock_table_cl
             price=315.12,
             sector="Diversified",
             industry="Broad Market",
+            payout_details=[
+                SecurityPayoutDetails(
+                    ex_dividend_date="2026-06-28",
+                    amount=0.45,
+                    payment_date="2026-07-02",
+                    source="dividends",
+                )
+            ],
         ),
         account_positions=[
             HoldingAccountPosition("acc-taxable-brokerage", 12.5, 3100),
@@ -287,6 +296,16 @@ def test_holding_uses_security_metadata_and_account_positions_json(mock_table_cl
     security = json.loads(entity["securityJson"])
     assert security["name"] == "Vanguard Total Stock Market ETF"
     assert security["price"] == 315.12
+    assert security["payoutDetails"] == [
+        {
+            "exDividendDate": "2026-06-28",
+            "amount": 0.45,
+            "declarationDate": None,
+            "recordDate": None,
+            "paymentDate": "2026-07-02",
+            "source": "dividends",
+        }
+    ]
     positions = json.loads(entity["accountPositionsJson"])
     assert positions == [
         {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},

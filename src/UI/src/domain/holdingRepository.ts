@@ -67,6 +67,20 @@ const securityCatalog: SecurityMetadata[] = [
     sma20: 312,
     sma50: 307,
     sma200: 291,
+    payoutDetails: [
+      {
+        exDividendDate: '2026-06-28',
+        amount: 0.45,
+        paymentDate: '2026-07-02',
+        source: 'dividends',
+      },
+      {
+        exDividendDate: '2025-12-20',
+        amount: 0.4,
+        paymentDate: '2025-12-27',
+        source: 'dividends',
+      },
+    ],
   },
   {
     symbol: 'SCHD',
@@ -102,6 +116,32 @@ export function createMockHoldingRepository(): HoldingRepository {
         accountPositions: holding.accountPositions.map((position) => ({ ...position })),
       })),
     createHolding: async (draft) => {
+      const existing = holdings.find(
+        (holding) => holding.security.symbol.toLowerCase() === draft.security.symbol.toLowerCase(),
+      );
+      if (existing) {
+        const existingPositionByAccount = new Map(
+          existing.accountPositions.map((position) => [position.accountId, position]),
+        );
+        const missingPositions = draft.accountPositions.filter(
+          (position) => !existingPositionByAccount.has(position.accountId),
+        );
+        const updated: Holding = {
+          ...existing,
+          accountPositions: [
+            ...existing.accountPositions.map((position) => ({ ...position })),
+            ...missingPositions.map((position) => ({ ...position })),
+          ],
+          updatedAt: nowIso(),
+        };
+        holdings = holdings.map((holding) => (holding.id === existing.id ? updated : holding));
+        return {
+          ...updated,
+          security: { ...updated.security },
+          accountPositions: updated.accountPositions.map((position) => ({ ...position })),
+        };
+      }
+
       const timestamp = nowIso();
       const next: Holding = {
         id: `holding-${crypto.randomUUID().slice(0, 8)}`,

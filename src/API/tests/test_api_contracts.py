@@ -1,7 +1,11 @@
 from fastapi.testclient import TestClient
 
+from app.application.use_cases.security_details import (
+    RefreshHeldSecurityDetails,
+    RefreshHoldingSecurityDetails,
+)
 from app.application.use_cases.security_search import SearchSecurities
-from app.domain.models import VerifiedIdentity
+from app.domain.models import SecurityMetadata, SecurityPayoutDetails, VerifiedIdentity
 from app.infrastructure.settings import Settings
 from app.main import create_app
 from app.presentation.http.container import build_container
@@ -38,6 +42,42 @@ class FakeSecuritySearchProvider:
         ]
 
 
+class FakeSecurityDetailsProvider:
+    def get_details(self, security: SecurityMetadata) -> SecurityMetadata:
+        return SecurityMetadata(
+            symbol=security.symbol,
+            name=security.name,
+            exchange="NYSE Arca",
+            asset_type=security.asset_type,
+            currency=security.currency,
+            price=321.45,
+            sector="Diversified",
+            industry="Broad Market",
+            pe_ratio=24.2,
+            thirty_day_yield=0.013,
+            fifty_two_week_low=255,
+            fifty_two_week_high=320,
+            dividend_previous_year=3.55,
+            dividend_current_year=3.72,
+            dividend_growth_rate=0.0479,
+            estimated_future_payout=3.72,
+            sma20=312,
+            sma50=307,
+            sma200=291,
+            details_status="fresh",
+            payout_details=[
+                SecurityPayoutDetails(
+                    ex_dividend_date="2026-06-28",
+                    amount=0.45,
+                    declaration_date="2026-06-10",
+                    record_date="2026-06-29",
+                    payment_date="2026-07-02",
+                    source="dividends",
+                )
+            ],
+        )
+
+
 def build_test_client() -> TestClient:
     settings = Settings(
         allowed_email="steveborgra@gmail.com",
@@ -49,6 +89,15 @@ def build_test_client() -> TestClient:
     app = create_app(settings)
     app.state.container = build_container(settings, verifier=FakeVerifier())
     app.state.container.search_securities = SearchSecurities(FakeSecuritySearchProvider())
+    details_provider = FakeSecurityDetailsProvider()
+    app.state.container.refresh_holding_security_details = RefreshHoldingSecurityDetails(
+        app.state.container.create_holding._repository,
+        details_provider,
+    )
+    app.state.container.refresh_held_security_details = RefreshHeldSecurityDetails(
+        app.state.container.create_holding._repository,
+        details_provider,
+    )
     return TestClient(app)
 
 
@@ -191,6 +240,102 @@ def test_security_can_be_searched_and_added_to_multiple_accounts():
     holdings_response = client.get("/api/v1/holdings")
     assert holdings_response.status_code == 200
     assert holdings_response.json()[0]["security"]["symbol"] == "VTI"
+
+
+def test_security_details_refresh_persists_stock_and_payout_details():
+    client = build_test_client()
+    authenticate(client)
+
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    create_response = client.post(
+        "/api/v1/holdings",
+        json={
+            "security": security,
+            "accountPositions": [
+                {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},
+            ],
+        },
+    )
+    assert create_response.status_code == 201
+    holding_id = create_response.json()["id"]
+
+    refresh_response = client.post(f"/api/v1/holdings/{holding_id}/security-details/refresh")
+
+    assert refresh_response.status_code == 200
+    refreshed_security = refresh_response.json()["security"]
+    assert refreshed_security["price"] == 321.45
+    assert refreshed_security["peRatio"] == 24.2
+    assert refreshed_security["estimatedFuturePayout"] == 3.72
+    assert refreshed_security["payoutDetails"] == [
+        {
+            "exDividendDate": "2026-06-28",
+            "amount": 0.45,
+            "declarationDate": "2026-06-10",
+            "recordDate": "2026-06-29",
+            "paymentDate": "2026-07-02",
+            "source": "dividends",
+        }
+    ]
+
+    holdings_response = client.get("/api/v1/holdings")
+
+    assert holdings_response.status_code == 200
+    persisted_security = next(
+        item["security"]
+        for item in holdings_response.json()
+        if item["id"] == holding_id
+    )
+    assert persisted_security["price"] == 321.45
+    assert persisted_security["payoutDetails"][0]["paymentDate"] == "2026-07-02"
+
+
+def test_existing_security_add_reuses_holding_and_keeps_saved_details():
+    client = build_test_client()
+    authenticate(client)
+
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    first_response = client.post(
+        "/api/v1/holdings",
+        json={
+            "security": security,
+            "accountPositions": [
+                {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},
+            ],
+        },
+    )
+    assert first_response.status_code == 201
+    holding_id = first_response.json()["id"]
+    refresh_response = client.post(f"/api/v1/holdings/{holding_id}/security-details/refresh")
+    assert refresh_response.status_code == 200
+
+    second_response = client.post(
+        "/api/v1/holdings",
+        json={
+            "security": security,
+            "accountPositions": [
+                {"accountId": "acc-taxable-brokerage", "quantity": 0, "costBasis": None},
+                {"accountId": "acc-roth-ira", "quantity": 0, "costBasis": None},
+            ],
+        },
+    )
+
+    assert second_response.status_code == 201
+    payload = second_response.json()
+    assert payload["id"] == holding_id
+    assert payload["security"]["price"] == 321.45
+    assert payload["security"]["payoutDetails"][0]["exDividendDate"] == "2026-06-28"
+    assert payload["accountPositions"] == [
+        {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},
+        {"accountId": "acc-roth-ira", "quantity": 0, "costBasis": None},
+    ]
+
+    holdings_response = client.get("/api/v1/holdings")
+    assert holdings_response.status_code == 200
+    assert len([
+        item
+        for item in holdings_response.json()
+        if item["security"]["symbol"] == "VTI"
+    ]) == 1
 
 
 def test_logout_clears_the_cookie_session():
