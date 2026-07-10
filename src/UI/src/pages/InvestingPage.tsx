@@ -4,6 +4,7 @@ import type { HoldingRepository } from '../domain/holdingRepository';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import { FundingSchedulePage } from './FundingSchedulePage';
 import { HoldingsPage } from './HoldingsPage';
+import { PassiveIncomePage } from './PassiveIncomePage';
 
 type InvestingSectionId =
   | 'funding-schedule'
@@ -111,6 +112,14 @@ export function InvestingPage({ accountRepository, holdingRepository, incomeRepo
             accountRepository={accountRepository}
             holdingRepository={holdingRepository}
           />
+        </section>
+      ) : activeSection.id === 'passive-income' ? (
+        <section
+          aria-labelledby={`investing-tab-${activeSection.id}`}
+          id={`investing-panel-${activeSection.id}`}
+          role="tabpanel"
+        >
+          <PassiveIncomePage holdingRepository={holdingRepository} />
         </section>
       ) : (
         <section

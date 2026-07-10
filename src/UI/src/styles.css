@@ -928,6 +928,53 @@ p {
   font-size: 0.74rem;
 }
 
+.passive-income-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.passive-income-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.passive-income-summary-card {
+  display: flex;
+  min-height: 72px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: var(--md-sys-color-surface-container-low);
+  padding: 12px 14px;
+}
+
+.passive-income-summary-card span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.passive-income-summary-card strong {
+  color: var(--md-sys-color-on-surface);
+  font-family: Consolas, monospace;
+  font-size: 1.15rem;
+}
+
+.passive-income-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.passive-income-section h3 {
+  font-size: 0.9rem;
+}
+
 .holdings-grid {
   display: grid;
   grid-template-columns: minmax(340px, 0.82fr) minmax(0, 1.18fr);
@@ -2526,6 +2573,10 @@ button.security-result:hover {
   .holding-account-row {
     grid-template-columns: 1fr;
     align-items: stretch;
+  }
+
+  .passive-income-summary-grid {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -123,4 +123,41 @@ describe('InvestingPage', () => {
 
     expect(screen.getAllByRole('cell', { name: 'VTI' })).toHaveLength(1);
   });
+
+  it('shows passive income schedule and five year projection from holdings', async () => {
+    const holdingRepository = createMockHoldingRepository();
+    render(
+      <InvestingPage
+        accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
+        holdingRepository={holdingRepository}
+        incomeRepository={createMockIncomeSourceRepository()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
+    await userEvent.type(screen.getByLabelText('Security'), 'vti');
+    await userEvent.click(
+      await screen.findByRole('button', { name: /VTI/i }, { timeout: 3000 }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
+    await userEvent.type(
+      screen.getByLabelText('VTI quantity for Fidelity Taxable Brokerage'),
+      '12.5',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByText('Holdings saved.');
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Passive Income' }));
+
+    expect(await screen.findByRole('heading', { name: 'Passive Income' })).toBeInTheDocument();
+    expect(screen.getByText('Estimated annual income')).toBeInTheDocument();
+    expect(screen.getByText('$46.50')).toBeInTheDocument();
+    expect(screen.getByText('2026 Payment Schedule')).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '2026-07-02' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '$5.63' })).toBeInTheDocument();
+    expect(screen.getByText('5 Year Income Projection')).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '2027' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '$48.73' })).toBeInTheDocument();
+  });
 });

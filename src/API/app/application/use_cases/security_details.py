@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from typing import Protocol
 
 from app.domain.exceptions import NotFoundError
@@ -21,6 +22,22 @@ class SecurityDetailsRefreshResult:
 
 def _coalesce[T](next_value: T | None, current_value: T | None) -> T | None:
     return next_value if next_value is not None else current_value
+
+
+def _updated_date(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
+def should_refresh_security_details(security: SecurityMetadata) -> bool:
+    updated_date = _updated_date(security.details_updated_at)
+    if updated_date is None:
+        return True
+    return updated_date < datetime.now(tz=UTC).date()
 
 
 def merge_security_details(
@@ -71,6 +88,9 @@ class RefreshHoldingSecurityDetails:
         if holding is None:
             raise NotFoundError("Holding not found.")
 
+        if not should_refresh_security_details(holding.security):
+            return holding
+
         details = self._provider.get_details(holding.security)
         timestamp = now_iso()
         updated = replace(
@@ -102,6 +122,8 @@ class RefreshHeldSecurityDetails:
 
         for holding in holdings:
             symbol = holding.security.symbol
+            if not should_refresh_security_details(holding.security):
+                continue
             if symbol in details_by_symbol or symbol in failed_symbols:
                 continue
 

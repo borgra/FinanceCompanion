@@ -3,6 +3,7 @@ from app.application.use_cases.security_details import (
     RefreshHoldingSecurityDetails,
 )
 from app.domain.models import Holding, HoldingAccountPosition, SecurityMetadata
+from app.infrastructure.in_memory_repositories import now_iso
 
 
 class FakeHoldingRepository:
@@ -45,7 +46,11 @@ class FakeSecurityDetailsProvider:
         )
 
 
-def holding(holding_id: str, symbol: str = "VTI") -> Holding:
+def holding(
+    holding_id: str,
+    symbol: str = "VTI",
+    details_updated_at: str | None = None,
+) -> Holding:
     return Holding(
         id=holding_id,
         security=SecurityMetadata(
@@ -55,6 +60,7 @@ def holding(holding_id: str, symbol: str = "VTI") -> Holding:
             asset_type="ETF",
             currency="USD",
             price=315.12,
+            details_updated_at=details_updated_at,
         ),
         account_positions=[
             HoldingAccountPosition("acc-taxable-brokerage", 12.5, 3100),
@@ -85,6 +91,21 @@ def test_refresh_holding_security_details_persists_merged_details():
     assert repository.holdings[0].security.price == 321.45
 
 
+def test_refresh_holding_security_details_skips_same_day_details():
+    repository = FakeHoldingRepository([
+        holding("holding-1", details_updated_at=now_iso()),
+    ])
+    provider = FakeSecurityDetailsProvider()
+
+    refreshed = RefreshHoldingSecurityDetails(repository, provider).execute(
+        "user-123",
+        "holding-1",
+    )
+
+    assert provider.requested_symbols == []
+    assert refreshed.security.price == 315.12
+
+
 def test_bulk_refresh_deduplicates_symbols_and_updates_matching_holdings():
     repository = FakeHoldingRepository([
         holding("holding-1", "VTI"),
@@ -97,3 +118,17 @@ def test_bulk_refresh_deduplicates_symbols_and_updates_matching_holdings():
     assert provider.requested_symbols == ["VTI"]
     assert result.failed_symbols == []
     assert [item.security.price for item in result.holdings] == [321.45, 321.45]
+
+
+def test_bulk_refresh_skips_same_day_details_and_refreshes_stale_details():
+    repository = FakeHoldingRepository([
+        holding("holding-1", "VTI", details_updated_at=now_iso()),
+        holding("holding-2", "MSFT", details_updated_at="2026-01-01T00:00:00Z"),
+    ])
+    provider = FakeSecurityDetailsProvider()
+
+    result = RefreshHeldSecurityDetails(repository, provider).execute("user-123")
+
+    assert provider.requested_symbols == ["MSFT"]
+    assert result.failed_symbols == []
+    assert [item.security.price for item in result.holdings] == [315.12, 321.45]

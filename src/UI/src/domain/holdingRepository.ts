@@ -16,6 +16,17 @@ export type HoldingRepository = {
 
 const nowIso = () => new Date().toISOString();
 
+const isUpdatedToday = (updatedAt?: string | null) => {
+  if (!updatedAt) {
+    return false;
+  }
+  const updatedDate = new Date(updatedAt);
+  if (Number.isNaN(updatedDate.getTime())) {
+    return false;
+  }
+  return updatedDate.toISOString().slice(0, 10) === nowIso().slice(0, 10);
+};
+
 const securityCatalog: SecurityMetadata[] = [
   {
     symbol: 'AAPL',
@@ -172,6 +183,13 @@ export function createMockHoldingRepository(): HoldingRepository {
       if (!existing) {
         throw new Error('Holding not found.');
       }
+      if (isUpdatedToday(existing.security.detailsUpdatedAt)) {
+        return {
+          ...existing,
+          security: { ...existing.security },
+          accountPositions: existing.accountPositions.map((position) => ({ ...position })),
+        };
+      }
       const catalogSecurity = securityCatalog.find(
         (item) => item.symbol === existing.security.symbol,
       );
@@ -195,6 +213,9 @@ export function createMockHoldingRepository(): HoldingRepository {
     refreshHeldSecurityDetails: async () => {
       const refreshed = await Promise.all(
         holdings.map((holding) => {
+          if (isUpdatedToday(holding.security.detailsUpdatedAt)) {
+            return holding;
+          }
           const catalogSecurity = securityCatalog.find(
             (item) => item.symbol === holding.security.symbol,
           );
