@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Account } from '../domain/account';
 import { createMockAccountRepository } from '../domain/accountRepository';
 import { createMockHoldingRepository } from '../domain/holdingRepository';
@@ -27,6 +27,17 @@ describe('InvestingPage', () => {
       updatedAt: '2026-06-30T00:00:00.000Z',
     },
   ];
+
+  const selectSecurityFromDialog = async (symbol: string) => {
+    const dialog = screen.getByRole('heading', { name: 'Add Security' }).closest('form');
+    expect(dialog).not.toBeNull();
+    const result = await within(dialog as HTMLElement).findByRole(
+      'button',
+      { name: new RegExp(symbol, 'i') },
+      { timeout: 3000 },
+    );
+    await userEvent.click(result);
+  };
 
   it('shows investing subsections and switches panels', async () => {
     render(
@@ -69,9 +80,7 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
     await userEvent.type(screen.getByLabelText('Security'), 'vti');
-    await userEvent.click(
-      await screen.findByRole('button', { name: /VTI/i }, { timeout: 3000 }),
-    );
+    await selectSecurityFromDialog('VTI');
     await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
 
     await userEvent.type(
@@ -114,14 +123,37 @@ describe('InvestingPage', () => {
     for (let index = 0; index < 2; index += 1) {
       await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
       await userEvent.type(screen.getByLabelText('Security'), 'vti');
-      await userEvent.click(
-        await screen.findByRole('button', { name: /VTI/i }, { timeout: 3000 }),
-      );
+      await selectSecurityFromDialog('VTI');
       await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
       await screen.findByText('VTI was added.');
     }
 
     expect(screen.getAllByRole('cell', { name: 'VTI' })).toHaveLength(1);
+  });
+
+  it('removes a security holding after confirmation', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
+
+    render(
+      <InvestingPage
+        accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
+        holdingRepository={createMockHoldingRepository()}
+        incomeRepository={createMockIncomeSourceRepository()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
+    await userEvent.type(screen.getByLabelText('Security'), 'vti');
+    await selectSecurityFromDialog('VTI');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
+    expect(await screen.findByRole('cell', { name: 'VTI' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /remove vti holding/i }));
+
+    expect(await screen.findByText('VTI was removed.')).toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'VTI' })).not.toBeInTheDocument();
+    expect(screen.getByText('No holdings have been added yet.')).toBeInTheDocument();
   });
 
   it('shows passive income schedule and five year projection from holdings', async () => {
@@ -137,9 +169,7 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
     await userEvent.type(screen.getByLabelText('Security'), 'vti');
-    await userEvent.click(
-      await screen.findByRole('button', { name: /VTI/i }, { timeout: 3000 }),
-    );
+    await selectSecurityFromDialog('VTI');
     await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
     await userEvent.type(
       screen.getByLabelText('VTI quantity for Fidelity Taxable Brokerage'),
