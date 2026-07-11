@@ -128,7 +128,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
         const next = await budgetRepository.listCategoriesWithSubCategories();
         if (cancelled) return;
         setCategories(next);
-        setSelectedCategoryId((prev) => prev ?? next[0]?.id);
+        setSelectedCategoryId((prev) => (prev && next.some((c) => c.id === prev) ? prev : undefined));
       } catch {
         if (cancelled) return;
         setLoadError('Budget categories could not be loaded. Try again.');
@@ -202,30 +202,32 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
   const refreshCategories = async () => {
     const next = await budgetRepository.listCategoriesWithSubCategories();
     setCategories(next);
-    setSelectedCategoryId((prev) => (prev && next.some((c) => c.id === prev) ? prev : next[0]?.id));
+    setSelectedCategoryId((prev) => (prev && next.some((c) => c.id === prev) ? prev : undefined));
   };
 
   const hasUnsavedChanges = () => isDirty;
 
-  const ensureSavedBeforeSwitch = async (nextId: string) => {
-    if (nextId === selectedCategoryId) return;
+  const toggleCategoryExpansion = async (nextId: string) => {
+    const nextSelectedCategoryId = nextId === selectedCategoryId ? undefined : nextId;
+
     if (!hasUnsavedChanges()) {
-      setSelectedCategoryId(nextId);
+      setSelectedCategoryId(nextSelectedCategoryId);
       return;
     }
 
-    const okToSave = window.confirm('You have unsaved changes. Save before switching categories?');
+    const okToSave = window.confirm('You have unsaved changes. Save before changing categories?');
     if (!okToSave) return;
-    await saveChanges();
-    setSelectedCategoryId(nextId);
+    const saved = await saveChanges();
+    if (!saved) return;
+    setSelectedCategoryId(nextSelectedCategoryId);
   };
 
   const saveChanges = async () => {
-    if (!draftCategory) return;
-    if (!selectedCategory) return;
+    if (!draftCategory) return false;
+    if (!selectedCategory) return false;
 
     // Validate inputs.
-    if (!draftCategory.name.trim()) return;
+    if (!draftCategory.name.trim()) return false;
 
     const initial = selectedCategory;
     const initialSubsById = new Map(initial.subCategories.map((s) => [s.id, s] as const));
@@ -272,8 +274,10 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
       await refreshCategories();
       // Draft reset runs via effect.
+      return true;
     } catch {
       setSaveError('Unable to save budget changes. Try again.');
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -283,7 +287,10 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     // If the current selected category is dirty and we're deleting it, force save first.
     if (id === selectedCategoryId && hasUnsavedChanges()) {
       const okToSave = window.confirm('You have unsaved changes. Save before deleting this category?');
-      if (okToSave) await saveChanges();
+      if (okToSave) {
+        const saved = await saveChanges();
+        if (!saved) return;
+      }
       else return;
     }
 
@@ -368,10 +375,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     return cat.subCategories.reduce((sum, sub) => sum + sub.monthlyAmountUsd, 0);
   };
 
-  const selectedCategoryTotal = selectedCategoryMonthlyTotal(draftCategory);
-  const selectedCategoryShare =
-    totals.totalMonth > 0 ? (selectedCategoryTotal / totals.totalMonth) * 100 : 0;
-
   return (
     <main className="app-shell budget-shell">
       <header className="page-header compact-header">
@@ -389,7 +392,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
       ) : null}
 
       <section className="budget-overview" aria-label="Budget overview" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
-        <article className="budget-hero-card" style={{ maxWidth: '600px', width: '100%' }}>
+        <article className="budget-hero-card" style={{ width: '100%' }}>
           <div className="budget-hero-topline" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <span className="budget-section-label" style={{ fontSize: '0.85rem', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 'bold' }}>Monthly Posture</span>
             <span
@@ -435,20 +438,20 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
         </article>
       </section>
 
-      <section className="budget-main-grid" aria-label="Budget categories">
-        <div className="budget-left">
-          <section className="budget-left-intro" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+      <section className="budget-main-grid budget-master-list-grid" aria-label="Budget categories">
+        <div className="budget-left budget-master-list-panel">
+          <section className="budget-left-intro budget-master-list-header">
             <div>
-              <span className="budget-section-label">Category groups</span>
-              <h2 style={{ margin: 0 }}>What needs money every month?</h2>
+              <span className="budget-section-label">Master categories</span>
+              <h2>Budget category list</h2>
+              <p>Expand a category to edit the group and the line items that make it up.</p>
             </div>
             <button
               className="primary-action"
               type="button"
               onClick={() => setIsAddCatModalOpen(true)}
-              style={{ minHeight: '36px', padding: '0 12px', fontSize: '0.8rem', gap: '6px' }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>add</span>
+              <span className="material-symbols-outlined" aria-hidden="true">add</span>
               Add Category
             </button>
           </section>
@@ -462,315 +465,271 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
             <div className="empty-state">
               <span className="material-symbols-outlined" aria-hidden="true">folder_off</span>
               <h2>No categories yet</h2>
-              <p>Click "Add Category" above to start building your net budget.</p>
+              <p>Add a category to start building your master budget list.</p>
             </div>
           ) : (
-            <div className="budget-category-list" role="list">
+            <div className="budget-category-list budget-accordion-list" role="list">
               {categories.map((cat) => {
-                const isSelected = cat.id === selectedCategoryId;
+                const isExpanded = cat.id === selectedCategoryId;
                 const effectiveCat =
-                  isSelected && draftCategory ? draftCategory : cat;
+                  isExpanded && draftCategory ? draftCategory : cat;
                 const categoryMonthlyTotal = selectedCategoryMonthlyTotal(effectiveCat);
                 const categoryShare =
                   totals.totalMonth > 0 ? (categoryMonthlyTotal / totals.totalMonth) * 100 : 0;
+                const panelId = `budget-category-panel-${cat.id}`;
+                const buttonId = `budget-category-trigger-${cat.id}`;
 
                 return (
                   <article
                     key={cat.id}
                     className={
-                      isSelected
+                      isExpanded
                         ? 'budget-category-card budget-category-card-selected'
                         : 'budget-category-card'
                     }
                     style={
                       {
                         '--category-color': effectiveCat.colorHex,
-                        display: 'flex',
-                        flexDirection: 'row',
-                        alignItems: 'stretch',
-                        gap: 0,
-                        padding: 0,
-                        overflow: 'hidden'
                       } as React.CSSProperties
                     }
+                    role="listitem"
                   >
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <div className="budget-category-row">
                       <button
+                        id={buttonId}
                         className="budget-category-select"
                         type="button"
-                        aria-pressed={isSelected}
-                        onClick={() => void ensureSavedBeforeSwitch(cat.id)}
-                        style={{
-                          flex: 1,
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '12px 16px',
-                          background: 'none',
-                          border: 'none',
-                          textAlign: 'left',
-                          cursor: 'pointer'
-                        }}
+                        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${effectiveCat.name || 'Untitled'} category`}
+                        aria-expanded={isExpanded}
+                        aria-controls={panelId}
+                        onClick={() => void toggleCategoryExpansion(cat.id)}
                       >
-                        <div className="budget-category-copy" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span className="budget-category-name" style={{ fontWeight: 'bold' }}>{cat.name}</span>
-                          <span className="budget-category-meta" style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                            {effectiveCat.subCategories.length} line
-                            {effectiveCat.subCategories.length === 1 ? '' : ' items'}
+                        <span className="material-symbols-outlined budget-accordion-icon" aria-hidden="true">
+                          {isExpanded ? 'expand_less' : 'expand_more'}
+                        </span>
+                        <span className="budget-category-color-dot" aria-hidden="true" />
+                        <span className="budget-category-copy">
+                          <span className="budget-category-name">{effectiveCat.name || 'Untitled'}</span>
+                          <span className="budget-category-meta">
+                            {effectiveCat.subCategories.length} component
+                            {effectiveCat.subCategories.length === 1 ? '' : 's'}
                           </span>
-                        </div>
-                        <div className="budget-category-metrics" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
-                          <span className="budget-category-month" style={{ fontWeight: 'bold' }}>{formatMoney(categoryMonthlyTotal)}</span>
-                          <span className="budget-category-share" style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>{formatPercent(categoryShare)}</span>
-                        </div>
+                        </span>
+                        <span className="budget-category-metrics">
+                          <span className="budget-category-month">{formatMoney(categoryMonthlyTotal)}</span>
+                          <span className="budget-category-share">{formatPercent(categoryShare)}</span>
+                        </span>
                       </button>
-                      <div className="budget-category-progress" aria-hidden="true" style={{ height: '3px', backgroundColor: 'var(--md-sys-color-surface-container-highest)', overflow: 'hidden' }}>
-                        <span style={{ display: 'block', height: '100%', backgroundColor: 'var(--category-color)', width: `${clampPercent(categoryShare)}%` }} />
-                      </div>
-                    </div>
 
-                    {/* Vertical Divider */}
-                    <div style={{ width: '1px', backgroundColor: 'var(--md-sys-color-outline-variant)', alignSelf: 'stretch', margin: '8px 0' }} />
-
-                    {/* Trashcan Delete Icon Right Aligned */}
-                    <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px' }}>
                       <button
-                        className="link-button link-button-danger"
+                        className="link-button link-button-danger budget-icon-action"
                         type="button"
                         onClick={() => void deleteCategory(cat.id)}
                         aria-label={`Delete ${cat.name} category`}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '8px',
-                          color: 'var(--md-sys-color-error)',
-                          borderRadius: '50%'
-                        }}
                       >
-                        <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }} aria-hidden="true">delete</span>
+                        <span className="material-symbols-outlined" aria-hidden="true">delete</span>
                       </button>
                     </div>
+
+                    <div className="budget-category-progress" aria-hidden="true">
+                      <span style={{ width: `${clampPercent(categoryShare)}%` }} />
+                    </div>
+
+                    {isExpanded && draftCategory ? (
+                      <section
+                        id={panelId}
+                        className="budget-accordion-panel"
+                        aria-labelledby={buttonId}
+                      >
+                        <div className="budget-accordion-toolbar">
+                          <div className="budget-category-focus">
+                            <article className="budget-focus-card">
+                              <span className="budget-summary-label">Monthly total</span>
+                              <strong className="budget-summary-value">{formatMoney(categoryMonthlyTotal)}</strong>
+                            </article>
+                            <article className="budget-focus-card">
+                              <span className="budget-summary-label">Share of budget</span>
+                              <strong className="budget-summary-value">{formatPercent(categoryShare)}</strong>
+                            </article>
+                            <article className="budget-focus-card">
+                              <span className="budget-summary-label">Components</span>
+                              <strong className="budget-summary-value">{draftCategory.subCategories.length}</strong>
+                            </article>
+                          </div>
+
+                          <button
+                            className="primary-action"
+                            type="button"
+                            disabled={!isDirty || isSaving}
+                            onClick={() => void saveChanges()}
+                          >
+                            <span className="material-symbols-outlined" aria-hidden="true">save</span>
+                            {isSaving ? 'Saving...' : 'Save changes'}
+                          </button>
+                        </div>
+
+                        {saveError ? (
+                          <div className="alert error-alert" role="alert">
+                            <span className="material-symbols-outlined" aria-hidden="true">error</span>
+                            <span>{saveError}</span>
+                          </div>
+                        ) : null}
+
+                        <section className="budget-subcategory-editor" aria-label={`${draftCategory.name} components`}>
+                          <div className="budget-category-inline-editor">
+                            <label className="field">
+                              <span>Category name</span>
+                              <input
+                                value={draftCategory.name}
+                                onChange={(e) => {
+                                  setDraftCategory((prev) => {
+                                    if (!prev) return prev;
+                                    return { ...prev, name: e.target.value };
+                                  });
+                                  setIsDirty(true);
+                                }}
+                              />
+                            </label>
+                            <label className="field budget-color-field">
+                              <span>Category color</span>
+                              <input
+                                type="color"
+                                value={draftCategory.colorHex}
+                                onChange={(e) => {
+                                  const nextColorHex = e.target.value;
+                                  setDraftCategory((prev) => {
+                                    if (!prev) return prev;
+                                    return { ...prev, colorHex: nextColorHex };
+                                  });
+                                  setIsDirty(true);
+                                }}
+                              />
+                            </label>
+                          </div>
+
+                          <div className="budget-subcategory-table" role="list">
+                            <div className="subcategory-header" aria-hidden="true">
+                              <div>Component</div>
+                              <div>Monthly Budget</div>
+                              <div>Yearly Budget</div>
+                              <div>Actions</div>
+                            </div>
+
+                            <div className="budget-subcategory-row budget-subcategory-row-new">
+                              <label className="field budget-subcategory-name-field">
+                                <span>New component name</span>
+                                <input
+                                  value={newSubName}
+                                  onChange={(e) => setNewSubName(e.target.value)}
+                                  placeholder="e.g. HOA or Rent"
+                                />
+                              </label>
+
+                              <label className="field budget-subcategory-amount-field">
+                                <span>Monthly amount ($)</span>
+                                <div className="input-wrapper">
+                                  <span className="input-prefix" aria-hidden="true">$</span>
+                                  <input
+                                    value={newSubMonthlyAmount}
+                                    onChange={(e) => setNewSubMonthlyAmount(e.target.value)}
+                                    inputMode="decimal"
+                                    data-has-prefix="true"
+                                    placeholder="0.00"
+                                  />
+                                </div>
+                              </label>
+
+                              <div className="budget-subcategory-annual">
+                                {newSubMonthlyAmount && parsePositiveUsd(newSubMonthlyAmount) !== undefined
+                                  ? formatMoney(Number(newSubMonthlyAmount) * 12)
+                                  : '$0.00'}
+                              </div>
+
+                              <div className="budget-subcategory-actions">
+                                <button
+                                  className="primary-action compact-add-action"
+                                  type="button"
+                                  onClick={addSubCategoryToDraft}
+                                  disabled={!newSubName.trim() || parsePositiveUsd(newSubMonthlyAmount) === undefined}
+                                >
+                                  <span className="material-symbols-outlined" aria-hidden="true">add</span>
+                                  Add
+                                </button>
+                              </div>
+                            </div>
+
+                            {draftCategory.subCategories.length === 0 ? (
+                              <div className="budget-component-empty">
+                                No components yet. Add the first monthly item above.
+                              </div>
+                            ) : (
+                              draftCategory.subCategories.map((sub) => (
+                                <article
+                                  key={sub.id}
+                                  className="budget-subcategory-row"
+                                  role="listitem"
+                                >
+                                  <label className="field budget-subcategory-name-field">
+                                    <span>Name</span>
+                                    <input
+                                      value={sub.name}
+                                      onChange={(e) =>
+                                        updateSubInDraft(sub.id, { name: e.target.value })
+                                      }
+                                    />
+                                  </label>
+
+                                  <label className="field budget-subcategory-amount-field">
+                                    <span>Monthly amount ($)</span>
+                                    <div className="input-wrapper">
+                                      <span className="input-prefix" aria-hidden="true">$</span>
+                                      <input
+                                        value={String(sub.monthlyAmountUsd)}
+                                        onChange={(e) => {
+                                          const parsed = parsePositiveUsd(e.target.value);
+                                          updateSubInDraft(sub.id, {
+                                            monthlyAmountUsd: parsed ?? 0,
+                                          });
+                                        }}
+                                        data-has-prefix="true"
+                                        inputMode="decimal"
+                                      />
+                                    </div>
+                                  </label>
+
+                                  <div className="budget-subcategory-annual" aria-label={`${sub.name} yearly budget`}>
+                                    {formatMoney(sub.monthlyAmountUsd * 12)}
+                                  </div>
+
+                                  <div className="budget-subcategory-actions">
+                                    <button
+                                      className="link-button link-button-danger"
+                                      type="button"
+                                      onClick={() => deleteSubFromDraft(sub.id)}
+                                    >
+                                      <span className="material-symbols-outlined" aria-hidden="true">delete</span>
+                                      Delete
+                                    </button>
+                                  </div>
+                                </article>
+                              ))
+                            )}
+                          </div>
+                        </section>
+                      </section>
+                    ) : null}
                   </article>
                 );
               })}
             </div>
           )}
-        </div>
 
-        <div className="budget-right">
-          {draftCategory ? (
-            <>
-              <header className="budget-right-header">
-                <div className="budget-right-header-row">
-                  <div className="budget-right-title">
-                    <span className="budget-section-label">Category workspace</span>
-                    <h2 className="budget-right-title-text">{draftCategory.name || 'Untitled'}</h2>
-                  </div>
-                  <div className="budget-save-actions">
-                    <button
-                      className="primary-action"
-                      type="button"
-                      disabled={!isDirty || isSaving}
-                      onClick={() => void saveChanges()}
-                    >
-                      <span className="material-symbols-outlined" aria-hidden="true">save</span>
-                      {isSaving ? 'Saving...' : 'Save changes'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="budget-category-focus">
-                  <article className="budget-focus-card">
-                    <span className="budget-summary-label">Monthly total</span>
-                    <strong className="budget-summary-value">{formatMoney(selectedCategoryTotal)}</strong>
-                  </article>
-                  <article className="budget-focus-card">
-                    <span className="budget-summary-label">Share of budget</span>
-                    <strong className="budget-summary-value">{formatPercent(selectedCategoryShare)}</strong>
-                  </article>
-                  <article className="budget-focus-card">
-                    <span className="budget-summary-label">Line items</span>
-                    <strong className="budget-summary-value">{draftCategory.subCategories.length}</strong>
-                  </article>
-                </div>
-              </header>
-
-              {saveError ? (
-                <div className="alert error-alert" role="alert">
-                  <span className="material-symbols-outlined" aria-hidden="true">error</span>
-                  <span>{saveError}</span>
-                </div>
-              ) : null}
-
-              <section className="budget-subcategory-editor" aria-label="Sub-categories">
-                <div className="budget-category-inline-editor">
-                  <label className="field">
-                    <span>Category name</span>
-                    <input
-                      value={draftCategory.name}
-                      onChange={(e) => {
-                        setDraftCategory((prev) => {
-                          if (!prev) return prev;
-                          return { ...prev, name: e.target.value };
-                        });
-                        setIsDirty(true);
-                      }}
-                    />
-                  </label>
-                  <label className="field budget-color-field">
-                    <span>Category color</span>
-                    <input
-                      type="color"
-                      value={draftCategory.colorHex}
-                      onChange={(e) => {
-                        const nextColorHex = e.target.value;
-                        setDraftCategory((prev) => {
-                          if (!prev) return prev;
-                          return { ...prev, colorHex: nextColorHex };
-                        });
-                        setIsDirty(true);
-                      }}
-                    />
-                  </label>
-                </div>
-
-                <div className="budget-subcategory-table" role="list">
-                  <div className="subcategory-header" aria-hidden="true">
-                    <div>Line item</div>
-                    <div>Monthly Budget</div>
-                    <div>Yearly Budget</div>
-                    <div style={{ textAlign: 'right' }}>Actions</div>
-                  </div>
-
-                  {/* In-line Add Sub-Category Row at the top */}
-                  <div
-                    className="budget-subcategory-row budget-subcategory-row-new"
-                    style={{
-                      borderBottom: '2px solid var(--md-sys-color-outline-variant)',
-                      paddingBottom: '12px',
-                      marginBottom: '12px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.015)'
-                    }}
-                  >
-                    <label className="field budget-subcategory-name-field">
-                      <span>New Line Item Name</span>
-                      <input
-                        value={newSubName}
-                        onChange={(e) => setNewSubName(e.target.value)}
-                        placeholder="e.g. HOA or Rent"
-                      />
-                    </label>
-
-                    <label className="field budget-subcategory-amount-field">
-                      <span>Monthly amount ($)</span>
-                      <div className="input-wrapper">
-                        <span className="input-prefix" aria-hidden="true">$</span>
-                        <input
-                          value={newSubMonthlyAmount}
-                          onChange={(e) => setNewSubMonthlyAmount(e.target.value)}
-                          inputMode="decimal"
-                          data-has-prefix="true"
-                          placeholder="0.00"
-                        />
-                      </div>
-                    </label>
-
-                    <div className="budget-subcategory-annual" style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                      {newSubMonthlyAmount && parsePositiveUsd(newSubMonthlyAmount) !== undefined
-                        ? formatMoney(Number(newSubMonthlyAmount) * 12)
-                        : '$   -   '}
-                    </div>
-
-                    <div className="budget-subcategory-actions" style={{ display: 'flex', alignItems: 'center' }}>
-                      <button
-                        className="primary-action"
-                        type="button"
-                        onClick={addSubCategoryToDraft}
-                        disabled={!newSubName.trim() || parsePositiveUsd(newSubMonthlyAmount) === undefined}
-                        style={{
-                          minHeight: '36px',
-                          padding: '0 12px',
-                          fontSize: '0.75rem',
-                          borderRadius: 'var(--md-sys-shape-corner-s)'
-                        }}
-                      >
-                        <span className="material-symbols-outlined" style={{ fontSize: '1rem' }} aria-hidden="true">add</span>
-                        Add Item
-                      </button>
-                    </div>
-                  </div>
-
-                  {draftCategory.subCategories.map((sub) => (
-                    <article
-                      key={sub.id}
-                      className="budget-subcategory-row"
-                      role="listitem"
-                    >
-                      <label className="field budget-subcategory-name-field">
-                        <span>Name</span>
-                        <input
-                          value={sub.name}
-                          onChange={(e) =>
-                            updateSubInDraft(sub.id, { name: e.target.value })
-                          }
-                        />
-                      </label>
-
-                      <label className="field budget-subcategory-amount-field">
-                        <span>Monthly amount ($)</span>
-                        <div className="input-wrapper">
-                          <span className="input-prefix" aria-hidden="true">$</span>
-                          <input
-                            value={String(sub.monthlyAmountUsd)}
-                            onChange={(e) => {
-                              const parsed = parsePositiveUsd(e.target.value);
-                              updateSubInDraft(sub.id, {
-                                monthlyAmountUsd: parsed ?? 0,
-                              });
-                            }}
-                            data-has-prefix="true"
-                            inputMode="decimal"
-                          />
-                        </div>
-                      </label>
-
-                      <div className="budget-subcategory-annual" aria-label={`${sub.name} yearly budget`}>
-                        {formatMoney(sub.monthlyAmountUsd * 12)}
-                      </div>
-
-                      <div className="budget-subcategory-actions">
-                        <button
-                          className="link-button link-button-danger"
-                          type="button"
-                          onClick={() => deleteSubFromDraft(sub.id)}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">delete</span>
-                          Delete
-                        </button>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              {incomeError ? (
-                <div className="alert error-alert" role="alert">
-                  <span className="material-symbols-outlined" aria-hidden="true">error</span>
-                  <span>{incomeError}</span>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="empty-state">
-              <span className="material-symbols-outlined" aria-hidden="true">ads_click</span>
-              <h2>Select a category</h2>
-              <p>Choose a category on the left to edit its sub-categories.</p>
+          {incomeError ? (
+            <div className="alert error-alert" role="alert">
+              <span className="material-symbols-outlined" aria-hidden="true">error</span>
+              <span>{incomeError}</span>
             </div>
-          )}
+          ) : null}
         </div>
       </section>
 

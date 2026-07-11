@@ -26,7 +26,7 @@ const incomeSource = (overrides: Partial<IncomeSource> = {}): IncomeSource => ({
 });
 
 describe('BudgetPage', () => {
-  it('shows monthly posture and a clearer category workspace', async () => {
+  it('shows monthly posture and a master category list', async () => {
     render(
       <BudgetPage
         budgetRepository={createMockBudgetRepository()}
@@ -39,11 +39,16 @@ describe('BudgetPage', () => {
     expect(await screen.findByText('Monthly Posture')).toBeInTheDocument();
     expect(await screen.findByText('Housing')).toBeInTheDocument();
     expect(screen.getByText('Income Budgeted')).toBeInTheDocument();
-    expect(screen.getByText('What needs money every month?')).toBeInTheDocument();
-    expect(screen.getByText('Yearly Budget')).toBeInTheDocument();
+    expect(screen.getByText('Budget category list')).toBeInTheDocument();
+    expect(screen.getByText('Master categories')).toBeInTheDocument();
+    expect(screen.queryByText('Yearly Budget')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Expand Housing category/i })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
-  it('switches category cards and updates the workspace summary', async () => {
+  it('expands a category accordion and shows its components', async () => {
     render(
       <BudgetPage
         budgetRepository={createMockBudgetRepository()}
@@ -55,10 +60,42 @@ describe('BudgetPage', () => {
 
     expect(await screen.findByText('Housing')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByText('Utilities'));
+    await userEvent.click(screen.getByRole('button', { name: /Expand Utilities category/i }));
 
     expect(await screen.findByDisplayValue('Electricity')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Internet')).toBeInTheDocument();
-    expect(screen.getByText('Line items')).toBeInTheDocument();
+    expect(screen.getByText('Components')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Collapse Utilities category/i })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  });
+
+  it('can collapse an expanded category accordion', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <BudgetPage
+        budgetRepository={createMockBudgetRepository()}
+        incomeRepository={createMockIncomeSourceRepository({
+          initialSources: [incomeSource()],
+        })}
+      />,
+    );
+
+    const expandUtilities = await screen.findByRole('button', {
+      name: /Expand Utilities category/i,
+    });
+
+    await user.click(expandUtilities);
+    expect(await screen.findByDisplayValue('Electricity')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Collapse Utilities category/i }));
+
+    expect(screen.queryByDisplayValue('Electricity')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Expand Utilities category/i })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 });

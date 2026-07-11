@@ -5,7 +5,6 @@ import {
   type IncomeSource,
   type IncomeSourceDraft,
   type IncomeSourceFilter,
-  type IncomeSourceStatus,
 } from '../../domain/incomeSource';
 import type { IncomeSourceRepository } from '../../domain/incomeSourceRepository';
 import { IncomeSourceForm } from './IncomeSourceForm';
@@ -108,7 +107,7 @@ export function IncomeSourcesPage({
       ? sources.find((source) => source.id === view.sourceId)
       : undefined;
 
-  const isDirty = JSON.stringify(draft) !== JSON.stringify(initialDraft);
+  const isDirty = view.name !== 'list' && JSON.stringify(draft) !== JSON.stringify(initialDraft);
 
   const startCreate = () => {
     const nextDraft = emptyIncomeSourceDraft();
@@ -157,6 +156,9 @@ export function IncomeSourcesPage({
         await repository.createIncomeSource(draft);
       }
       await refreshSources();
+      if (draft.status === 'Active') {
+        setFilter('Active');
+      }
       returnToList();
     } catch (error) {
       setSaveError(
@@ -169,20 +171,20 @@ export function IncomeSourcesPage({
     }
   };
 
-  const updateStatus = async (source: IncomeSource, status: IncomeSourceStatus) => {
-    setSaveError(undefined);
-    try {
-      await repository.setIncomeSourceStatus(source.id, status);
-      await refreshSources();
-      if (status === 'Active') {
-        setFilter('Active');
-      }
-    } catch {
-      setSaveError('Status could not be updated. Try again.');
+  const changeExpandedSource = (source?: IncomeSource) => {
+    if (isDirty && !window.confirm('Discard unsaved changes?')) {
+      return;
     }
+
+    if (!source) {
+      returnToList();
+      return;
+    }
+
+    startEdit(source);
   };
 
-  if (view.name === 'create' || view.name === 'edit') {
+  if (view.name === 'create') {
     return (
       <IncomeSourceForm
         draft={draft}
@@ -239,7 +241,7 @@ export function IncomeSourcesPage({
         </div>
       ) : null}
 
-      {saveError ? (
+      {saveError && view.name !== 'edit' ? (
         <div className="alert error-alert" role="alert">
           <span>{saveError}</span>
         </div>
@@ -293,98 +295,118 @@ export function IncomeSourcesPage({
           </button>
         </section>
       ) : (
-        <section className="source-list" aria-label="Income source list">
+        <section className="source-list source-master-list" aria-label="Income source list">
           {filteredSources.map((source) => {
             const displayPeriod = findDisplayPeriod(source);
             const isCurrentPeriod = findCurrentPeriod(source)?.id === displayPeriod?.id;
+            const isExpanded = view.name === 'edit' && view.sourceId === source.id;
+            const panelId = `income-source-panel-${source.id}`;
+            const buttonId = `income-source-trigger-${source.id}`;
 
             return (
-              <article className="source-row" key={source.id}>
-                <div className="source-main">
-                  <h2>
-                    {source.name}
+              <article
+                className={isExpanded ? 'source-row source-row-expanded' : 'source-row'}
+                key={source.id}
+              >
+                <div className="source-row-summary">
+                  <button
+                    id={buttonId}
+                    className="source-row-toggle"
+                    type="button"
+                    aria-controls={panelId}
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${source.name} source`}
+                    onClick={() => changeExpandedSource(isExpanded ? undefined : source)}
+                  >
+                    <span className="material-symbols-outlined source-accordion-icon" aria-hidden="true">
+                      {isExpanded ? 'expand_less' : 'expand_more'}
+                    </span>
+                    <span className="source-main">
+                      <span className="source-title">
+                        {source.name}
+                      </span>
+                      <span className="source-subtitle">
+                        {source.type} &middot; {source.cadence} &middot; {source.periods.length}{' '}
+                        {source.periods.length === 1 ? 'period' : 'periods'}
+                      </span>
+                    </span>
                     <span className={`status-badge status-badge-${source.status.toLowerCase()}`}>
                       {source.status}
                     </span>
-                  </h2>
-                  <p>
-                    {source.type} &middot; {source.cadence} &middot; {source.periods.length}{' '}
-                    {source.periods.length === 1 ? 'period' : 'periods'}
-                  </p>
-                </div>
-                <dl className="source-meta">
-                  {displayPeriod ? (
-                    <>
-                      <div>
-                        <dt>{isCurrentPeriod ? 'Current period' : 'Latest period'}</dt>
-                        <dd>
-                          {displayPeriod.startDate} to{' '}
-                          {displayPeriod.endDate ?? 'Present'}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Net percentage</dt>
-                        <dd>{displayPeriod.netPercentage}%</dd>
-                      </div>
-                      <div>
-                        <dt>Gross monthly</dt>
-                        <dd>
-                          {formatMonthlyAmount(displayPeriod.yearlyGrossAmount)}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Net monthly</dt>
-                        <dd>
-                          {formatMonthlyAmount(
-                            calculateYearlyNetAmount(displayPeriod),
-                          )}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Gross yearly</dt>
-                        <dd>{formatMoney(displayPeriod.yearlyGrossAmount)}</dd>
-                      </div>
-                      <div>
-                        <dt>Net yearly</dt>
-                        <dd>{formatMoney(calculateYearlyNetAmount(displayPeriod))}</dd>
-                      </div>
-                    </>
-                  ) : (
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <dt>Income periods</dt>
-                      <dd>None configured</dd>
-                    </div>
-                  )}
-                </dl>
-                <div className="row-actions">
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    onClick={() => startEdit(source)}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">edit</span>
-                    Edit
                   </button>
-                  {source.status === 'Active' ? (
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      onClick={() => void updateStatus(source, 'Inactive')}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">block</span>
-                      Mark inactive
-                    </button>
-                  ) : (
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      onClick={() => void updateStatus(source, 'Active')}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">check_circle</span>
-                      Reactivate
-                    </button>
-                  )}
+                  <dl className="source-meta">
+                    {displayPeriod ? (
+                      <>
+                        <div>
+                          <dt>{isCurrentPeriod ? 'Current period' : 'Latest period'}</dt>
+                          <dd>
+                            {displayPeriod.startDate} to{' '}
+                            {displayPeriod.endDate ?? 'Present'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Net percentage</dt>
+                          <dd>{displayPeriod.netPercentage}%</dd>
+                        </div>
+                        <div>
+                          <dt>Gross monthly</dt>
+                          <dd>
+                            {formatMonthlyAmount(displayPeriod.yearlyGrossAmount)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Net monthly</dt>
+                          <dd>
+                            {formatMonthlyAmount(
+                              calculateYearlyNetAmount(displayPeriod),
+                            )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Gross yearly</dt>
+                          <dd>{formatMoney(displayPeriod.yearlyGrossAmount)}</dd>
+                        </div>
+                        <div>
+                          <dt>Net yearly</dt>
+                          <dd>{formatMoney(calculateYearlyNetAmount(displayPeriod))}</dd>
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <dt>Income periods</dt>
+                        <dd>None configured</dd>
+                      </div>
+                    )}
+                  </dl>
                 </div>
+
+                {isExpanded && editingSource ? (
+                  <section
+                    id={panelId}
+                    className="source-accordion-panel"
+                    aria-labelledby={buttonId}
+                  >
+                    <IncomeSourceForm
+                      draft={draft}
+                      duplicateNameWarning={hasDuplicateNameWarning(
+                        draft,
+                        sources,
+                        editingSource.id,
+                      )}
+                      errors={validationResult.sourceErrors}
+                      isSaving={isSaving}
+                      mode="edit"
+                      periodErrors={validationResult.periodErrors}
+                      presentation="inline"
+                      saveError={saveError}
+                      source={editingSource}
+                      layout={layout}
+                      onCancel={cancelForm}
+                      onChange={setDraft}
+                      onSubmit={saveDraft}
+                    />
+                  </section>
+                ) : null}
               </article>
             );
           })}

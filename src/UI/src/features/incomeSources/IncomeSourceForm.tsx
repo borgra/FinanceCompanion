@@ -23,6 +23,7 @@ type IncomeSourceFormProps = {
   mode: 'create' | 'edit';
   source?: IncomeSource;
   layout?: 'standalone' | 'embedded';
+  presentation?: 'page' | 'inline';
   onChange: (draft: IncomeSourceDraft) => void;
   onSubmit: () => void;
   onCancel: () => void;
@@ -38,6 +39,7 @@ export function IncomeSourceForm({
   mode,
   source,
   layout = 'standalone',
+  presentation = 'page',
   onChange,
   onSubmit,
   onCancel,
@@ -78,21 +80,8 @@ export function IncomeSourceForm({
     onSubmit();
   };
 
-  return (
-    <main
-      className={
-        layout === 'embedded'
-          ? 'settings-embedded-shell app-shell narrow-shell'
-          : 'app-shell narrow-shell'
-      }
-    >
-      <header className="page-header compact-header">
-        <div className="page-header-text">
-          <p className="eyebrow">Income Management</p>
-          <h1>{title}</h1>
-        </div>
-      </header>
-
+  const formContent = (
+    <>
       {saveError ? (
         <div className="alert error-alert" role="alert">
           <span className="material-symbols-outlined" aria-hidden="true">error</span>
@@ -100,7 +89,11 @@ export function IncomeSourceForm({
         </div>
       ) : null}
 
-      <form className="source-form" onSubmit={submitForm} noValidate>
+      <form
+        className={presentation === 'inline' ? 'source-form source-form-inline' : 'source-form'}
+        onSubmit={submitForm}
+        noValidate
+      >
         <div className="form-grid">
           <label className="field">
             <span>Source name</span>
@@ -208,6 +201,28 @@ export function IncomeSourceForm({
           </button>
         </div>
       </form>
+    </>
+  );
+
+  if (presentation === 'inline') {
+    return formContent;
+  }
+
+  return (
+    <main
+      className={
+        layout === 'embedded'
+          ? 'settings-embedded-shell app-shell narrow-shell'
+          : 'app-shell narrow-shell'
+      }
+    >
+      <header className="page-header compact-header">
+        <div className="page-header-text">
+          <p className="eyebrow">Income Management</p>
+          <h1>{title}</h1>
+        </div>
+      </header>
+      {formContent}
     </main>
   );
 }

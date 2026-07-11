@@ -167,12 +167,47 @@ describe('IncomeSourcesPage', () => {
     expect(screen.getByText('Zoo side work')).toBeInTheDocument();
   });
 
+  it('starts income source rows collapsed and expands inline for editing', async () => {
+    renderPage([source({ id: 'stable-id', name: 'Main job' })]);
+
+    expect(await screen.findByText('Main job')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/source name/i)).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /expand main job source/i }),
+    );
+
+    expect(await screen.findByLabelText(/source name/i)).toHaveValue('Main job');
+    expect(
+      screen.getByRole('button', { name: /collapse main job source/i }),
+    ).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('can collapse an expanded income source row', async () => {
+    const user = userEvent.setup();
+    renderPage([source({ id: 'stable-id', name: 'Main job' })]);
+
+    await user.click(
+      await screen.findByRole('button', { name: /expand main job source/i }),
+    );
+    expect(await screen.findByLabelText(/source name/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /collapse main job source/i }));
+
+    expect(screen.queryByLabelText(/source name/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /expand main job source/i }),
+    ).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('edits an income source without changing identity', async () => {
     const repository = renderPage([
       source({ id: 'stable-id', name: 'Old name' }),
     ]);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: /expand old name source/i }),
+    );
     await userEvent.clear(screen.getByLabelText(/source name/i));
     await userEvent.type(screen.getByLabelText(/source name/i), 'New name');
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
@@ -182,16 +217,30 @@ describe('IncomeSourcesPage', () => {
     expect(savedSource.id).toBe('stable-id');
   });
 
-  it('deactivates and reactivates sources across filters', async () => {
+  it('does not show status action buttons on collapsed source rows', async () => {
+    renderPage([source({ id: '1', name: 'Main job' })]);
+
+    expect(await screen.findByText('Main job')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /mark inactive/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /reactivate/i })).not.toBeInTheDocument();
+  });
+
+  it('deactivates and reactivates sources through the expanded form', async () => {
     renderPage([source({ id: '1', name: 'Main job' })]);
 
     await userEvent.click(
-      await screen.findByRole('button', { name: /mark inactive/i }),
+      await screen.findByRole('button', { name: /expand main job source/i }),
     );
+    await userEvent.click(screen.getByLabelText('Inactive'));
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
     expect(await screen.findByText(/no active sources/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Inactive' }));
-    await userEvent.click(screen.getByRole('button', { name: /reactivate/i }));
+    await userEvent.click(screen.getByRole('button', { name: /expand main job source/i }));
+    await userEvent.click(screen.getByLabelText('Active'));
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
     expect(await screen.findByText('Main job')).toBeInTheDocument();
     expect(within(screen.getByRole('article')).getByText('Active')).toBeInTheDocument();
   });
