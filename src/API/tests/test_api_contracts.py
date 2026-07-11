@@ -338,6 +338,31 @@ def test_existing_security_add_reuses_holding_and_keeps_saved_details():
     ]) == 1
 
 
+def test_delete_holding_removes_security_from_holdings():
+    client = build_test_client()
+    authenticate(client)
+
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    create_response = client.post(
+        "/api/v1/holdings",
+        json={
+            "security": security,
+            "accountPositions": [
+                {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},
+            ],
+        },
+    )
+    assert create_response.status_code == 201
+    holding_id = create_response.json()["id"]
+
+    delete_response = client.delete(f"/api/v1/holdings/{holding_id}")
+
+    assert delete_response.status_code == 204
+    holdings_response = client.get("/api/v1/holdings")
+    assert holdings_response.status_code == 200
+    assert all(item["id"] != holding_id for item in holdings_response.json())
+
+
 def test_logout_clears_the_cookie_session():
     client = build_test_client()
     authenticate(client)

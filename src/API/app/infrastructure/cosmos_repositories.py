@@ -607,3 +607,9 @@ class CosmosHoldingRepository:
         entity = _holding_to_entity(user_id, holding)
         self._client.upsert_entity(entity)
         return deepcopy(holding)
+
+    def delete_for_user(self, user_id: str, holding_id: str) -> None:
+        try:
+            self._client.delete_entity(user_id, f"holding:{holding_id}")
+        except ResourceNotFoundError as exc:
+            raise NotFoundError("Holding not found.") from exc

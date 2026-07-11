@@ -14,6 +14,7 @@ export const createHoldingApiRepository = (client: HttpClient): HoldingRepositor
   createHolding: (draft: HoldingDraft) => client.post<Holding>('/holdings', draft),
   updateHolding: (id: string, draft: HoldingDraft) =>
     client.put<Holding>(`/holdings/${id}`, draft),
+  deleteHolding: (id: string) => client.delete(`/holdings/${id}`),
   refreshHoldingSecurityDetails: (id: string) =>
     client.post<Holding>(`/holdings/${id}/security-details/refresh`, {}),
   refreshHeldSecurityDetails: () =>

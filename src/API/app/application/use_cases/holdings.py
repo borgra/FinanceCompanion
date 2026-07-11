@@ -52,3 +52,11 @@ class UpdateHolding:
 
     def execute(self, user_id: str, holding_id: str, holding: Holding) -> Holding:
         return self._repository.update_for_user(user_id, holding_id, holding)
+
+
+class DeleteHolding:
+    def __init__(self, repository: HoldingRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, holding_id: str) -> None:
+        self._repository.delete_for_user(user_id, holding_id)

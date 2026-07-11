@@ -10,6 +10,7 @@ export type HoldingRepository = {
   listHoldings: () => Promise<Holding[]>;
   createHolding: (draft: HoldingDraft) => Promise<Holding>;
   updateHolding: (id: string, draft: HoldingDraft) => Promise<Holding>;
+  deleteHolding: (id: string) => Promise<void>;
   refreshHoldingSecurityDetails: (id: string) => Promise<Holding>;
   refreshHeldSecurityDetails: () => Promise<SecurityDetailsRefreshResult>;
 };
@@ -177,6 +178,13 @@ export function createMockHoldingRepository(): HoldingRepository {
       };
       holdings = holdings.map((holding) => (holding.id === id ? updated : holding));
       return { ...updated };
+    },
+    deleteHolding: async (id) => {
+      const existing = holdings.find((holding) => holding.id === id);
+      if (!existing) {
+        throw new Error('Holding not found.');
+      }
+      holdings = holdings.filter((holding) => holding.id !== id);
     },
     refreshHoldingSecurityDetails: async (id) => {
       const existing = holdings.find((holding) => holding.id === id);

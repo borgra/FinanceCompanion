@@ -321,6 +321,36 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     }
   };
 
+  const removeHolding = async (holding: Holding) => {
+    const confirmed = window.confirm(`Remove ${holding.security.symbol} from holdings?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      await holdingRepository.deleteHolding(holding.id);
+      setHoldings((current) => current.filter((item) => item.id !== holding.id));
+      setDirtyHoldingIds((current) => {
+        const next = new Set(current);
+        next.delete(holding.id);
+        return next;
+      });
+      setRefreshingHoldingIds((current) => {
+        const next = new Set(current);
+        next.delete(holding.id);
+        return next;
+      });
+      setSuccessMessage(`${holding.security.symbol} was removed.`);
+    } catch {
+      setError('Unable to remove holding.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (isLoading) {
     return <p className="status-copy">Loading holdings...</p>;
   }
@@ -370,12 +400,13 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   {account.name.length > 18 ? `${account.name.slice(0, 15)}...` : account.name}
                 </FinanceTableHeaderCell>
               ))}
+              <FinanceTableHeaderCell>Actions</FinanceTableHeaderCell>
             </tr>
           </thead>
           <tbody>
             {holdings.length === 0 ? (
               <tr>
-                <td colSpan={5 + managedAccounts.length}>
+                <td colSpan={6 + managedAccounts.length}>
                   <span className="excel-cell-val">No holdings have been added yet.</span>
                 </td>
               </tr>
@@ -427,6 +458,17 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                         />
                       </td>
                     ))}
+                    <td>
+                      <button
+                        className="link-button link-button-danger holdings-remove-action"
+                        type="button"
+                        onClick={() => void removeHolding(holding)}
+                        disabled={isSaving}
+                        aria-label={`Remove ${holding.security.symbol} holding`}
+                      >
+                        <span className="material-symbols-outlined" aria-hidden="true">delete</span>
+                      </button>
+                    </td>
                   </tr>
                 );
               })

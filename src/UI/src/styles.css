@@ -928,6 +928,16 @@ p {
   font-size: 0.74rem;
 }
 
+.holdings-remove-action {
+  min-height: 28px;
+  width: 28px;
+  padding: 0;
+}
+
+.holdings-remove-action .material-symbols-outlined {
+  font-size: 1.1rem;
+}
+
 .passive-income-workspace {
   display: flex;
   flex-direction: column;

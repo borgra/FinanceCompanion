@@ -17,7 +17,7 @@ from app.application.use_cases.income_sources import (
     SetIncomeSourceStatus,
     UpdateIncomeSource,
 )
-from app.application.use_cases.holdings import CreateHolding, ListHoldings, UpdateHolding
+from app.application.use_cases.holdings import CreateHolding, DeleteHolding, ListHoldings, UpdateHolding
 from app.application.use_cases.security_details import (
     RefreshHeldSecurityDetails,
     RefreshHoldingSecurityDetails,
@@ -62,6 +62,7 @@ class Container:
     list_holdings: ListHoldings
     create_holding: CreateHolding
     update_holding: UpdateHolding
+    delete_holding: DeleteHolding
     search_securities: SearchSecurities
     refresh_holding_security_details: RefreshHoldingSecurityDetails
     refresh_held_security_details: RefreshHeldSecurityDetails
@@ -142,6 +143,7 @@ def build_container(
         list_holdings=ListHoldings(holdings),
         create_holding=CreateHolding(holdings),
         update_holding=UpdateHolding(holdings),
+        delete_holding=DeleteHolding(holdings),
         search_securities=SearchSecurities(
             AlphaVantageSecuritySearchProvider(settings.alpha_vantage_api_key)
         ),

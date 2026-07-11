@@ -354,3 +354,12 @@ def update_holding(holding_id: str, request: HoldingCreateRequest, user=Depends(
         updated_at=now_iso(),
     )
     return to_holding_payload(container.update_holding.execute(user.user_id, holding_id, holding))
+
+
+@router.delete("/holdings/{holding_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_holding(holding_id: str, user=Depends(require_session_user), container=Depends(get_container)) -> Response:
+    try:
+        container.delete_holding.execute(user.user_id, holding_id)
+    except DomainError as exc:
+        raise _domain_error_to_http(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

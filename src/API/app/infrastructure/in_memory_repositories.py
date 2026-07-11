@@ -368,3 +368,9 @@ class InMemoryHoldingRepository:
                 items[index] = deepcopy(holding)
                 return deepcopy(holding)
         raise NotFoundError("Holding not found.")
+
+    def delete_for_user(self, user_id: str, holding_id: str) -> None:
+        items = self._store.holdings.setdefault(user_id, [])
+        if not any(item.id == holding_id for item in items):
+            raise NotFoundError("Holding not found.")
+        self._store.holdings[user_id] = [item for item in items if item.id != holding_id]
