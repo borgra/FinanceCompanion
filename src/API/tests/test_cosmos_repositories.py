@@ -255,7 +255,7 @@ def test_account_create_and_update(mock_table_client):
     mock_table_client.upsert_entity.assert_called_once()
 
 
-def test_holding_uses_security_metadata_and_account_positions_json(mock_table_client):
+def test_holding_stores_security_identity_and_details_separately(mock_table_client):
     repo = CosmosHoldingRepository(mock_table_client)
     holding = Holding(
         id="holding-1",
@@ -293,10 +293,17 @@ def test_holding_uses_security_metadata_and_account_positions_json(mock_table_cl
     assert entity["PartitionKey"] == "user-123"
     assert entity["RowKey"] == "holding:holding-1"
     assert entity["securitySymbol"] == "VTI"
-    security = json.loads(entity["securityJson"])
-    assert security["name"] == "Vanguard Total Stock Market ETF"
-    assert security["price"] == 315.12
-    assert security["payoutDetails"] == [
+    assert entity["securityName"] == "Vanguard Total Stock Market ETF"
+    assert entity["securityExchange"] == "NYSE Arca"
+    assert entity["securityAssetType"] == "ETF"
+    assert entity["securityCurrency"] == "USD"
+    assert "securityJson" not in entity
+
+    security_details = json.loads(entity["securityDetails"])
+    assert security_details["price"] == 315.12
+    assert security_details["sector"] == "Diversified"
+    assert security_details["industry"] == "Broad Market"
+    assert security_details["payoutDetails"] == [
         {
             "exDividendDate": "2026-06-28",
             "amount": 0.45,
@@ -311,3 +318,55 @@ def test_holding_uses_security_metadata_and_account_positions_json(mock_table_cl
         {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},
         {"accountId": "acc-roth-ira", "quantity": 4, "costBasis": 990},
     ]
+
+
+def test_holding_reads_security_details_attribute(mock_table_client):
+    repo = CosmosHoldingRepository(mock_table_client)
+    mock_table_client.query_entities.return_value = [
+        {
+            "PartitionKey": "user-123",
+            "RowKey": "holding:holding-1",
+            "entityId": "holding-1",
+            "securitySymbol": "MSFT",
+            "securityName": "Microsoft Corporation",
+            "securityExchange": "United States",
+            "securityAssetType": "Equity",
+            "securityCurrency": "USD",
+            "securityDetails": json.dumps({
+                "price": 385.1,
+                "sector": "Technology",
+                "industry": "Software",
+                "peRatio": 34.2,
+                "thirtyDayYield": None,
+                "fiftyTwoWeekLow": 300.0,
+                "fiftyTwoWeekHigh": 420.0,
+                "dividendPreviousYear": 3.0,
+                "dividendCurrentYear": 3.32,
+                "dividendGrowthRate": 0.1067,
+                "estimatedFuturePayout": 3.32,
+                "sma20": 382.0,
+                "sma50": 377.0,
+                "sma200": 360.0,
+                "detailsUpdatedAt": "2026-07-11T19:21:28.294379Z",
+                "detailsStatus": "partial",
+                "payoutDetails": [],
+            }),
+            "accountPositionsJson": json.dumps([
+                {"accountId": "acc-1", "quantity": 50.0, "costBasis": None},
+            ]),
+            "createdAt": "2026-07-10T02:32:48.231011Z",
+            "updatedAt": "2026-07-11T19:21:28.294379Z",
+        }
+    ]
+
+    holdings = repo.list_for_user("user-123")
+
+    assert len(holdings) == 1
+    security = holdings[0].security
+    assert security.symbol == "MSFT"
+    assert security.name == "Microsoft Corporation"
+    assert security.price == 385.1
+    assert security.sector == "Technology"
+    assert security.pe_ratio == 34.2
+    assert security.details_status == "partial"
+    assert holdings[0].account_positions[0].quantity == 50.0

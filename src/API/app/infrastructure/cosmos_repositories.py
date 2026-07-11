@@ -315,6 +315,46 @@ def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
     }
 
 
+def _security_details_to_dict(security: SecurityMetadata) -> dict:
+    return {
+        "price": security.price,
+        "sector": security.sector,
+        "industry": security.industry,
+        "peRatio": security.pe_ratio,
+        "thirtyDayYield": security.thirty_day_yield,
+        "fiftyTwoWeekLow": security.fifty_two_week_low,
+        "fiftyTwoWeekHigh": security.fifty_two_week_high,
+        "dividendPreviousYear": security.dividend_previous_year,
+        "dividendCurrentYear": security.dividend_current_year,
+        "dividendGrowthRate": security.dividend_growth_rate,
+        "estimatedFuturePayout": security.estimated_future_payout,
+        "sma20": security.sma20,
+        "sma50": security.sma50,
+        "sma200": security.sma200,
+        "detailsUpdatedAt": security.details_updated_at,
+        "detailsStatus": security.details_status,
+        "payoutDetails": [
+            _security_payout_details_to_dict(payout)
+            for payout in security.payout_details
+        ],
+    }
+
+
+def _security_metadata_from_entity(entity: dict) -> SecurityMetadata:
+    if entity.get("securityJson"):
+        return _security_metadata_from_dict(json.loads(entity["securityJson"]))
+
+    security_details = json.loads(entity.get("securityDetails", "{}"))
+    return _security_metadata_from_dict({
+        "symbol": entity["securitySymbol"],
+        "name": entity["securityName"],
+        "exchange": entity["securityExchange"],
+        "assetType": entity["securityAssetType"],
+        "currency": entity["securityCurrency"],
+        **security_details,
+    })
+
+
 def _holding_account_position_from_dict(data: dict) -> HoldingAccountPosition:
     return HoldingAccountPosition(
         account_id=data["accountId"],
@@ -332,11 +372,10 @@ def _holding_account_position_to_dict(position: HoldingAccountPosition) -> dict:
 
 
 def _holding_from_entity(entity: dict) -> Holding:
-    security_data = json.loads(entity["securityJson"])
     positions_data = json.loads(entity.get("accountPositionsJson", "[]"))
     return Holding(
         id=entity.get("entityId") or entity.get("id") or entity["RowKey"].split(":", 1)[1],
-        security=_security_metadata_from_dict(security_data),
+        security=_security_metadata_from_entity(entity),
         account_positions=[
             _holding_account_position_from_dict(item)
             for item in positions_data
@@ -352,9 +391,13 @@ def _holding_to_entity(user_id: str, holding: Holding) -> dict:
         "RowKey": f"holding:{holding.id}",
         "entityId": holding.id,
         "securitySymbol": holding.security.symbol,
+        "securityName": holding.security.name,
+        "securityExchange": holding.security.exchange,
+        "securityAssetType": holding.security.asset_type,
+        "securityCurrency": holding.security.currency,
         "createdAt": holding.created_at,
         "updatedAt": holding.updated_at,
-        "securityJson": json.dumps(_security_metadata_to_dict(holding.security)),
+        "securityDetails": json.dumps(_security_details_to_dict(holding.security)),
         "accountPositionsJson": json.dumps([
             _holding_account_position_to_dict(item)
             for item in holding.account_positions
