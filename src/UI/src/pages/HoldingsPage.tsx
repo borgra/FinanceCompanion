@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import {
   FinanceMoneyCellInput,
   FinanceMoneyCellValue,
@@ -29,6 +29,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 const formatQuantity = (value: number) => (value === 0 ? '' : numberFormatter.format(value));
 
 const formatMoney = (value: number) => (value === 0 ? '$   -   ' : currencyFormatter.format(value));
+const formatPortfolioMoney = (value: number) => currencyFormatter.format(value);
 
 const parseQuantity = (value: string) => Number(value.replace(/[,\s]/g, '')) || 0;
 
@@ -162,6 +163,63 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     () => new Map(accounts.map((account) => [account.id, account.name])),
     [accounts],
   );
+
+  const orderedHoldings = useMemo(
+    () => [...holdings].sort((a, b) => a.security.name.localeCompare(b.security.name)),
+    [holdings],
+  );
+
+  const investmentValues = useMemo(() => {
+    const values = { total: 0, taxable: 0, retirement: 0, hsa: 0 };
+    const accountsById = new Map(accounts.map((account) => [account.id, account]));
+
+    for (const holding of holdings) {
+      const price = holding.security.price ?? 0;
+      for (const position of holding.accountPositions) {
+        const value = position.quantity * price;
+        const accountType = accountsById.get(position.accountId)?.investmentAccountType;
+        values.total += value;
+        if (accountType === 'Taxable') values.taxable += value;
+        else if (accountType === 'HSA') values.hsa += value;
+        else if (accountType === '401k' || accountType === 'IRA') values.retirement += value;
+      }
+    }
+    return values;
+  }, [accounts, holdings]);
+
+  const focusHoldingCell = (holdingIndex: number, accountIndex: number) => {
+    const holding = orderedHoldings[holdingIndex];
+    const account = managedAccounts[accountIndex];
+    if (!holding || !account) return;
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLInputElement>(
+        `[data-ledger-cell="holding-${holding.id}-${account.id}"]`,
+      )?.focus();
+    });
+  };
+
+  const handleHoldingCellKeyDown = (
+    event: KeyboardEvent<HTMLInputElement>,
+    holdingIndex: number,
+    accountIndex: number,
+  ) => {
+    const movement = {
+      Enter: [1, 0],
+      ArrowUp: [-1, 0],
+      ArrowDown: [1, 0],
+      ArrowLeft: [0, -1],
+      ArrowRight: [0, 1],
+    } as const;
+    const delta = movement[event.key as keyof typeof movement];
+    if (!delta) return;
+
+    const nextHoldingIndex = holdingIndex + delta[0];
+    const nextAccountIndex = accountIndex + delta[1];
+    if (!orderedHoldings[nextHoldingIndex] || !managedAccounts[nextAccountIndex]) return;
+
+    event.preventDefault();
+    focusHoldingCell(nextHoldingIndex, nextAccountIndex);
+  };
 
   const closeAddDialog = () => {
     setIsAddDialogOpen(false);
@@ -558,6 +616,13 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         </div>
       </div>
 
+      <section className="holdings-value-summary" aria-label="Investment value summary">
+        <div><span>Total investments</span><strong>{formatPortfolioMoney(investmentValues.total)}</strong></div>
+        <div><span>Taxable</span><strong>{formatPortfolioMoney(investmentValues.taxable)}</strong></div>
+        <div><span>Retirement</span><strong>{formatPortfolioMoney(investmentValues.retirement)}</strong></div>
+        <div><span>HSA</span><strong>{formatPortfolioMoney(investmentValues.hsa)}</strong></div>
+      </section>
+
       {managedAccounts.length === 0 ? (
         <div className="investment-account-empty">
           <p>Turn on Manage Holdings for at least one investment account.</p>
@@ -587,7 +652,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                 </td>
               </tr>
             ) : (
-              holdings.map((holding) => {
+              orderedHoldings.map((holding, holdingIndex) => {
                 const totalQuantity = managedAccounts.reduce(
                   (total, account) => total + getQuantity(holding, account.id),
                   0,
@@ -618,13 +683,14 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                         formatValue={formatMoney}
                       />
                     </td>
-                    {managedAccounts.map((account) => (
+                    {managedAccounts.map((account, accountIndex) => (
                       <td key={account.id} title={accountNameById.get(account.id)}>
                         <FinanceMoneyCellInput
                           value={getQuantity(holding, account.id)}
                           formatValue={formatQuantity}
                           onValueChange={(value) => updateQuantity(holding.id, account.id, value)}
                           focusId={`holding-${holding.id}-${account.id}`}
+                          onKeyDown={(event) => handleHoldingCellKeyDown(event, holdingIndex, accountIndex)}
                           aria-label={`${holding.security.symbol} quantity for ${account.name}`}
                         />
                       </td>

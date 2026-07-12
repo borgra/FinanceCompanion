@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Account } from '../domain/account';
@@ -289,6 +289,65 @@ describe('InvestingPage', () => {
     expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(2);
     expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(2, 'holding-schd');
   }, 10000);
+
+  it('summarizes investment values, sorts holdings by name, and supports quantity-grid navigation', async () => {
+    const accounts: Account[] = [
+      investmentAccounts[0],
+      { ...investmentAccounts[0], id: 'acc-401k', name: 'Fidelity 401k', investmentAccountType: '401k' },
+      { ...investmentAccounts[0], id: 'acc-hsa', name: 'Fidelity HSA', investmentAccountType: 'HSA' },
+    ];
+    const holdings: Holding[] = [
+      {
+        id: 'holding-zebra',
+        security: { symbol: 'ZBRA', name: 'Zebra Income', exchange: 'NYSE', assetType: 'Equity', currency: 'USD', price: 100 },
+        accountPositions: [
+          { accountId: 'acc-taxable-brokerage', quantity: 2, costBasis: null },
+          { accountId: 'acc-401k', quantity: 1, costBasis: null },
+          { accountId: 'acc-hsa', quantity: 1, costBasis: null },
+        ],
+        createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'holding-alpha',
+        security: { symbol: 'ALPH', name: 'Alpha Fund', exchange: 'NYSE', assetType: 'ETF', currency: 'USD', price: 50 },
+        accountPositions: [
+          { accountId: 'acc-taxable-brokerage', quantity: 1, costBasis: null },
+          { accountId: 'acc-401k', quantity: 2, costBasis: null },
+          { accountId: 'acc-hsa', quantity: 3, costBasis: null },
+        ],
+        createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    const holdingRepository: HoldingRepository = {
+      searchSecurities: vi.fn(), listHoldings: vi.fn(async () => holdings), createHolding: vi.fn(),
+      updateHolding: vi.fn(), deleteHolding: vi.fn(), refreshHoldingSecurityDetails: vi.fn(),
+      refreshHeldSecurityDetails: vi.fn(), updateManualPayoutDetails: vi.fn(),
+    };
+
+    render(<InvestingPage accountRepository={createMockAccountRepository({ initialAccounts: accounts })} holdingRepository={holdingRepository} incomeRepository={createMockIncomeSourceRepository()} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
+
+    expect(await screen.findByText('Total investments')).toBeInTheDocument();
+    expect(screen.getByText('Taxable')).toBeInTheDocument();
+    expect(screen.getByText('Retirement')).toBeInTheDocument();
+    expect(screen.getByText('HSA')).toBeInTheDocument();
+    expect(screen.getByText('$700.00')).toBeInTheDocument();
+    expect(screen.getAllByText('$250.00')).toHaveLength(2);
+    expect(screen.getByText('$200.00')).toBeInTheDocument();
+
+    const rows = screen.getAllByRole('row');
+    expect(rows[1]).toHaveTextContent('Alpha Fund');
+    expect(rows[2]).toHaveTextContent('Zebra Income');
+
+    const alphaTaxable = screen.getByLabelText('ALPH quantity for Fidelity Taxable Brokerage');
+    const alphaRetirement = screen.getByLabelText('ALPH quantity for Fidelity 401k');
+    const zebraRetirement = screen.getByLabelText('ZBRA quantity for Fidelity 401k');
+    alphaTaxable.focus();
+    fireEvent.keyDown(alphaTaxable, { key: 'ArrowRight' });
+    await waitFor(() => expect(alphaRetirement).toHaveFocus());
+    fireEvent.keyDown(alphaRetirement, { key: 'ArrowDown' });
+    await waitFor(() => expect(zebraRetirement).toHaveFocus());
+  });
 
   it('shows passive income by month with prior actuals and current and next-year estimates', async () => {
     const holdingRepository = createMockHoldingRepository();
