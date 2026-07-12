@@ -1056,14 +1056,13 @@ export function AccountPage({
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              aspectRatio: '1 / 1',
-              minHeight: '220px'
+              minHeight: '168px'
             }}>
               <div>
                 <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Income Coverage
                 </span>
-                <h3 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--md-sys-color-primary)', margin: '12px 0 6px 0' }}>
+                <h3 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--md-sys-color-primary)', margin: '8px 0 4px 0' }}>
                   {totalMonthlyIncome > 0 
                     ? `${(currentAggregateBalance / totalMonthlyIncome).toFixed(1)} months` 
                     : 'N/A'}
@@ -1093,8 +1092,7 @@ export function AccountPage({
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
-              aspectRatio: '1 / 1',
-              minHeight: '220px'
+              minHeight: '168px'
             }}>
               <div>
                 <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
