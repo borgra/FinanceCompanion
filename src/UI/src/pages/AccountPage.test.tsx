@@ -732,11 +732,13 @@ describe('AccountPage', () => {
     // Monthly net income (from primary job active source) is $120,000 / 12 * 75% = $7,500.
     // Income Coverage: 82,500 / 7,500 = 11.0 months.
     // Monthly budget is $1,450.00 (Rent 1350 + HOA 100).
-    // Budget Coverage: 82,500 / 1,450 = 56.9 months.
+    // Essential and Total Budget Coverage: 82,500 / 1,450 = 56.9 months.
     expect(screen.getAllByText('$82,500.00').length).toBeGreaterThan(0);
     expect(screen.getAllByText('$7,500.00').length).toBeGreaterThan(0);
     expect(screen.getByText('11.0 months')).toBeInTheDocument();
-    expect(screen.getByText('56.9 months')).toBeInTheDocument();
+    expect(screen.getByText('Essential')).toBeInTheDocument();
+    expect(screen.getByText('Total')).toBeInTheDocument();
+    expect(screen.getAllByText('56.9 months')).toHaveLength(2);
 
     // 3. Verify emergency fund threshold input
     const thresholdInput = screen.getByLabelText('Minimum threshold');

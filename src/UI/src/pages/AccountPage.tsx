@@ -934,6 +934,15 @@ export function AccountPage({
     return sum;
   }, [budgetCategories]);
 
+  const essentialMonthlyBudget = useMemo(() => {
+    return budgetCategories.reduce(
+      (total, category) => total + (category.isEssential
+        ? category.subCategories.reduce((sum, subCategory) => sum + subCategory.monthlyAmountUsd, 0)
+        : 0),
+      0,
+    );
+  }, [budgetCategories]);
+
   const currentAggregateBalance = useMemo(() => {
     return sortedAccounts.reduce((sum, account) => {
       const balance = currentBalanceByAccountId.get(account.id) ?? 0;
@@ -1007,13 +1016,28 @@ export function AccountPage({
 
       {viewMode === 'aggregate' ? (
         <section className="aggregate-dashboard-workspace" aria-labelledby="bank-dashboard-heading" style={{ maxWidth: '100%', margin: '0 auto 40px auto' }}>
-          <div style={{ marginBottom: '24px' }}>
-            <h2 id="bank-dashboard-heading" style={{ fontSize: '1.25rem', fontFamily: 'var(--md-sys-font-display)', fontWeight: 800 }}>
-              Bank Dashboard
-            </h2>
-            <p style={{ color: 'var(--md-sys-color-on-surface-variant)', fontSize: '0.9rem' }}>
-              Combined view of all checking and savings accounts.
-            </p>
+          <div className="bank-dashboard-header">
+            <div>
+              <h2 id="bank-dashboard-heading" style={{ fontSize: '1.25rem', fontFamily: 'var(--md-sys-font-display)', fontWeight: 800 }}>
+                Bank Dashboard
+              </h2>
+              <p style={{ color: 'var(--md-sys-color-on-surface-variant)', fontSize: '0.9rem' }}>
+                Combined view of all checking and savings accounts.
+              </p>
+            </div>
+            <label className="bank-emergency-control">
+              <span>Emergency fund minimum</span>
+              <div className="input-wrapper">
+                <span className="input-prefix" aria-hidden="true">$</span>
+                <input
+                  aria-label="Minimum threshold"
+                  type="number"
+                  value={threshold || ''}
+                  onChange={(e) => setThreshold(Number(e.target.value) || 0)}
+                  placeholder="0.00"
+                />
+              </div>
+            </label>
           </div>
 
           {/* Square Cards Grid */}
@@ -1076,65 +1100,32 @@ export function AccountPage({
                 <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Budget Coverage
                 </span>
-                <h3 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--md-sys-color-primary)', margin: '12px 0 6px 0' }}>
-                  {totalMonthlyBudget > 0 
-                    ? `${(currentAggregateBalance / totalMonthlyBudget).toFixed(1)} months` 
-                    : 'N/A'}
-                </h3>
-                <span style={{ fontSize: '0.78rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                  Emergency fund multiple based on monthly budget.
-                </span>
+                <div className="bank-budget-coverage-metrics">
+                  <div>
+                    <span>Essential</span>
+                    <strong>
+                      {essentialMonthlyBudget > 0
+                        ? `${(currentAggregateBalance / essentialMonthlyBudget).toFixed(1)} months`
+                        : 'N/A'}
+                    </strong>
+                    <small>{formatMoney(essentialMonthlyBudget)} monthly</small>
+                  </div>
+                  <div>
+                    <span>Total</span>
+                    <strong>
+                      {totalMonthlyBudget > 0
+                        ? `${(currentAggregateBalance / totalMonthlyBudget).toFixed(1)} months`
+                        : 'N/A'}
+                    </strong>
+                    <small>{formatMoney(totalMonthlyBudget)} monthly</small>
+                  </div>
+                </div>
               </div>
               <div style={{ borderTop: '1px solid var(--md-sys-color-outline-variant)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
                   <span style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Total Balance</span>
                   <span style={{ fontWeight: 'bold', fontFamily: 'Consolas, monospace' }}>{formatMoney(currentAggregateBalance)}</span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                  <span style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Monthly Budget</span>
-                  <span style={{ fontWeight: 'bold', fontFamily: 'Consolas, monospace', color: 'var(--md-sys-color-error)' }}>{formatMoney(totalMonthlyBudget)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 3: Emergency Fund Config Card */}
-            <div style={{
-              border: '1.5px solid var(--md-sys-color-outline-variant)',
-              borderRadius: 'var(--md-sys-shape-corner-m)',
-              padding: '20px',
-              backgroundColor: 'rgba(255, 255, 255, 0.015)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              aspectRatio: '1 / 1',
-              minHeight: '220px'
-            }}>
-              <div>
-                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Emergency Fund
-                </span>
-                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: '12px 0 6px 0' }}>
-                  Threshold Configuration
-                </h3>
-                <span style={{ fontSize: '0.78rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
-                  Minimum target balance across all bank accounts.
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label className="field" style={{ margin: 0 }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Minimum Threshold</span>
-                  <div className="input-wrapper">
-                    <span className="input-prefix" aria-hidden="true">$</span>
-                    <input
-                      aria-label="Minimum threshold"
-                      type="number"
-                      value={threshold || ''}
-                      onChange={(e) => setThreshold(Number(e.target.value) || 0)}
-                      placeholder="0.00"
-                      style={{ textAlign: 'right' }}
-                    />
-                  </div>
-                </label>
               </div>
             </div>
           </div>
