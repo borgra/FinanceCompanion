@@ -356,20 +356,21 @@ describe('InvestingPage', () => {
   });
 
   it('correctly handles future manual payouts, prioritizing defined next-year payouts and mapping leap year Feb 29 to Feb 28', async () => {
-    const RealDate = global.Date;
+    const RealDate = globalThis.Date;
     const mockDate = new RealDate('2025-01-15T12:00:00Z');
     // @ts-expect-error Date is a read-only global property but we override it for mock time
-    global.Date = function (...args: string[]) {
+    globalThis.Date = function (...args: string[]) {
       if (args.length > 0) {
         // @ts-expect-error RealDate needs constructor invocation matching
         return new RealDate(...args);
       }
       return mockDate;
     };
-    global.Date.now = () => mockDate.getTime();
-    global.Date.UTC = RealDate.UTC;
-    global.Date.parse = RealDate.parse;
-    global.Date.prototype = RealDate.prototype;
+    // @ts-expect-error Date is read-only
+    globalThis.Date.now = () => mockDate.getTime();
+    globalThis.Date.UTC = RealDate.UTC;
+    globalThis.Date.parse = RealDate.parse;
+    globalThis.Date.prototype = RealDate.prototype;
     const mockHolding: Holding = {
       id: 'holding-test',
       security: {
@@ -449,6 +450,7 @@ describe('InvestingPage', () => {
     const augPriorBtn = screen.getByRole('button', { name: /Aug, 1 payment, \$30\.00/i });
     expect(augPriorBtn.closest('article')).not.toHaveClass('passive-income-estimate');
 
-    global.Date = RealDate;
+    // @ts-expect-error Date is read-only
+    globalThis.Date = RealDate;
   });
 });
