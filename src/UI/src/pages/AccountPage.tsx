@@ -22,13 +22,14 @@ type AccountPageProps = {
   incomeRepository: IncomeSourceRepository;
   budgetRepository: BudgetRepository;
   accountRepository: AccountRepository;
+  defaultViewMode?: 'aggregate' | 'account';
 };
 
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
 });
-const accountSelectorMaxWidth = '960px';
+const accountSelectorMaxWidth = '100%';
 const maxAccountNameLength = 100;
 const maxAccountBalance = 999_999_999.99;
 const accountTypeOrder: Record<AccountType, number> = {
@@ -218,6 +219,7 @@ export function AccountPage({
   incomeRepository,
   budgetRepository,
   accountRepository,
+  defaultViewMode = 'aggregate',
 }: AccountPageProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
@@ -225,6 +227,16 @@ export function AccountPage({
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>();
+
+  const [viewMode, setViewMode] = useState<'aggregate' | 'account'>(defaultViewMode);
+  const [threshold, setThreshold] = useState<number>(() => {
+    const saved = localStorage.getItem('finance-companion-emergency-threshold');
+    return saved ? Number(saved) : 20000;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('finance-companion-emergency-threshold', String(threshold));
+  }, [threshold]);
 
   // Draft editing states
   const [draftAccount, setDraftAccount] = useState<Account>();
@@ -891,6 +903,51 @@ export function AccountPage({
     };
   }, [computedRecords]);
 
+  const totalMonthlyIncome = useMemo(() => {
+    const currentMonthCode = currentProjectionMonth.dateCode;
+    let totalNet = 0;
+    const activeSources = incomeSources.filter((s) => s.status === 'Active');
+    for (const source of activeSources) {
+      const period = source.periods.find((p) => {
+        const startMonth = p.startDate.slice(0, 7);
+        const endMonth = p.endDate ? p.endDate.slice(0, 7) : '9999-12';
+        return startMonth <= currentMonthCode && currentMonthCode <= endMonth;
+      }) ?? source.periods[source.periods.length - 1];
+
+      if (period) {
+        const monthlyGross = period.yearlyGrossAmount / 12;
+        const monthlyNet = monthlyGross * (period.netPercentage / 100);
+        totalNet += monthlyNet;
+      }
+    }
+    return Math.round(totalNet);
+  }, [incomeSources, currentProjectionMonth.dateCode]);
+
+  const currentAggregateBalance = useMemo(() => {
+    return sortedAccounts.reduce((sum, account) => {
+      const balance = currentBalanceByAccountId.get(account.id) ?? 0;
+      return sum + balance;
+    }, 0);
+  }, [sortedAccounts, currentBalanceByAccountId]);
+
+  const monthlyAggregates = useMemo(() => {
+    return projectionMonths.map((month) => {
+      const total = sortedAccounts.reduce((sum, account) => {
+        const records = computeAccountRecords(account, incomeSources, projectionMonths);
+        const record = records.find((r) => r.month === month.name);
+        return sum + (record?.net ?? 0);
+      }, 0);
+      return {
+        name: month.name,
+        total,
+      };
+    });
+  }, [sortedAccounts, incomeSources, projectionMonths]);
+
+  const maxAggregateMonthTotal = useMemo(() => {
+    return Math.max(...monthlyAggregates.map((m) => m.total), 0);
+  }, [monthlyAggregates]);
+
   return (
     <main className="app-shell budget-shell">
       <header className="page-header compact-header">
@@ -913,86 +970,268 @@ export function AccountPage({
         </div>
       ) : null}
 
-      {/* TOP SECTION: SELECTORS WITH A SMALL FOOTPRINT */}
-      <section style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }} aria-label="Bank accounts selectors">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: accountSelectorMaxWidth }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#d97706', letterSpacing: '0.05em' }}>
-            Select Account
-          </span>
+      {/* View Mode Toggle */}
+      <section className="toolbar" aria-label="Bank Management views" style={{ marginBottom: '20px' }}>
+        <div className="filter-tabs" role="tablist" aria-label="Bank Management views">
           <button
-            className="secondary-action"
+            aria-selected={viewMode === 'aggregate'}
+            className="filter-tab"
+            role="tab"
             type="button"
-            onClick={openCreateAccountModal}
-            style={{ minHeight: '28px', padding: '0 10px', fontSize: '0.75rem', borderRadius: 'var(--md-sys-shape-corner-s)' }}
+            onClick={() => setViewMode('aggregate')}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">add</span>
-            Add Account
+            Aggregate Dashboard
+          </button>
+          <button
+            aria-selected={viewMode === 'account'}
+            className="filter-tab"
+            role="tab"
+            type="button"
+            onClick={() => setViewMode('account')}
+          >
+            Single Account View
           </button>
         </div>
-
-        <div className="accounts-vertical-stack" role="list" style={{ maxWidth: accountSelectorMaxWidth }}>
-          {isLoading ? (
-            <div style={{ fontSize: '0.85rem', padding: '8px' }}>Loading accounts...</div>
-          ) : sortedAccounts.length === 0 ? (
-            <div style={{ fontSize: '0.85rem', padding: '8px', fontStyle: 'italic' }}>No accounts. Add one.</div>
-          ) : (
-            sortedAccounts.map((acc) => {
-              const isSelected = acc.id === selectedAccountId;
-              const balance = currentBalanceByAccountId.get(acc.id) ?? 0;
-              
-              return (
-                <div
-                  key={acc.id}
-                  className={isSelected ? 'account-selector-item active' : 'account-selector-item'}
-                  onClick={() => void ensureSavedBeforeSwitch(acc.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      void ensureSavedBeforeSwitch(acc.id);
-                    }
-                  }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <div className="account-selector-item-left">
-                    <span className="material-symbols-outlined" style={{ fontSize: '1.25rem', color: accountTypeIconColor(acc.type) }}>
-                      {accountTypeIcon(acc.type)}
-                    </span>
-                    <span className="account-selector-item-name">{acc.name}</span>
-                    <span className="account-selector-item-type">({acc.type})</span>
-                  </div>
-                  <div className="account-selector-item-right">
-                    <span className="account-selector-item-bal">Current Balance: {formatMoney(balance)}</span>
-                    <button
-                      className="link-button"
-                      type="button"
-                      aria-label={`Edit ${acc.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditAccountModal(acc);
-                      }}
-                      style={{ minHeight: 'auto', padding: 0 }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>edit</span>
-                    </button>
-                    <button
-                      className="link-button link-button-danger"
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void deleteAccount(acc.id);
-                      }}
-                      style={{ minHeight: 'auto', padding: 0 }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>close</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
       </section>
+
+      {viewMode === 'aggregate' ? (
+        <section className="aggregate-dashboard-workspace" aria-labelledby="aggregate-dashboard-heading" style={{ maxWidth: '100%', margin: '0 auto 40px auto' }}>
+          <div style={{ marginBottom: '24px' }}>
+            <h2 id="aggregate-dashboard-heading" style={{ fontSize: '1.25rem', fontFamily: 'var(--md-sys-font-display)', fontWeight: 800 }}>
+              Aggregate Dashboard
+            </h2>
+            <p style={{ color: 'var(--md-sys-color-on-surface-variant)', fontSize: '0.9rem' }}>
+              Combined view of all checking and savings accounts.
+            </p>
+          </div>
+
+          <div className="passive-income-summary-grid" style={{ marginBottom: '24px' }}>
+            <div className="passive-income-summary-card">
+              <span>Total Current Balance</span>
+              <strong>{formatMoney(currentAggregateBalance)}</strong>
+            </div>
+            <div className="passive-income-summary-card">
+              <span>Monthly Net Income</span>
+              <strong>{formatMoney(totalMonthlyIncome)}</strong>
+            </div>
+            <div className="passive-income-summary-card">
+              <span>Emergency Fund Coverage</span>
+              <strong>
+                {totalMonthlyIncome > 0 
+                  ? `${(currentAggregateBalance / totalMonthlyIncome).toFixed(1)} months` 
+                  : 'N/A'}
+              </strong>
+            </div>
+          </div>
+
+          <div style={{
+            border: '1.5px solid var(--md-sys-color-outline-variant)',
+            borderRadius: 'var(--md-sys-shape-corner-m)',
+            padding: '20px',
+            marginBottom: '32px',
+            backgroundColor: 'rgba(255, 255, 255, 0.015)'
+          }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '8px' }}>Emergency Fund</h3>
+            <p style={{ color: 'var(--md-sys-color-on-surface-variant)', fontSize: '0.85rem', marginBottom: '16px' }}>
+              Define the minimum Bank Account threshold (across all accounts) to monitor coverage.
+            </p>
+            <div className="modal-form" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
+              <label className="field" style={{ flex: '1 1 240px', maxWidth: '320px', marginBottom: 0 }}>
+                <span>Minimum Threshold</span>
+                <div className="input-wrapper">
+                  <span className="input-prefix" aria-hidden="true">$</span>
+                  <input
+                    aria-label="Minimum threshold"
+                    type="number"
+                    value={threshold || ''}
+                    onChange={(e) => setThreshold(Number(e.target.value) || 0)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <section className="passive-income-chart-section" aria-labelledby="aggregate-chart-heading" style={{ marginBottom: '32px' }}>
+            <div className="passive-income-section-heading">
+              <h3 id="aggregate-chart-heading">Aggregate Balance Projection</h3>
+              <span>
+                Bars are colored <span style={{ color: '#34d399', fontWeight: 'bold' }}>Green</span> when &gt;= threshold, and <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>Amber</span> when below.
+              </span>
+            </div>
+            <div className="passive-income-chart" role="img" aria-label="Aggregate bank balance projection by month">
+              <div className="passive-income-y-axis">
+                <span>{formatMoney(maxAggregateMonthTotal)}</span>
+                <span>{formatMoney(maxAggregateMonthTotal / 2)}</span>
+                <span>$0</span>
+              </div>
+              <div className="passive-income-bars">
+                {monthlyAggregates.map((month) => {
+                  const isAbove = month.total >= threshold;
+                  const height = maxAggregateMonthTotal > 0 
+                    ? Math.max((month.total / maxAggregateMonthTotal) * 100, 3) 
+                    : 0;
+                  const barGradient = isAbove 
+                    ? 'linear-gradient(180deg, #34d399, #059669)' 
+                    : 'linear-gradient(180deg, #fbbf24, #d97706)';
+                  const trackBorderColor = isAbove
+                    ? 'rgba(52, 211, 153, 0.42)'
+                    : 'rgba(251, 191, 36, 0.42)';
+                  const trackBgColor = isAbove
+                    ? 'rgba(52, 211, 153, 0.04)'
+                    : 'rgba(251, 191, 36, 0.04)';
+
+                  return (
+                    <div
+                      className="passive-income-bar-item"
+                      key={month.name}
+                      style={{ display: 'grid', gridTemplateRows: 'minmax(150px, 1fr) 20px 20px', gap: '4px', textAlign: 'center' }}
+                    >
+                      <span 
+                        className="passive-income-bar-track" 
+                        aria-hidden="true"
+                        style={{ borderColor: trackBorderColor, backgroundColor: trackBgColor }}
+                      >
+                        <span 
+                          className="passive-income-bar" 
+                          style={{ height: `${height}%`, background: barGradient }} 
+                        />
+                      </span>
+                      <strong style={{ fontSize: '0.68rem', fontFamily: 'Consolas, monospace' }}>
+                        {formatMoney(month.total)}
+                      </strong>
+                      <span style={{ fontSize: '0.72rem', fontWeight: 800 }}>{month.name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          <section style={{ border: '1.5px solid var(--md-sys-color-outline-variant)', borderRadius: 'var(--md-sys-shape-corner-m)', padding: '20px', backgroundColor: 'rgba(255, 255, 255, 0.005)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 800, margin: 0 }}>Account Balances Breakdown</h3>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={openCreateAccountModal}
+                style={{ minHeight: '28px', padding: '0 10px', fontSize: '0.75rem', borderRadius: 'var(--md-sys-shape-corner-s)' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">add</span>
+                Add Account
+              </button>
+            </div>
+            <div className="excel-table-fullwidth">
+              <FinanceTable wrapperStyle={{ margin: 0 }}>
+                <thead>
+                  <tr>
+                    <FinanceTableHeaderCell>Account Name</FinanceTableHeaderCell>
+                    <FinanceTableHeaderCell>Type</FinanceTableHeaderCell>
+                    <FinanceTableHeaderCell>APY</FinanceTableHeaderCell>
+                    <FinanceTableHeaderCell>Current Balance</FinanceTableHeaderCell>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedAccounts.map((acc) => {
+                    const balance = currentBalanceByAccountId.get(acc.id) ?? 0;
+                    return (
+                      <tr key={acc.id} style={{ cursor: 'pointer' }} onClick={() => {
+                        setSelectedAccountId(acc.id);
+                        setViewMode('account');
+                      }}>
+                        <td className="excel-bold-col" style={{ fontWeight: 'bold' }}>{acc.name}</td>
+                        <td>{acc.type}</td>
+                        <td>{acc.yieldRate}%</td>
+                        <td style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold' }}>{formatMoney(balance)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </FinanceTable>
+            </div>
+          </section>
+        </section>
+      ) : (
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }} aria-label="Bank accounts selectors">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: accountSelectorMaxWidth }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase', color: '#d97706', letterSpacing: '0.05em' }}>
+              Select Account
+            </span>
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={openCreateAccountModal}
+              style={{ minHeight: '28px', padding: '0 10px', fontSize: '0.75rem', borderRadius: 'var(--md-sys-shape-corner-s)' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">add</span>
+              Add Account
+            </button>
+          </div>
+
+          <div className="accounts-vertical-stack" role="list" style={{ maxWidth: accountSelectorMaxWidth }}>
+            {isLoading ? (
+              <div style={{ fontSize: '0.85rem', padding: '8px' }}>Loading accounts...</div>
+            ) : sortedAccounts.length === 0 ? (
+              <div style={{ fontSize: '0.85rem', padding: '8px', fontStyle: 'italic' }}>No accounts. Add one.</div>
+            ) : (
+              sortedAccounts.map((acc) => {
+                const isSelected = acc.id === selectedAccountId;
+                const balance = currentBalanceByAccountId.get(acc.id) ?? 0;
+                
+                return (
+                  <div
+                    key={acc.id}
+                    className={isSelected ? 'account-selector-item active' : 'account-selector-item'}
+                    onClick={() => void ensureSavedBeforeSwitch(acc.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        void ensureSavedBeforeSwitch(acc.id);
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="account-selector-item-left">
+                      <span className="material-symbols-outlined" style={{ fontSize: '1.25rem', color: accountTypeIconColor(acc.type) }}>
+                        {accountTypeIcon(acc.type)}
+                      </span>
+                      <span className="account-selector-item-name">{acc.name}</span>
+                      <span className="account-selector-item-type">({acc.type})</span>
+                    </div>
+                    <div className="account-selector-item-right">
+                      <span className="account-selector-item-bal">Current Balance: {formatMoney(balance)}</span>
+                      <button
+                        className="link-button"
+                        type="button"
+                        aria-label={`Edit ${acc.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditAccountModal(acc);
+                        }}
+                        style={{ minHeight: 'auto', padding: 0 }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>edit</span>
+                      </button>
+                      <button
+                        className="link-button link-button-danger"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void deleteAccount(acc.id);
+                        }}
+                        style={{ minHeight: 'auto', padding: 0 }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }}>close</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
+      )}
 
       {/* POP-UP MODAL: ADD ACCOUNT */}
       {isModalOpen && (
@@ -1273,259 +1512,261 @@ export function AccountPage({
         </div>
       )}
 
-      {draftAccount ? (
-        <>
-          {/* WORKSPACE DETAIL WORKSPACE WITH INLINE SPENDING COLUMN CONFIGURATOR */}
-          <section className="budget-right" style={{ padding: '20px', width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--md-sys-color-outline-variant)', paddingBottom: '12px' }}>
-              <div>
-                <h2 style={{ fontSize: '1.25rem', fontFamily: 'var(--md-sys-font-display)', fontWeight: 800 }}>
-                  {draftAccount.name || 'Untitled Account'}
-                  <button className="edit-title-btn" aria-label="Edit account" onClick={() => openEditAccountModal(draftAccount)}>
-                    <span className="material-symbols-outlined">edit</span>
+      {viewMode === 'account' && (
+        draftAccount ? (
+          <>
+            {/* WORKSPACE DETAIL WORKSPACE WITH INLINE SPENDING COLUMN CONFIGURATOR */}
+            <section className="budget-right" style={{ padding: '20px', width: '100%' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--md-sys-color-outline-variant)', paddingBottom: '12px' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.25rem', fontFamily: 'var(--md-sys-font-display)', fontWeight: 800 }}>
+                    {draftAccount.name || 'Untitled Account'}
+                    <button className="edit-title-btn" aria-label="Edit account" onClick={() => openEditAccountModal(draftAccount)}>
+                      <span className="material-symbols-outlined">edit</span>
+                    </button>
+                  </h2>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={!isDirty || isSaving}
+                    onClick={() => void saveAccountChanges()}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">save</span>
+                    {isSaving ? 'Saving...' : 'Save changes'}
                   </button>
-                </h2>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  className="primary-action"
-                  type="button"
-                  disabled={!isDirty || isSaving}
-                  onClick={() => void saveAccountChanges()}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '1.1rem' }} aria-hidden="true">save</span>
-                  {isSaving ? 'Saving...' : 'Save changes'}
-                </button>
-              </div>
-            </div>
-
-            {/* Outlined Summary Section containing the remaining four badges */}
-            <div style={{ border: '1.5px solid var(--md-sys-color-outline-variant)', borderRadius: 'var(--md-sys-shape-corner-m)', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px', backgroundColor: 'rgba(255, 255, 255, 0.015)' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>
-                  {isSavingsLedger ? 'Total Interest (Year)' : 'Total Credits (Year)'}
-                </span>
-                <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: '#34d399' }}>{formatMoney(summaryTotals.creditSum)}</strong>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Total Expenses (Year)</span>
-                <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--md-sys-color-error)' }}>
-                  {summaryTotals.expenseSum > 0 ? `-${formatMoney(summaryTotals.expenseSum)}` : formatMoney(0)}
-                </strong>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Total Investments (Year)</span>
-                <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: '#38bdf8' }}>{formatMoney(summaryTotals.investSum)}</strong>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Total Savings (Year)</span>
-                <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: '#38bdf8' }}>{formatMoney(summaryTotals.savingsSum)}</strong>
-              </div>
-            </div>
-
-            {/* Read-only account details */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 420px)', gap: '20px', marginBottom: '16px' }}>
-              <div
-                aria-label="Account details"
-                style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}
-              >
-                <div className="status-badge" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', padding: '12px' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Start Month</span>
-                  <strong style={{ fontSize: '0.95rem' }}>{formatMonthYear(draftAccount.startDate)}</strong>
-                </div>
-                <div className="status-badge" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', padding: '12px' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Yield / APY</span>
-                  <strong style={{ fontSize: '0.95rem' }}>{draftAccount.yieldRate}%</strong>
                 </div>
               </div>
-            </div>
 
-            {/* FULL WIDTH LEDGER GRID WITH TIGHT PADDING AND NO FOOTER TOTALS */}
-            <div className="excel-table-fullwidth">
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
-                <button
-                  className="secondary-action"
-                  type="button"
-                  onClick={openColumnModal}
-                  style={{ minHeight: '30px', padding: '0 10px', fontSize: '0.75rem' }}
-                >
-                  Add
-                </button>
+              {/* Outlined Summary Section containing the remaining four badges */}
+              <div style={{ border: '1.5px solid var(--md-sys-color-outline-variant)', borderRadius: 'var(--md-sys-shape-corner-m)', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px', backgroundColor: 'rgba(255, 255, 255, 0.015)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>
+                    {isSavingsLedger ? 'Total Interest (Year)' : 'Total Credits (Year)'}
+                  </span>
+                  <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: '#34d399' }}>{formatMoney(summaryTotals.creditSum)}</strong>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Total Expenses (Year)</span>
+                  <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--md-sys-color-error)' }}>
+                    {summaryTotals.expenseSum > 0 ? `-${formatMoney(summaryTotals.expenseSum)}` : formatMoney(0)}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Total Investments (Year)</span>
+                  <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: '#38bdf8' }}>{formatMoney(summaryTotals.investSum)}</strong>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Total Savings (Year)</span>
+                  <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: '#38bdf8' }}>{formatMoney(summaryTotals.savingsSum)}</strong>
+                </div>
               </div>
-              <FinanceTable wrapperStyle={{ margin: 0 }}>
-                  <thead>
-                    <tr>
-                      <FinanceTableHeaderCell>Month</FinanceTableHeaderCell>
-                      <FinanceTableHeaderCell>Start</FinanceTableHeaderCell>
-                      
-                      {/* Credit/Interest Header: Savings interest is editable, checking credit is derived. */}
-                      <FinanceTableHeaderCell
-                        contentClassName="excel-col-credit"
-                        icon="add_circle"
-                        isEditable={isSavingsLedger}
-                        title={
-                          isSavingsLedger
-                            ? 'Interest earned for this savings account'
-                            : 'Credit inflows, derivable from Income Management rules'
-                        }
-                        style={{ borderBottom: '2.5px solid #34d399' }}
-                      >
-                        {isSavingsLedger ? 'Interest' : 'Credit'}
-                      </FinanceTableHeaderCell>
 
-                      {/* Active category columns */}
-                      {activeColumns.map((col, index) => (
+              {/* Read-only account details */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 420px)', gap: '20px', marginBottom: '16px' }}>
+                <div
+                  aria-label="Account details"
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}
+                >
+                  <div className="status-badge" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', padding: '12px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Start Month</span>
+                    <strong style={{ fontSize: '0.95rem' }}>{formatMonthYear(draftAccount.startDate)}</strong>
+                  </div>
+                  <div className="status-badge" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', padding: '12px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Yield / APY</span>
+                    <strong style={{ fontSize: '0.95rem' }}>{draftAccount.yieldRate}%</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* FULL WIDTH LEDGER GRID WITH TIGHT PADDING AND NO FOOTER TOTALS */}
+              <div className="excel-table-fullwidth">
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    onClick={openColumnModal}
+                    style={{ minHeight: '30px', padding: '0 10px', fontSize: '0.75rem' }}
+                  >
+                    Add
+                  </button>
+                </div>
+                <FinanceTable wrapperStyle={{ margin: 0 }}>
+                    <thead>
+                      <tr>
+                        <FinanceTableHeaderCell>Month</FinanceTableHeaderCell>
+                        <FinanceTableHeaderCell>Start</FinanceTableHeaderCell>
+                        
+                        {/* Credit/Interest Header: Savings interest is editable, checking credit is derived. */}
                         <FinanceTableHeaderCell
-                          key={col.id}
-                          icon={col.icon}
-                          isEditable
-                          title={col.name}
-                          isMoveLeftDisabled={index === 0}
-                          isMoveRightDisabled={index === activeColumns.length - 1}
-                          onMoveLeft={() => moveAccountColumn(col.id, -1)}
-                          onMoveRight={() => moveAccountColumn(col.id, 1)}
-                          onRemove={() => removeAccountColumn(col.id)}
+                          contentClassName="excel-col-credit"
+                          icon="add_circle"
+                          isEditable={isSavingsLedger}
+                          title={
+                            isSavingsLedger
+                              ? 'Interest earned for this savings account'
+                              : 'Credit inflows, derivable from Income Management rules'
+                          }
+                          style={{ borderBottom: '2.5px solid #34d399' }}
                         >
-                          {col.name.length > 15 ? `${col.name.slice(0, 12)}...` : col.name}
+                          {isSavingsLedger ? 'Interest' : 'Credit'}
                         </FinanceTableHeaderCell>
-                      ))}
-                      {!isSavingsLedger ? (
-                        <FinanceTableHeaderCell>Expenses</FinanceTableHeaderCell>
-                      ) : null}
-                      <FinanceTableHeaderCell>SubTotal</FinanceTableHeaderCell>
-                      
-                      {/* Invest Column Header: Special style */}
-                      <FinanceTableHeaderCell
-                        className="excel-col-special-header"
-                        icon="trending_up"
-                        isEditable
-                        title="Investment outflows"
-                      >
-                        Invest
-                      </FinanceTableHeaderCell>
 
-                      {/* Savings Column Header: Special style */}
-                      {!isSavingsLedger ? (
+                        {/* Active category columns */}
+                        {activeColumns.map((col, index) => (
+                          <FinanceTableHeaderCell
+                            key={col.id}
+                            icon={col.icon}
+                            isEditable
+                            title={col.name}
+                            isMoveLeftDisabled={index === 0}
+                            isMoveRightDisabled={index === activeColumns.length - 1}
+                            onMoveLeft={() => moveAccountColumn(col.id, -1)}
+                            onMoveRight={() => moveAccountColumn(col.id, 1)}
+                            onRemove={() => removeAccountColumn(col.id)}
+                          >
+                            {col.name.length > 15 ? `${col.name.slice(0, 12)}...` : col.name}
+                          </FinanceTableHeaderCell>
+                        ))}
+                        {!isSavingsLedger ? (
+                          <FinanceTableHeaderCell>Expenses</FinanceTableHeaderCell>
+                        ) : null}
+                        <FinanceTableHeaderCell>SubTotal</FinanceTableHeaderCell>
+                        
+                        {/* Invest Column Header: Special style */}
                         <FinanceTableHeaderCell
                           className="excel-col-special-header"
-                          icon="savings"
+                          icon="trending_up"
                           isEditable
-                          title="Savings allocations"
+                          title="Investment outflows"
                         >
-                          Savings
+                          Invest
                         </FinanceTableHeaderCell>
-                      ) : null}
 
-                      <FinanceTableHeaderCell style={{ color: 'var(--md-sys-color-primary)' }}>
-                        Net Total
-                      </FinanceTableHeaderCell>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {computedRecords.map((row, m) => {
-                      const isCurrent = row.month === currentProjectionMonth.name;
-                      // Forecast calculations are standard, no amber highlighting
-                      const isForecast = ['Aug-26', 'Sep-26', 'Oct-26', 'Nov-26', 'Dec-26'].includes(row.month);
-                      const rowClass = isCurrent
-                        ? 'excel-row-current'
-                        : isForecast
-                        ? 'excel-row-forecast'
-                        : 'excel-row-actual';
+                        {/* Savings Column Header: Special style */}
+                        {!isSavingsLedger ? (
+                          <FinanceTableHeaderCell
+                            className="excel-col-special-header"
+                            icon="savings"
+                            isEditable
+                            title="Savings allocations"
+                          >
+                            Savings
+                          </FinanceTableHeaderCell>
+                        ) : null}
 
-                      return (
-                        <tr key={row.month} className={rowClass}>
-                          <td className="excel-bold-col" style={{ color: isCurrent ? '#a78bfa' : 'var(--md-sys-color-on-surface)' }}>{row.month}</td>
-                          <td>
-                            <span className="excel-cell-val">{formatMoney(row.start)}</span>
-                          </td>
-                          <td className="excel-col-credit">
-                            {isSavingsLedger ? (
-                              <FinanceMoneyCellInput
-                                value={row.credit}
-                                formatValue={formatMoney}
-                                onValueChange={(val) => updateCell(m, 'credit', val)}
-                                focusId={`interest-${m}`}
-                                nextFocusId={
-                                  m < computedRecords.length - 1 ? `interest-${m + 1}` : undefined
-                                }
-                                fillDownLabel={`Auto-populate Interest from ${row.month} down`}
-                                onFillDown={(val) => fillDownCell(m, 'credit', val)}
-                              />
-                            ) : (
-                              <span className="excel-cell-val excel-bold-col" style={{ color: '#34d399' }}>
-                                {formatMoney(row.credit)}
-                              </span>
-                            )}
-                          </td>
-                          {activeColumns.map((col) => (
-                            <td key={col.id}>
-                              <FinanceMoneyCellInput
-                                value={row.outflows[col.id] || 0}
-                                formatValue={formatMoney}
-                                onValueChange={(val) => updateOutflowCell(m, col.id, val)}
-                                focusId={`outflow-${col.id}-${m}`}
-                                nextFocusId={
-                                  m < computedRecords.length - 1 ? `outflow-${col.id}-${m + 1}` : undefined
-                                }
-                                fillDownLabel={`Auto-populate ${col.name} from ${row.month} down`}
-                                onFillDown={(val) => fillDownOutflowCell(m, col.id, val)}
-                              />
-                            </td>
-                          ))}
-                          {!isSavingsLedger ? (
+                        <FinanceTableHeaderCell style={{ color: 'var(--md-sys-color-primary)' }}>
+                          Net Total
+                        </FinanceTableHeaderCell>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {computedRecords.map((row, m) => {
+                        const isCurrent = row.month === currentProjectionMonth.name;
+                        // Forecast calculations are standard, no amber highlighting
+                        const isForecast = ['Aug-26', 'Sep-26', 'Oct-26', 'Nov-26', 'Dec-26'].includes(row.month);
+                        const rowClass = isCurrent
+                          ? 'excel-row-current'
+                          : isForecast
+                          ? 'excel-row-forecast'
+                          : 'excel-row-actual';
+
+                        return (
+                          <tr key={row.month} className={rowClass}>
+                            <td className="excel-bold-col" style={{ color: isCurrent ? '#a78bfa' : 'var(--md-sys-color-on-surface)' }}>{row.month}</td>
                             <td>
-                              <span className="excel-cell-val excel-bold-col" style={{ color: 'var(--md-sys-color-error)' }}>
-                                {row.expenses > 0 ? `-${formatMoney(row.expenses)}` : (row.expenses < 0 ? formatMoney(Math.abs(row.expenses)) : '$   -   ')}
-                              </span>
+                              <span className="excel-cell-val">{formatMoney(row.start)}</span>
                             </td>
-                          ) : null}
-                          <td>
-                            <span className="excel-cell-val excel-bold-col">{formatMoney(row.subtotal)}</span>
-                          </td>
-                          <td className="excel-col-special">
-                            <FinanceMoneyCellInput
-                              value={row.invest}
-                              formatValue={formatMoney}
-                              onValueChange={(val) => updateCell(m, 'invest', val)}
-                              focusId={`invest-${m}`}
-                              nextFocusId={m < computedRecords.length - 1 ? `invest-${m + 1}` : undefined}
-                              fillDownLabel={`Auto-populate Invest from ${row.month} down`}
-                              onFillDown={(val) => fillDownCell(m, 'invest', val)}
-                            />
-                          </td>
-                          {!isSavingsLedger ? (
+                            <td className="excel-col-credit">
+                              {isSavingsLedger ? (
+                                <FinanceMoneyCellInput
+                                  value={row.credit}
+                                  formatValue={formatMoney}
+                                  onValueChange={(val) => updateCell(m, 'credit', val)}
+                                  focusId={`interest-${m}`}
+                                  nextFocusId={
+                                    m < computedRecords.length - 1 ? `interest-${m + 1}` : undefined
+                                  }
+                                  fillDownLabel={`Auto-populate Interest from ${row.month} down`}
+                                  onFillDown={(val) => fillDownCell(m, 'credit', val)}
+                                />
+                              ) : (
+                                <span className="excel-cell-val excel-bold-col" style={{ color: '#34d399' }}>
+                                  {formatMoney(row.credit)}
+                                </span>
+                              )}
+                            </td>
+                            {activeColumns.map((col) => (
+                              <td key={col.id}>
+                                <FinanceMoneyCellInput
+                                  value={row.outflows[col.id] || 0}
+                                  formatValue={formatMoney}
+                                  onValueChange={(val) => updateOutflowCell(m, col.id, val)}
+                                  focusId={`outflow-${col.id}-${m}`}
+                                  nextFocusId={
+                                    m < computedRecords.length - 1 ? `outflow-${col.id}-${m + 1}` : undefined
+                                  }
+                                  fillDownLabel={`Auto-populate ${col.name} from ${row.month} down`}
+                                  onFillDown={(val) => fillDownOutflowCell(m, col.id, val)}
+                                />
+                              </td>
+                            ))}
+                            {!isSavingsLedger ? (
+                              <td>
+                                <span className="excel-cell-val excel-bold-col" style={{ color: 'var(--md-sys-color-error)' }}>
+                                  {row.expenses > 0 ? `-${formatMoney(row.expenses)}` : (row.expenses < 0 ? formatMoney(Math.abs(row.expenses)) : '$   -   ')}
+                                </span>
+                              </td>
+                            ) : null}
+                            <td>
+                              <span className="excel-cell-val excel-bold-col">{formatMoney(row.subtotal)}</span>
+                            </td>
                             <td className="excel-col-special">
                               <FinanceMoneyCellInput
-                                value={row.savings}
+                                value={row.invest}
                                 formatValue={formatMoney}
-                                onValueChange={(val) => updateCell(m, 'savings', val)}
-                                focusId={`savings-${m}`}
-                                nextFocusId={m < computedRecords.length - 1 ? `savings-${m + 1}` : undefined}
-                                fillDownLabel={`Auto-populate Savings from ${row.month} down`}
-                                onFillDown={(val) => fillDownCell(m, 'savings', val)}
-                                disabled={draftAccount?.type === 'Checking' && !draftAccount?.savingsAccountId}
+                                onValueChange={(val) => updateCell(m, 'invest', val)}
+                                focusId={`invest-${m}`}
+                                nextFocusId={m < computedRecords.length - 1 ? `invest-${m + 1}` : undefined}
+                                fillDownLabel={`Auto-populate Invest from ${row.month} down`}
+                                onFillDown={(val) => fillDownCell(m, 'invest', val)}
                               />
                             </td>
-                          ) : null}
-                          <td>
-                            <span className="excel-cell-val excel-bold-col" style={{ color: 'var(--md-sys-color-primary)', fontWeight: '800' }}>
-                              {formatMoney(row.net)}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-              </FinanceTable>
-            </div>
-          </section>
-        </>
-      ) : (
-        <div className="empty-state">
-          <span className="material-symbols-outlined" aria-hidden="true">ads_click</span>
-          <h2>Select an account</h2>
-          <p>Choose an account above to edit ledger values and forecast.</p>
-        </div>
+                            {!isSavingsLedger ? (
+                              <td className="excel-col-special">
+                                <FinanceMoneyCellInput
+                                  value={row.savings}
+                                  formatValue={formatMoney}
+                                  onValueChange={(val) => updateCell(m, 'savings', val)}
+                                  focusId={`savings-${m}`}
+                                  nextFocusId={m < computedRecords.length - 1 ? `savings-${m + 1}` : undefined}
+                                  fillDownLabel={`Auto-populate Savings from ${row.month} down`}
+                                  onFillDown={(val) => fillDownCell(m, 'savings', val)}
+                                  disabled={draftAccount?.type === 'Checking' && !draftAccount?.savingsAccountId}
+                                />
+                              </td>
+                            ) : null}
+                            <td>
+                              <span className="excel-cell-val excel-bold-col" style={{ color: 'var(--md-sys-color-primary)', fontWeight: '800' }}>
+                                {formatMoney(row.net)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                </FinanceTable>
+              </div>
+            </section>
+          </>
+        ) : (
+          <div className="empty-state">
+            <span className="material-symbols-outlined" aria-hidden="true">ads_click</span>
+            <h2>Select an account</h2>
+            <p>Choose an account above to edit ledger values and forecast.</p>
+          </div>
+        )
       )}
     </main>
   );

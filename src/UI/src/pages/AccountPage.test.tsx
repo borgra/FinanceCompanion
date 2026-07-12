@@ -7,7 +7,7 @@ import { type Account, defaultMonthlyRecords } from '../domain/account';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import { AccountPage } from './AccountPage';
 
-const renderPage = (initialAccounts?: Account[]) => {
+const renderPage = (initialAccounts?: Account[], defaultViewMode: 'aggregate' | 'account' = 'account') => {
   const repository = createMockAccountRepository({ initialAccounts });
   const mockIncomeRepository: IncomeSourceRepository = {
     listIncomeSources: () => Promise.resolve([
@@ -76,6 +76,7 @@ const renderPage = (initialAccounts?: Account[]) => {
       accountRepository={repository}
       budgetRepository={mockBudgetRepository}
       incomeRepository={mockIncomeRepository}
+      defaultViewMode={defaultViewMode}
     />,
   );
 
@@ -688,4 +689,70 @@ describe('AccountPage', () => {
     const updatedSavingsAcc = accounts.find((acc) => acc.id === 'acc-savings-test');
     expect(updatedSavingsAcc?.monthlyRecords[0].savings).toBe(200);
   });
+
+  it('renders Aggregate Dashboard by default with emergency fund configs and chart', async () => {
+    const mockAccounts: Account[] = [
+      {
+        id: 'acc-checking-1',
+        name: 'Chase Checking',
+        type: 'Checking',
+        startingBalance: 10000,
+        startDate: '2026-01-01',
+        yieldRate: 0,
+        assignedIncomeSourceIds: ['income-source-primary'],
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      },
+      {
+        id: 'acc-savings-1',
+        name: 'Marcus HYS',
+        type: 'Savings',
+        startingBalance: 20000,
+        startDate: '2026-01-01',
+        yieldRate: 4.5,
+        assignedIncomeSourceIds: [],
+        columns: [],
+        monthlyRecords: defaultMonthlyRecords(),
+        createdAt: '',
+        updatedAt: '',
+      }
+    ];
+
+    renderPage(mockAccounts, 'aggregate');
+
+    // 1. Verify Aggregate Dashboard header and details
+    expect(await screen.findByRole('heading', { name: /aggregate dashboard/i })).toBeInTheDocument();
+    expect(screen.getByText('Combined view of all checking and savings accounts.')).toBeInTheDocument();
+
+    // 2. Verify emergency fund coverage multiple:
+    // Total aggregate balance is $82,500.00.
+    // Monthly net income (from primary job active source) is $120,000 / 12 * 75% = $7,500.
+    // 82,500 / 7,500 = 11.0 months.
+    expect(screen.getAllByText('$82,500.00').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$7,500.00').length).toBeGreaterThan(0);
+    expect(screen.getByText('11.0 months')).toBeInTheDocument();
+
+    // 3. Verify emergency fund threshold input
+    const thresholdInput = screen.getByLabelText('Minimum threshold');
+    expect(thresholdInput).toHaveValue(20000);
+
+    // Update threshold and verify update
+    await userEvent.clear(thresholdInput);
+    await userEvent.type(thresholdInput, '40000');
+    expect(thresholdInput).toHaveValue(40000);
+    expect(localStorage.getItem('finance-companion-emergency-threshold')).toBe('40000');
+
+    // 4. Verify Account Breakdown table has the accounts
+    expect(screen.getByText('Chase Checking')).toBeInTheDocument();
+    expect(screen.getByText('Marcus HYS')).toBeInTheDocument();
+
+    // 5. Verify clicking a row switches viewMode to 'account' and displays the account details
+    await userEvent.click(screen.getByText('Chase Checking'));
+    expect(screen.queryByText('Combined view of all checking and savings accounts.')).not.toBeInTheDocument();
+    expect(screen.getByText('Select Account')).toBeInTheDocument();
+    expect(screen.getAllByText('Chase Checking').length).toBeGreaterThan(0);
+  });
 });
+
