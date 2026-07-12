@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { IncomeSource } from '../domain/incomeSource';
@@ -37,10 +37,12 @@ describe('BudgetPage', () => {
     );
 
     expect(await screen.findByText('Monthly Posture')).toBeInTheDocument();
-    expect(await screen.findByText('Housing')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Expand Housing category/i })).toBeInTheDocument();
     expect(screen.getByText('Income Budgeted')).toBeInTheDocument();
     expect(screen.getByText('Budget category list')).toBeInTheDocument();
     expect(screen.getByText('Master categories')).toBeInTheDocument();
+    expect(screen.getByLabelText('Sort categories')).toHaveValue('amount');
+    expect(screen.getByLabelText('Budget allocation')).toBeInTheDocument();
     expect(screen.queryByText('Yearly Budget')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Expand Housing category/i })).toHaveAttribute(
       'aria-expanded',
@@ -58,7 +60,7 @@ describe('BudgetPage', () => {
       />,
     );
 
-    expect(await screen.findByText('Housing')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Expand Housing category/i })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /Expand Utilities category/i }));
 
@@ -97,5 +99,22 @@ describe('BudgetPage', () => {
       'aria-expanded',
       'false',
     );
+  });
+
+  it('allows category sorting and exposes allocation details from the legend', async () => {
+    const user = userEvent.setup();
+    render(
+      <BudgetPage
+        budgetRepository={createMockBudgetRepository()}
+        incomeRepository={createMockIncomeSourceRepository({ initialSources: [incomeSource()] })}
+      />,
+    );
+
+    const sort = await screen.findByLabelText('Sort categories');
+    await user.selectOptions(sort, 'name');
+    expect(sort).toHaveValue('name');
+
+    await user.hover(screen.getByRole('button', { name: /Housing: \$1,450\.00/i }));
+    expect(within(screen.getByLabelText('Budget allocation')).getByText('50.0%')).toBeInTheDocument();
   });
 });

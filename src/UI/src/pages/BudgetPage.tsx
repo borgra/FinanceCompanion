@@ -49,6 +49,32 @@ const emptyIncomeTotals = (): IncomeTotals => ({
 
 const tmpId = () => `tmp-${crypto.randomUUID()}`;
 
+type BudgetSort = 'amount' | 'name';
+
+const budgetColors = [
+  { name: 'Green', value: '#00e676' },
+  { name: 'Sky', value: '#38bdf8' },
+  { name: 'Amber', value: '#f59e0b' },
+  { name: 'Rose', value: '#fb7185' },
+  { name: 'Violet', value: '#a78bfa' },
+  { name: 'Teal', value: '#14b8a6' },
+  { name: 'Orange', value: '#f97316' },
+  { name: 'Slate', value: '#94a3b8' },
+];
+
+const categoryIcons = [
+  ['category', 'General'],
+  ['home', 'Housing'],
+  ['shopping_cart', 'Shopping'],
+  ['restaurant', 'Dining'],
+  ['directions_car', 'Transportation'],
+  ['health_and_safety', 'Healthcare'],
+  ['subscriptions', 'Subscriptions'],
+  ['savings', 'Savings'],
+  ['volunteer_activism', 'Giving'],
+  ['payments', 'Payments'],
+] as const;
+
 export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPageProps) {
   const [categories, setCategories] = useState<BudgetCategoryWithSubCategories[]>([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>();
@@ -71,7 +97,10 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryColorHex, setNewCategoryColorHex] = useState('#00e676');
+  const [newCategoryIcon, setNewCategoryIcon] = useState('category');
   const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<BudgetSort>('amount');
+  const [hoveredCategoryId, setHoveredCategoryId] = useState<string | undefined>();
 
   const [newSubName, setNewSubName] = useState('');
   const [newSubMonthlyAmount, setNewSubMonthlyAmount] = useState('');
@@ -79,6 +108,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
   const closeAddCatModal = () => {
     setNewCategoryName('');
     setNewCategoryColorHex('#00e676');
+    setNewCategoryIcon('category');
     setIsAddCatModalOpen(false);
   };
 
@@ -118,6 +148,48 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     ? 'Balanced'
     : 'Flexible';
   const budgetHealthTone = isOverBudget ? 'critical' : allocationRate >= 90 ? 'caution' : 'healthy';
+
+  const categorySummaries = useMemo(() => {
+    return derivedCategoriesForTotals.map((category) => {
+      const monthlyAmount = category.subCategories.reduce(
+        (sum, subCategory) => sum + subCategory.monthlyAmountUsd,
+        0,
+      );
+      return {
+        category,
+        monthlyAmount,
+        percentage: totals.totalMonth > 0 ? (monthlyAmount / totals.totalMonth) * 100 : 0,
+      };
+    });
+  }, [derivedCategoriesForTotals, totals.totalMonth]);
+
+  const sortedCategories = useMemo(() => {
+    return [...categorySummaries].sort((a, b) => {
+      if (sortBy === 'name') return a.category.name.localeCompare(b.category.name);
+      return b.monthlyAmount - a.monthlyAmount || a.category.name.localeCompare(b.category.name);
+    });
+  }, [categorySummaries, sortBy]);
+
+  const pieSegments = useMemo(() => {
+    let start = 0;
+    return categorySummaries
+      .filter((item) => item.monthlyAmount > 0)
+      .map((item) => {
+        const end = start + item.percentage * 3.6;
+        const segment = { ...item, start, end };
+        start = end;
+        return segment;
+      });
+  }, [categorySummaries]);
+
+  const pieGradient = useMemo(() => {
+    if (pieSegments.length === 0) return 'conic-gradient(var(--md-sys-color-surface-container-highest) 0deg 360deg)';
+    return `conic-gradient(${pieSegments
+      .map((segment) => `${segment.category.colorHex} ${segment.start}deg ${segment.end}deg`)
+      .join(', ')})`;
+  }, [pieSegments]);
+
+  const hoveredCategory = categorySummaries.find((item) => item.category.id === hoveredCategoryId);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,11 +307,16 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     setIsSaving(true);
     setSaveError(undefined);
     try {
-      if (draftCategory.name !== initial.name || draftCategory.colorHex !== initial.colorHex) {
+      if (
+        draftCategory.name !== initial.name ||
+        draftCategory.colorHex !== initial.colorHex ||
+        draftCategory.icon !== initial.icon
+      ) {
         await budgetRepository.updateCategory(
           initial.id,
           draftCategory.name.trim(),
           draftCategory.colorHex,
+          draftCategory.icon,
         );
       }
 
@@ -303,9 +380,10 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
   const createCategory = async () => {
     const name = newCategoryName.trim();
     if (!name) return;
-    await budgetRepository.createCategory(name, newCategoryColorHex);
+    await budgetRepository.createCategory(name, newCategoryColorHex, newCategoryIcon);
     setNewCategoryName('');
     setNewCategoryColorHex('#00e676');
+    setNewCategoryIcon('category');
     setIsAddCatModalOpen(false);
     await refreshCategories();
   };
@@ -391,10 +469,10 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
         </div>
       ) : null}
 
-      <section className="budget-overview" aria-label="Budget overview" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
-        <article className="budget-hero-card" style={{ width: '100%' }}>
-          <div className="budget-hero-topline" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <span className="budget-section-label" style={{ fontSize: '0.85rem', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 'bold' }}>Monthly Posture</span>
+      <section className="budget-overview" aria-label="Budget overview">
+        <article className="budget-hero-card">
+          <div className="budget-hero-topline">
+            <span className="budget-section-label">Monthly Posture</span>
             <span
               className={`budget-health-pill budget-health-pill-${budgetHealthTone}`}
               aria-label={`Budget health ${budgetHealthLabel}`}
@@ -403,37 +481,89 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
             </span>
           </div>
 
-          <div className="budget-hero-main" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div>
-              <span className="budget-summary-label" style={{ display: 'block', fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Budgeted Amount</span>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                <strong style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--md-sys-color-primary)' }}>
+          <div className="budget-hero-main">
+            <div className="budget-posture-summary">
+              <span className="budget-summary-label">Budgeted Amount</span>
+              <div className="budget-total-line">
+                <strong>
                   {formatMoney(totals.totalMonth)}
                 </strong>
-                <span style={{ fontSize: '1rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                <span>
                   / {incomeLoading ? '—' : formatMoney(incomeTotals.monthlyNet)} budgeted
                 </span>
               </div>
-            </div>
 
-            <div className="budget-progress-panel" style={{ marginTop: 0 }}>
-              <div className="budget-progress-header" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)', marginBottom: '6px' }}>
+              <div className="budget-progress-panel">
+                <div className="budget-progress-header">
                 <span>Income Budgeted</span>
                 <strong>{incomeLoading ? '—' : formatPercent(totals.percentNet)}</strong>
               </div>
-              <div className="budget-progress-track" aria-hidden="true" style={{ height: '8px', backgroundColor: 'var(--md-sys-color-surface-container-highest)', borderRadius: '4px', overflow: 'hidden' }}>
+                <div className="budget-progress-track" aria-hidden="true">
                 <span
                   className={`budget-progress-fill ${isOverBudget ? 'budget-progress-fill-over' : ''}`}
-                  style={{
-                    display: 'block',
-                    height: '100%',
-                    backgroundColor: isOverBudget ? 'var(--md-sys-color-error)' : 'var(--md-sys-color-primary)',
-                    width: `${clampPercent(allocationRate)}%`,
-                    transition: 'width 0.3s ease'
-                  }}
+                  style={{ width: `${clampPercent(allocationRate)}%` }}
                 />
+                </div>
               </div>
             </div>
+
+            <section className="budget-allocation-panel" aria-label="Budget allocation">
+              <div
+                className="budget-pie-chart"
+                role="img"
+                aria-label="Budget allocation pie chart"
+                style={{ background: pieGradient }}
+                onMouseMove={(event) => {
+                  const bounds = event.currentTarget.getBoundingClientRect();
+                  const x = event.clientX - bounds.left - bounds.width / 2;
+                  const y = event.clientY - bounds.top - bounds.height / 2;
+                  const distance = Math.sqrt(x * x + y * y);
+                  if (distance > bounds.width / 2 || distance < bounds.width * 0.22) {
+                    setHoveredCategoryId(undefined);
+                    return;
+                  }
+                  const angle = (Math.atan2(y, x) * 180 / Math.PI + 450) % 360;
+                  setHoveredCategoryId(
+                    pieSegments.find((segment) => angle >= segment.start && angle < segment.end)?.category.id,
+                  );
+                }}
+                onMouseLeave={() => setHoveredCategoryId(undefined)}
+              >
+                <span className="budget-pie-center">
+                  <strong>{formatMoney(totals.totalMonth)}</strong>
+                  <span>monthly</span>
+                </span>
+              </div>
+              <div className="budget-pie-details" aria-live="polite">
+                {hoveredCategory ? (
+                  <>
+                    <span className="budget-pie-detail-name">
+                      <i style={{ backgroundColor: hoveredCategory.category.colorHex }} aria-hidden="true" />
+                      {hoveredCategory.category.name}
+                    </span>
+                    <strong>{formatMoney(hoveredCategory.monthlyAmount)}</strong>
+                    <span>{formatPercent(hoveredCategory.percentage)}</span>
+                  </>
+                ) : (
+                  <span>Hover a section for category details</span>
+                )}
+              </div>
+              <div className="budget-pie-legend">
+                {pieSegments.map((segment) => (
+                  <button
+                    key={segment.category.id}
+                    type="button"
+                    onMouseEnter={() => setHoveredCategoryId(segment.category.id)}
+                    onFocus={() => setHoveredCategoryId(segment.category.id)}
+                    onMouseLeave={() => setHoveredCategoryId(undefined)}
+                    aria-label={`${segment.category.name}: ${formatMoney(segment.monthlyAmount)}, ${formatPercent(segment.percentage)}`}
+                  >
+                    <i style={{ backgroundColor: segment.category.colorHex }} aria-hidden="true" />
+                    {segment.category.name}
+                  </button>
+                ))}
+              </div>
+            </section>
           </div>
         </article>
       </section>
@@ -446,14 +576,19 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               <h2>Budget category list</h2>
               <p>Expand a category to edit the group and the line items that make it up.</p>
             </div>
-            <button
-              className="primary-action"
-              type="button"
-              onClick={() => setIsAddCatModalOpen(true)}
-            >
-              <span className="material-symbols-outlined" aria-hidden="true">add</span>
-              Add Category
-            </button>
+            <div className="budget-master-actions">
+              <label className="budget-sort-control">
+                <span>Sort</span>
+                <select aria-label="Sort categories" value={sortBy} onChange={(event) => setSortBy(event.target.value as BudgetSort)}>
+                  <option value="amount">Amount: high to low</option>
+                  <option value="name">Name: A to Z</option>
+                </select>
+              </label>
+              <button className="primary-action" type="button" onClick={() => setIsAddCatModalOpen(true)}>
+                <span className="material-symbols-outlined" aria-hidden="true">add</span>
+                Add Category
+              </button>
+            </div>
           </section>
 
           {isLoading ? (
@@ -469,7 +604,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
             </div>
           ) : (
             <div className="budget-category-list budget-accordion-list" role="list">
-              {categories.map((cat) => {
+              {sortedCategories.map(({ category: cat }) => {
                 const isExpanded = cat.id === selectedCategoryId;
                 const effectiveCat =
                   isExpanded && draftCategory ? draftCategory : cat;
@@ -507,7 +642,9 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                         <span className="material-symbols-outlined budget-accordion-icon" aria-hidden="true">
                           {isExpanded ? 'expand_less' : 'expand_more'}
                         </span>
-                        <span className="budget-category-color-dot" aria-hidden="true" />
+                        <span className="material-symbols-outlined budget-category-icon" aria-hidden="true">
+                          {effectiveCat.icon}
+                        </span>
                         <span className="budget-category-copy">
                           <span className="budget-category-name">{effectiveCat.name || 'Untitled'}</span>
                           <span className="budget-category-meta">
@@ -590,20 +727,37 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                                 }}
                               />
                             </label>
-                            <label className="field budget-color-field">
+                            <div className="field budget-color-field">
                               <span>Category color</span>
-                              <input
-                                type="color"
-                                value={draftCategory.colorHex}
-                                onChange={(e) => {
-                                  const nextColorHex = e.target.value;
-                                  setDraftCategory((prev) => {
-                                    if (!prev) return prev;
-                                    return { ...prev, colorHex: nextColorHex };
-                                  });
+                              <div className="budget-color-palette" role="group" aria-label="Category color">
+                                {budgetColors.map((color) => (
+                                  <button
+                                    key={color.value}
+                                    className={draftCategory.colorHex === color.value ? 'budget-color-swatch budget-color-swatch-selected' : 'budget-color-swatch'}
+                                    type="button"
+                                    aria-label={`Use ${color.name} color`}
+                                    aria-pressed={draftCategory.colorHex === color.value}
+                                    style={{ backgroundColor: color.value }}
+                                    onClick={() => {
+                                      setDraftCategory((prev) => prev ? { ...prev, colorHex: color.value } : prev);
+                                      setIsDirty(true);
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            <label className="field budget-icon-field">
+                              <span>Category icon</span>
+                              <select
+                                aria-label="Category icon"
+                                value={draftCategory.icon}
+                                onChange={(event) => {
+                                  setDraftCategory((prev) => prev ? { ...prev, icon: event.target.value } : prev);
                                   setIsDirty(true);
                                 }}
-                              />
+                              >
+                                {categoryIcons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                              </select>
                             </label>
                           </div>
 
@@ -751,13 +905,27 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                   autoFocus
                 />
               </label>
-              <label className="field budget-color-field">
+              <div className="field budget-color-field">
                 <span>Color</span>
-                <input
-                  type="color"
-                  value={newCategoryColorHex}
-                  onChange={(e) => setNewCategoryColorHex(e.target.value)}
-                />
+                <div className="budget-color-palette" role="group" aria-label="New category color">
+                  {budgetColors.map((color) => (
+                    <button
+                      key={color.value}
+                      className={newCategoryColorHex === color.value ? 'budget-color-swatch budget-color-swatch-selected' : 'budget-color-swatch'}
+                      type="button"
+                      aria-label={`Use ${color.name} color`}
+                      aria-pressed={newCategoryColorHex === color.value}
+                      style={{ backgroundColor: color.value }}
+                      onClick={() => setNewCategoryColorHex(color.value)}
+                    />
+                  ))}
+                </div>
+              </div>
+              <label className="field budget-icon-field">
+                <span>Icon</span>
+                <select aria-label="New category icon" value={newCategoryIcon} onChange={(event) => setNewCategoryIcon(event.target.value)}>
+                  {categoryIcons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
               </label>
             </div>
 

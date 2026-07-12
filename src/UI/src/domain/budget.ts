@@ -2,6 +2,7 @@ export type BudgetCategory = {
   id: string;
   name: string;
   colorHex: string;
+  icon: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -23,6 +24,7 @@ export type BudgetCategoryDraft = {
   id?: string;
   name: string;
   colorHex: string;
+  icon: string;
 };
 
 export type BudgetSubCategoryDraft = {

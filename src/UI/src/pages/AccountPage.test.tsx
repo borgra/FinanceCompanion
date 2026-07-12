@@ -40,6 +40,7 @@ const renderPage = (initialAccounts?: Account[]) => {
         id: 'cat-housing',
         name: 'Housing',
         colorHex: '#4de3ff',
+        icon: 'home',
         createdAt: '2026-06-30T00:00:00.000Z',
         updatedAt: '2026-06-30T00:00:00.000Z',
         subCategories: [

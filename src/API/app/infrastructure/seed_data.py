@@ -130,7 +130,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-housing",
             "name": "Housing",
-            "colorHex": "#4de3ff",
+            "colorHex": "#38bdf8",
+            "icon": "home",
             "createdAt": "2026-06-30T00:00:00.000Z",
             "updatedAt": "2026-06-30T00:00:00.000Z",
             "subCategories": [
@@ -155,7 +156,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-utilities",
             "name": "Utilities",
-            "colorHex": "#9d7bff",
+            "colorHex": "#a78bfa",
+            "icon": "bolt",
             "createdAt": "2026-06-30T00:00:00.000Z",
             "updatedAt": "2026-06-30T00:00:00.000Z",
             "subCategories": [
@@ -188,7 +190,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-groceries",
             "name": "Groceries",
-            "colorHex": "#ffd06a",
+            "colorHex": "#f59e0b",
+            "icon": "shopping_cart",
             "createdAt": "2026-06-30T00:00:00.000Z",
             "updatedAt": "2026-06-30T00:00:00.000Z",
             "subCategories": [
@@ -213,7 +216,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-transport",
             "name": "Transportation",
-            "colorHex": "#5cff9a",
+            "colorHex": "#14b8a6",
+            "icon": "directions_car",
             "createdAt": "2026-06-30T00:00:00.000Z",
             "updatedAt": "2026-06-30T00:00:00.000Z",
             "subCategories": [
@@ -238,7 +242,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-health",
             "name": "Healthcare",
-            "colorHex": "#ff6db1",
+            "colorHex": "#fb7185",
+            "icon": "health_and_safety",
             "createdAt": "2026-06-30T00:00:00.000Z",
             "updatedAt": "2026-06-30T00:00:00.000Z",
             "subCategories": [
@@ -263,7 +268,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-lifestyle",
             "name": "Lifestyle",
-            "colorHex": "#ff8f4d",
+            "colorHex": "#f97316",
+            "icon": "restaurant",
             "createdAt": "2026-06-30T00:00:00.000Z",
             "updatedAt": "2026-06-30T00:00:00.000Z",
             "subCategories": [
@@ -288,7 +294,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-debt",
             "name": "Debt Payments",
-            "colorHex": "#ff6b6b",
+            "colorHex": "#fb7185",
+            "icon": "payments",
             "createdAt": SEED_TIMESTAMP,
             "updatedAt": SEED_TIMESTAMP,
             "subCategories": [
@@ -313,7 +320,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-insurance",
             "name": "Insurance",
-            "colorHex": "#45b7d1",
+            "colorHex": "#38bdf8",
+            "icon": "health_and_safety",
             "createdAt": SEED_TIMESTAMP,
             "updatedAt": SEED_TIMESTAMP,
             "subCategories": [
@@ -338,7 +346,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-subscriptions",
             "name": "Subscriptions",
-            "colorHex": "#7c6cff",
+            "colorHex": "#a78bfa",
+            "icon": "subscriptions",
             "createdAt": SEED_TIMESTAMP,
             "updatedAt": SEED_TIMESTAMP,
             "subCategories": [
@@ -363,7 +372,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-savings",
             "name": "Savings Goals",
-            "colorHex": "#35c759",
+            "colorHex": "#00e676",
+            "icon": "savings",
             "createdAt": SEED_TIMESTAMP,
             "updatedAt": SEED_TIMESTAMP,
             "subCategories": [
@@ -388,7 +398,8 @@ SEED_BUDGET_CATEGORIES = {
         {
             "id": "cat-giving",
             "name": "Giving",
-            "colorHex": "#f7b731",
+            "colorHex": "#f59e0b",
+            "icon": "volunteer_activism",
             "createdAt": SEED_TIMESTAMP,
             "updatedAt": SEED_TIMESTAMP,
             "subCategories": [

@@ -104,6 +104,7 @@ def to_budget_category_payload(item: BudgetCategory) -> BudgetCategoryPayload:
         id=item.id,
         name=item.name,
         color_hex=item.color_hex,
+        icon=item.icon,
         created_at=item.created_at,
         updated_at=item.updated_at,
         sub_categories=[to_budget_sub_category_payload(sub) for sub in item.sub_categories],

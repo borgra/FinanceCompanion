@@ -72,6 +72,7 @@ describe('InvestingPage', () => {
 
   it('adds a searched security to investment accounts', async () => {
     const holdingRepository = createMockHoldingRepository();
+    const searchSecurities = vi.spyOn(holdingRepository, 'searchSecurities');
     const refreshHoldingSecurityDetails = vi.spyOn(
       holdingRepository,
       'refreshHoldingSecurityDetails',
@@ -90,9 +91,13 @@ describe('InvestingPage', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
+    expect(screen.getByLabelText('Security')).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText('Security')).toHaveAttribute('autocapitalize', 'none');
+    expect(screen.getByLabelText('Security')).toHaveAttribute('spellcheck', 'false');
     await userEvent.type(screen.getByLabelText('Security'), 'vti');
     await selectSecurityFromDialog('VTI');
     await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
+    expect(searchSecurities).toHaveBeenCalledWith('vti');
 
     await userEvent.type(
       screen.getByLabelText('VTI quantity for Fidelity Taxable Brokerage'),
@@ -130,6 +135,34 @@ describe('InvestingPage', () => {
     expect(updateManualPayoutDetails).toHaveBeenCalledTimes(1);
   });
 
+  it('allows a manual ticker when security search is unavailable', async () => {
+    const holdingRepository = createMockHoldingRepository();
+    vi.spyOn(holdingRepository, 'searchSecurities').mockRejectedValue(new Error('Unavailable'));
+    render(
+      <InvestingPage
+        accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
+        holdingRepository={holdingRepository}
+        incomeRepository={createMockIncomeSourceRepository()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
+    await userEvent.type(screen.getByLabelText('Security'), 'schd');
+
+    expect(
+      await screen.findByText(
+        'Search is unavailable. You can add a ticker manually.',
+        {},
+        { timeout: 3000 },
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Row' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
+    expect(await screen.findByRole('cell', { name: 'SCHD' })).toBeInTheDocument();
+  });
+
   it('reuses an existing holding when the same security is added again', async () => {
     render(
       <InvestingPage
@@ -144,7 +177,6 @@ describe('InvestingPage', () => {
     for (let index = 0; index < 2; index += 1) {
       await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
       await userEvent.type(screen.getByLabelText('Security'), 'vti');
-      await selectSecurityFromDialog('VTI');
       await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
       await screen.findByText('VTI was added.');
     }
@@ -166,7 +198,6 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
     await userEvent.type(screen.getByLabelText('Security'), 'vti');
-    await selectSecurityFromDialog('VTI');
     await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
     expect(await screen.findByRole('cell', { name: 'VTI' })).toBeInTheDocument();
 
@@ -273,7 +304,6 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
     await userEvent.type(screen.getByLabelText('Security'), 'vti');
-    await selectSecurityFromDialog('VTI');
     await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
     await userEvent.type(
       screen.getByLabelText('VTI quantity for Fidelity Taxable Brokerage'),

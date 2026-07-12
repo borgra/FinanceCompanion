@@ -12,4 +12,5 @@ class BudgetCategory:
     color_hex: str
     created_at: str
     updated_at: str
+    icon: str = "category"
     sub_categories: list[BudgetSubCategory] = field(default_factory=list)

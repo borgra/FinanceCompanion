@@ -44,7 +44,7 @@ def test_details_provider_keeps_quote_when_optional_endpoints_fail(monkeypatch):
     assert details.details_status == "partial"
 
 
-def test_details_provider_prioritizes_dividends_before_later_partial_failures(monkeypatch):
+def test_details_provider_prioritizes_quote_before_optional_detail_requests(monkeypatch):
     requested_functions = []
 
     def fake_get(url, params, timeout, headers):
@@ -69,7 +69,7 @@ def test_details_provider_prioritizes_dividends_before_later_partial_failures(mo
 
     details = AlphaVantageSecurityDetailsProvider("test-key").get_details(security("MSFT"))
 
-    assert requested_functions[:3] == ["DIVIDENDS", "GLOBAL_QUOTE", "OVERVIEW"]
+    assert requested_functions[:3] == ["GLOBAL_QUOTE", "DIVIDENDS", "OVERVIEW"]
     assert details.price == 512.88
     assert details.dividend_status == "unavailable"
     assert details.pe_ratio == 23.04
@@ -248,8 +248,8 @@ def test_details_provider_populates_voo_without_premium_adjusted_daily_call(monk
     details = AlphaVantageSecurityDetailsProvider("test-key").get_details(security("VOO"))
 
     assert requested_functions == [
-        "DIVIDENDS",
         "GLOBAL_QUOTE",
+        "DIVIDENDS",
         "OVERVIEW",
         "TIME_SERIES_DAILY",
     ]

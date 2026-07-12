@@ -187,8 +187,8 @@ class AlphaVantageSecurityDetailsProvider:
         if not self._api_key or self._api_key == "not-configured":
             raise SecurityDetailsUnavailableError("Security details are not configured.")
 
-        dividends, dividends_failed = self._try_get({"function": "DIVIDENDS", "symbol": symbol})
         quote, quote_failed = self._try_get({"function": "GLOBAL_QUOTE", "symbol": symbol})
+        dividends, dividends_failed = self._try_get({"function": "DIVIDENDS", "symbol": symbol})
         overview, overview_failed = self._try_get({"function": "OVERVIEW", "symbol": symbol})
         daily, daily_failed = self._try_get(
             {

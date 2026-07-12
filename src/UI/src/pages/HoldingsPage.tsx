@@ -32,6 +32,9 @@ const formatMoney = (value: number) => (value === 0 ? '$   -   ' : currencyForma
 
 const parseQuantity = (value: string) => Number(value.replace(/[,\s]/g, '')) || 0;
 
+const securitySymbolFromInput = (value: string) => value.trim().toUpperCase();
+const isValidSecuritySymbol = (value: string) => /^[A-Z0-9.-]+$/.test(value);
+
 const refreshThrottleMs = 3000;
 
 const wait = (milliseconds: number) =>
@@ -136,12 +139,10 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         } catch {
           if (isCurrent) {
             setResults([]);
-            setSearchError('Security search is unavailable. Check Alpha Vantage configuration and try again.');
+            setSearchError('Search is unavailable. You can add a ticker manually.');
           }
         } finally {
-          if (isCurrent) {
-            setIsSearching(false);
-          }
+          if (isCurrent) setIsSearching(false);
         }
       })();
     }, SECURITY_SEARCH_DELAY_MS);
@@ -324,7 +325,8 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
 
   const addHoldingRow = async (event: FormEvent) => {
     event.preventDefault();
-    if (!selectedSecurity || managedAccounts.length === 0) {
+    const symbol = securitySymbolFromInput(query);
+    if ((!selectedSecurity && !isValidSecuritySymbol(symbol)) || managedAccounts.length === 0) {
       return;
     }
 
@@ -333,7 +335,14 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setSuccessMessage(null);
     try {
       const created = await holdingRepository.createHolding({
-        security: selectedSecurity,
+        security: selectedSecurity ?? {
+          symbol,
+          name: symbol,
+          exchange: 'Unknown',
+          assetType: 'Unknown',
+          currency: 'USD',
+          price: null,
+        },
         accountPositions: managedAccounts.map((account) => ({
           accountId: account.id,
           quantity: 0,
@@ -684,6 +693,9 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   value={query}
                   placeholder="Search by symbol or name"
                   autoFocus
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setSelectedSecurity(null);
@@ -692,7 +704,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   }}
                 />
               </label>
-
               <div className="security-search-results" aria-live="polite">
                 {selectedSecurity ? (
                   <div className="security-result selected-security">
@@ -721,7 +732,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                     </button>
                   ))
                 ) : query ? (
-                  <p className="status-copy">No matching securities.</p>
+                  <p className="status-copy">No matching securities. Enter a ticker to add it manually.</p>
                 ) : null}
               </div>
             </div>
@@ -729,7 +740,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
               <button className="secondary-action" type="button" onClick={closeAddDialog}>
                 Cancel
               </button>
-              <button className="primary-action" type="submit" disabled={!selectedSecurity || isSaving}>
+              <button
+                className="primary-action"
+                type="submit"
+                disabled={(!selectedSecurity && !isValidSecuritySymbol(securitySymbolFromInput(query))) || isSaving}
+              >
                 Add Row
               </button>
             </div>
