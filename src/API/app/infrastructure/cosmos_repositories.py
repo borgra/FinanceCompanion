@@ -33,6 +33,10 @@ def _optional_float(value) -> float | None:
     return float(value) if value is not None else None
 
 
+def _nested_or_legacy(data: dict, nested: dict, nested_key: str, legacy_key: str):
+    return nested.get(nested_key) if nested_key in nested else data.get(legacy_key)
+
+
 # --- Conversion Helpers ---
 
 def _user_from_entity(entity: dict) -> User:
@@ -234,6 +238,8 @@ def _account_to_entity(user_id: str, account: Account) -> dict:
 
 
 def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
+    dividends = data.get("dividends") or {}
+    payouts_data = dividends.get("payouts") or data.get("payoutDetails", [])
     return SecurityMetadata(
         symbol=data["symbol"],
         name=data["name"],
@@ -247,10 +253,32 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         thirty_day_yield=_optional_float(data.get("thirtyDayYield")),
         fifty_two_week_low=_optional_float(data.get("fiftyTwoWeekLow")),
         fifty_two_week_high=_optional_float(data.get("fiftyTwoWeekHigh")),
-        dividend_previous_year=_optional_float(data.get("dividendPreviousYear")),
-        dividend_current_year=_optional_float(data.get("dividendCurrentYear")),
-        dividend_growth_rate=_optional_float(data.get("dividendGrowthRate")),
-        estimated_future_payout=_optional_float(data.get("estimatedFuturePayout")),
+        dividend_previous_year=_optional_float(_nested_or_legacy(
+            data,
+            dividends,
+            "previousYear",
+            "dividendPreviousYear",
+        )),
+        dividend_current_year=_optional_float(_nested_or_legacy(
+            data,
+            dividends,
+            "currentYear",
+            "dividendCurrentYear",
+        )),
+        dividend_growth_rate=_optional_float(_nested_or_legacy(
+            data,
+            dividends,
+            "growthRate",
+            "dividendGrowthRate",
+        )),
+        estimated_future_payout=_optional_float(
+            _nested_or_legacy(
+                data,
+                dividends,
+                "estimatedFuturePayout",
+                "estimatedFuturePayout",
+            )
+        ),
         sma20=_optional_float(data.get("sma20")),
         sma50=_optional_float(data.get("sma50")),
         sma200=_optional_float(data.get("sma200")),
@@ -258,7 +286,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         details_status=data.get("detailsStatus"),
         payout_details=[
             _security_payout_details_from_dict(item)
-            for item in data.get("payoutDetails", [])
+            for item in payouts_data
         ],
     )
 
@@ -299,16 +327,22 @@ def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
         "thirtyDayYield": security.thirty_day_yield,
         "fiftyTwoWeekLow": security.fifty_two_week_low,
         "fiftyTwoWeekHigh": security.fifty_two_week_high,
-        "dividendPreviousYear": security.dividend_previous_year,
-        "dividendCurrentYear": security.dividend_current_year,
-        "dividendGrowthRate": security.dividend_growth_rate,
-        "estimatedFuturePayout": security.estimated_future_payout,
+        "dividends": _security_dividends_to_dict(security),
         "sma20": security.sma20,
         "sma50": security.sma50,
         "sma200": security.sma200,
         "detailsUpdatedAt": security.details_updated_at,
         "detailsStatus": security.details_status,
-        "payoutDetails": [
+    }
+
+
+def _security_dividends_to_dict(security: SecurityMetadata) -> dict:
+    return {
+        "previousYear": security.dividend_previous_year,
+        "currentYear": security.dividend_current_year,
+        "growthRate": security.dividend_growth_rate,
+        "estimatedFuturePayout": security.estimated_future_payout,
+        "payouts": [
             _security_payout_details_to_dict(payout)
             for payout in security.payout_details
         ],
@@ -324,19 +358,12 @@ def _security_details_to_dict(security: SecurityMetadata) -> dict:
         "thirtyDayYield": security.thirty_day_yield,
         "fiftyTwoWeekLow": security.fifty_two_week_low,
         "fiftyTwoWeekHigh": security.fifty_two_week_high,
-        "dividendPreviousYear": security.dividend_previous_year,
-        "dividendCurrentYear": security.dividend_current_year,
-        "dividendGrowthRate": security.dividend_growth_rate,
-        "estimatedFuturePayout": security.estimated_future_payout,
+        "dividends": _security_dividends_to_dict(security),
         "sma20": security.sma20,
         "sma50": security.sma50,
         "sma200": security.sma200,
         "detailsUpdatedAt": security.details_updated_at,
         "detailsStatus": security.details_status,
-        "payoutDetails": [
-            _security_payout_details_to_dict(payout)
-            for payout in security.payout_details
-        ],
     }
 
 

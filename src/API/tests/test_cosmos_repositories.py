@@ -303,21 +303,81 @@ def test_holding_stores_security_identity_and_details_separately(mock_table_clie
     assert security_details["price"] == 315.12
     assert security_details["sector"] == "Diversified"
     assert security_details["industry"] == "Broad Market"
-    assert security_details["payoutDetails"] == [
-        {
-            "exDividendDate": "2026-06-28",
-            "amount": 0.45,
-            "declarationDate": None,
-            "recordDate": None,
-            "paymentDate": "2026-07-02",
-            "source": "dividends",
-        }
-    ]
+    assert "payoutDetails" not in security_details
+    assert security_details["dividends"] == {
+        "previousYear": None,
+        "currentYear": None,
+        "growthRate": None,
+        "estimatedFuturePayout": None,
+        "payouts": [
+            {
+                "exDividendDate": "2026-06-28",
+                "amount": 0.45,
+                "declarationDate": None,
+                "recordDate": None,
+                "paymentDate": "2026-07-02",
+                "source": "dividends",
+            }
+        ],
+    }
     positions = json.loads(entity["accountPositionsJson"])
     assert positions == [
         {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},
         {"accountId": "acc-roth-ira", "quantity": 4, "costBasis": 990},
     ]
+
+
+def test_holding_reads_new_dividend_section(mock_table_client):
+    repo = CosmosHoldingRepository(mock_table_client)
+    mock_table_client.query_entities.return_value = [
+        {
+            "PartitionKey": "user-123",
+            "RowKey": "holding:holding-1",
+            "entityId": "holding-1",
+            "securitySymbol": "SCHD",
+            "securityName": "Schwab U.S. Dividend Equity ETF",
+            "securityExchange": "NYSE Arca",
+            "securityAssetType": "ETF",
+            "securityCurrency": "USD",
+            "securityDetails": json.dumps({
+                "price": 80.12,
+                "dividends": {
+                    "previousYear": 2.65,
+                    "currentYear": 1.34,
+                    "growthRate": -0.4943,
+                    "estimatedFuturePayout": 1.34,
+                    "payouts": [
+                        {
+                            "exDividendDate": "2026-06-25",
+                            "amount": 0.26,
+                            "declarationDate": "2026-06-20",
+                            "recordDate": "2026-06-26",
+                            "paymentDate": "2026-07-01",
+                            "source": "dividends",
+                        }
+                    ],
+                },
+                "detailsUpdatedAt": "2026-07-11T19:21:28.294379Z",
+                "detailsStatus": "fresh",
+            }),
+            "accountPositionsJson": json.dumps([
+                {"accountId": "acc-1", "quantity": 25.0, "costBasis": 1900},
+            ]),
+            "createdAt": "2026-07-10T02:32:48.231011Z",
+            "updatedAt": "2026-07-11T19:21:28.294379Z",
+        }
+    ]
+
+    holdings = repo.list_for_user("user-123")
+
+    security = holdings[0].security
+    assert security.symbol == "SCHD"
+    assert security.dividend_previous_year == 2.65
+    assert security.dividend_current_year == 1.34
+    assert security.dividend_growth_rate == -0.4943
+    assert security.estimated_future_payout == 1.34
+    assert security.payout_details[0].ex_dividend_date == "2026-06-25"
+    assert security.payout_details[0].payment_date == "2026-07-01"
 
 
 def test_holding_reads_security_details_attribute(mock_table_client):
