@@ -31,6 +31,7 @@ class SecurityMetadata:
     dividend_current_year: float | None = None
     dividend_growth_rate: float | None = None
     estimated_future_payout: float | None = None
+    dividend_status: str | None = None
     sma20: float | None = None
     sma50: float | None = None
     sma200: float | None = None

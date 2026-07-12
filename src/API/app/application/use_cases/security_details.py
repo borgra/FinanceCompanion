@@ -64,6 +64,7 @@ def merge_security_details(
         dividend_current_year=_coalesce(details.dividend_current_year, current.dividend_current_year),
         dividend_growth_rate=_coalesce(details.dividend_growth_rate, current.dividend_growth_rate),
         estimated_future_payout=_coalesce(details.estimated_future_payout, current.estimated_future_payout),
+        dividend_status=_coalesce(details.dividend_status, current.dividend_status),
         sma20=_coalesce(details.sma20, current.sma20),
         sma50=_coalesce(details.sma50, current.sma50),
         sma200=_coalesce(details.sma200, current.sma200),

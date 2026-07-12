@@ -138,6 +138,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         dividend_current_year=_optional_float(data.get("dividendCurrentYear")),
         dividend_growth_rate=_optional_float(data.get("dividendGrowthRate")),
         estimated_future_payout=_optional_float(data.get("estimatedFuturePayout")),
+        dividend_status=data.get("dividendStatus"),
         sma20=_optional_float(data.get("sma20")),
         sma50=_optional_float(data.get("sma50")),
         sma200=_optional_float(data.get("sma200")),

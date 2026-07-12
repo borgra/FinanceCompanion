@@ -156,8 +156,9 @@ describe('InvestingPage', () => {
     expect(screen.getByText('No holdings have been added yet.')).toBeInTheDocument();
   });
 
-  it('shows passive income schedule and five year projection from holdings', async () => {
+  it('shows passive income by month with prior actuals and next year estimates', async () => {
     const holdingRepository = createMockHoldingRepository();
+    const currentYear = new Date().getFullYear();
     render(
       <InvestingPage
         accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
@@ -181,13 +182,33 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Passive Income' }));
 
     expect(await screen.findByRole('heading', { name: 'Passive Income' })).toBeInTheDocument();
-    expect(screen.getByText('Estimated annual income')).toBeInTheDocument();
-    expect(screen.getByText('$46.50')).toBeInTheDocument();
-    expect(screen.getByText('2026 Payment Schedule')).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: '2026-07-02' })).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: '$5.63' })).toBeInTheDocument();
-    expect(screen.getByText('5 Year Income Projection')).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: '2027' })).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: '$48.73' })).toBeInTheDocument();
+    expect(screen.getByText(String(currentYear))).toBeInTheDocument();
+    expect(screen.getByText('Dividend income')).toBeInTheDocument();
+    expect(screen.getAllByText('$5.63').length).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole('button', { name: /Jul, 1 payment, \$5\.63/i }));
+
+    expect(screen.getByText(`${currentYear}-07-02`)).toBeInTheDocument();
+    expect(screen.getByText('VTI')).toBeInTheDocument();
+    expect(screen.getByText('Vanguard Total Stock Market ETF')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show prior year' }));
+
+    expect(screen.getByText(String(currentYear - 1))).toBeInTheDocument();
+    expect(screen.getByText('Prior year actuals')).toBeInTheDocument();
+    expect(screen.getAllByText('$5.00').length).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show next year' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Show next year' }));
+
+    expect(screen.getByText(String(currentYear + 1))).toBeInTheDocument();
+    expect(screen.getByText('Next year estimate')).toBeInTheDocument();
+    expect(screen.getByText('Estimated income')).toBeInTheDocument();
+    expect(screen.getAllByText('$5.89').length).toBeGreaterThan(0);
+
+    await userEvent.click(screen.getByRole('button', { name: /Jul, 1 payment, \$5\.89/i }));
+
+    expect(screen.getByText(`${currentYear + 1}-07-02`)).toBeInTheDocument();
+    expect(screen.getByText('4.79% growth estimate')).toBeInTheDocument();
   });
 });

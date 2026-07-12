@@ -306,10 +306,7 @@ def test_holding_stores_security_identity_and_details_separately(mock_table_clie
     assert "payoutDetails" not in security_details
     assert "dividends" not in security_details
     assert json.loads(entity["dividendsJson"]) == {
-        "previousYear": None,
-        "currentYear": None,
-        "growthRate": None,
-        "estimatedFuturePayout": None,
+        "status": "recent",
         "payouts": [
             {
                 "exDividendDate": "2026-06-28",
@@ -346,6 +343,7 @@ def test_holding_reads_new_dividend_section(mock_table_client):
                 "detailsStatus": "fresh",
             }),
             "dividendsJson": json.dumps({
+                "status": "recent",
                 "previousYear": 2.65,
                 "currentYear": 1.34,
                 "growthRate": -0.4943,
@@ -377,8 +375,38 @@ def test_holding_reads_new_dividend_section(mock_table_client):
     assert security.dividend_current_year == 1.34
     assert security.dividend_growth_rate == -0.4943
     assert security.estimated_future_payout == 1.34
+    assert security.dividend_status == "recent"
     assert security.payout_details[0].ex_dividend_date == "2026-06-25"
     assert security.payout_details[0].payment_date == "2026-07-01"
+
+
+def test_holding_writes_none_recent_dividend_section_without_null_totals(mock_table_client):
+    repo = CosmosHoldingRepository(mock_table_client)
+    holding = Holding(
+        id="holding-1",
+        security=SecurityMetadata(
+            symbol="BA",
+            name="Boeing Company",
+            exchange="United States",
+            asset_type="Equity",
+            currency="USD",
+            price=229.66,
+            dividend_status="none_recent",
+        ),
+        account_positions=[
+            HoldingAccountPosition("acc-taxable-brokerage", 10, None),
+        ],
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-01T00:00:00Z",
+    )
+
+    repo.create_for_user("user-123", holding)
+
+    entity = mock_table_client.create_entity.call_args[0][0]
+    assert json.loads(entity["dividendsJson"]) == {
+        "status": "none_recent",
+        "payouts": [],
+    }
 
 
 def test_holding_reads_legacy_dividend_section_inside_security_details(mock_table_client):
@@ -396,6 +424,7 @@ def test_holding_reads_legacy_dividend_section_inside_security_details(mock_tabl
             "securityDetails": json.dumps({
                 "price": 63.31,
                 "dividends": {
+                    "status": "recent",
                     "previousYear": 3.2155,
                     "currentYear": 1.8935,
                     "growthRate": -0.4111,
@@ -425,6 +454,7 @@ def test_holding_reads_legacy_dividend_section_inside_security_details(mock_tabl
     security = holdings[0].security
     assert security.dividend_previous_year == 3.2155
     assert security.dividend_current_year == 1.8935
+    assert security.dividend_status == "recent"
     assert security.payout_details[0].ex_dividend_date == "2026-07-31"
 
 

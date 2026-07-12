@@ -42,6 +42,7 @@ class FakeSecurityDetailsProvider:
             dividend_previous_year=3.4,
             dividend_current_year=3.6,
             dividend_growth_rate=0.0588,
+            dividend_status="recent",
             sma20=318.2,
         )
 
@@ -85,6 +86,7 @@ def test_refresh_holding_security_details_persists_merged_details():
     assert refreshed.security.dividend_previous_year == 3.4
     assert refreshed.security.dividend_current_year == 3.6
     assert refreshed.security.dividend_growth_rate == 0.0588
+    assert refreshed.security.dividend_status == "recent"
     assert refreshed.security.sma20 == 318.2
     assert refreshed.security.details_status == "fresh"
     assert refreshed.security.details_updated_at is not None

@@ -279,6 +279,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
                 "estimatedFuturePayout",
             )
         ),
+        dividend_status=dividends.get("status") or data.get("dividendStatus"),
         sma20=_optional_float(data.get("sma20")),
         sma50=_optional_float(data.get("sma50")),
         sma200=_optional_float(data.get("sma200")),
@@ -327,7 +328,7 @@ def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
         "thirtyDayYield": security.thirty_day_yield,
         "fiftyTwoWeekLow": security.fifty_two_week_low,
         "fiftyTwoWeekHigh": security.fifty_two_week_high,
-        "dividends": _security_dividends_to_dict(security),
+        "dividends": _security_dividends_to_dict(security) or {},
         "sma20": security.sma20,
         "sma50": security.sma50,
         "sma200": security.sma200,
@@ -336,17 +337,39 @@ def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
     }
 
 
-def _security_dividends_to_dict(security: SecurityMetadata) -> dict:
-    return {
+def _security_dividends_to_dict(security: SecurityMetadata) -> dict | None:
+    payouts = [
+        _security_payout_details_to_dict(payout)
+        for payout in security.payout_details
+    ]
+    status = security.dividend_status
+    if not status and not payouts and all(
+        value is None
+        for value in [
+            security.dividend_previous_year,
+            security.dividend_current_year,
+            security.dividend_growth_rate,
+            security.estimated_future_payout,
+        ]
+    ):
+        return None
+
+    data = {
+        "status": status or "recent",
+        "payouts": payouts,
+    }
+    optional_values = {
         "previousYear": security.dividend_previous_year,
         "currentYear": security.dividend_current_year,
         "growthRate": security.dividend_growth_rate,
         "estimatedFuturePayout": security.estimated_future_payout,
-        "payouts": [
-            _security_payout_details_to_dict(payout)
-            for payout in security.payout_details
-        ],
     }
+    data.update({
+        key: value
+        for key, value in optional_values.items()
+        if value is not None
+    })
+    return data
 
 
 def _security_details_to_dict(security: SecurityMetadata) -> dict:
@@ -416,7 +439,7 @@ def _holding_from_entity(entity: dict) -> Holding:
 
 
 def _holding_to_entity(user_id: str, holding: Holding) -> dict:
-    return {
+    entity = {
         "PartitionKey": user_id,
         "RowKey": f"holding:{holding.id}",
         "entityId": holding.id,
@@ -434,6 +457,10 @@ def _holding_to_entity(user_id: str, holding: Holding) -> dict:
             for item in holding.account_positions
         ]),
     }
+    dividends = _security_dividends_to_dict(holding.security)
+    if dividends is not None:
+        entity["dividendsJson"] = json.dumps(dividends)
+    return entity
 
 
 # --- Repository Implementations ---

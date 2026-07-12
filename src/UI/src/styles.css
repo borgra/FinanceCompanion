@@ -944,6 +944,52 @@ p {
   gap: 14px;
 }
 
+.passive-income-header {
+  align-items: center;
+}
+
+.passive-income-year-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.passive-income-year-button {
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: var(--md-sys-shape-corner-s);
+}
+
+.passive-income-year-button .material-symbols-outlined {
+  font-size: 1.2rem;
+}
+
+.passive-income-year-readout {
+  display: flex;
+  min-width: 154px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-height: 44px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: rgba(255, 255, 255, 0.018);
+}
+
+.passive-income-year-readout strong {
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-font-display);
+  font-size: 1rem;
+}
+
+.passive-income-year-readout span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .passive-income-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(160px, 1fr));
@@ -983,6 +1029,225 @@ p {
 
 .passive-income-section h3 {
   font-size: 0.9rem;
+}
+
+.passive-income-chart-section,
+.passive-income-months {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.passive-income-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.passive-income-section-heading h3 {
+  font-size: 0.9rem;
+}
+
+.passive-income-section-heading span {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.passive-income-chart {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 238px;
+  padding: 12px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: rgba(255, 255, 255, 0.014);
+}
+
+.passive-income-y-axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 4px 0 30px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: Consolas, monospace;
+  font-size: 0.68rem;
+  text-align: right;
+}
+
+.passive-income-bars {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(58px, 1fr));
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.passive-income-bar-item {
+  display: grid;
+  grid-template-rows: minmax(150px, 1fr) 20px 20px;
+  gap: 4px;
+  min-width: 58px;
+  padding: 0;
+  color: var(--md-sys-color-on-surface);
+  text-align: center;
+}
+
+.passive-income-bar-item:hover .passive-income-bar-track,
+.passive-income-bar-item[aria-expanded='true'] .passive-income-bar-track {
+  border-color: rgba(0, 230, 118, 0.52);
+  background-color: rgba(0, 230, 118, 0.05);
+}
+
+.passive-income-bar-track {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  min-height: 150px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: var(--md-sys-shape-corner-xs);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.032), rgba(255, 255, 255, 0.008));
+  overflow: hidden;
+}
+
+.passive-income-bar {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 230, 118, 0.92), rgba(56, 189, 248, 0.72));
+}
+
+.passive-income-bar-item strong {
+  color: var(--md-sys-color-on-surface);
+  font-family: Consolas, monospace;
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.passive-income-bar-item > span:last-child {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.passive-income-month {
+  overflow: hidden;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: rgba(255, 255, 255, 0.012);
+}
+
+.passive-income-month-toggle {
+  display: grid;
+  grid-template-columns: 28px minmax(90px, 0.6fr) minmax(120px, 1fr) minmax(120px, auto);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.passive-income-month-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.026);
+}
+
+.passive-income-accordion-icon {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 1.2rem;
+}
+
+.passive-income-month-name {
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-font-display);
+  font-weight: 800;
+}
+
+.passive-income-month-count {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.passive-income-month-toggle strong {
+  justify-self: end;
+  color: var(--md-sys-color-on-surface);
+  font-family: Consolas, monospace;
+  font-size: 0.92rem;
+}
+
+.passive-income-month-panel {
+  padding: 0 12px 12px 50px;
+}
+
+.passive-income-month-panel p {
+  padding: 10px 0 2px;
+  font-size: 0.82rem;
+}
+
+.passive-income-payment-table {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: var(--md-sys-shape-corner-s);
+}
+
+.passive-income-payment-row {
+  display: grid;
+  grid-template-columns: minmax(112px, 0.72fr) minmax(240px, 2fr) minmax(100px, 0.8fr) minmax(90px, 0.7fr) minmax(110px, 0.8fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 38px;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.82rem;
+}
+
+.passive-income-payment-row:first-child {
+  border-top: 0;
+}
+
+.passive-income-payment-header {
+  min-height: 30px;
+  background-color: rgba(148, 163, 184, 0.08);
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: var(--md-sys-font-display);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.passive-income-payment-row > span:nth-child(3),
+.passive-income-payment-row > span:nth-child(4),
+.passive-income-payment-row > strong {
+  justify-self: end;
+  font-family: Consolas, monospace;
+}
+
+.passive-income-payment-security {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.passive-income-payment-security strong {
+  color: var(--md-sys-color-on-surface);
+}
+
+.passive-income-payment-security small {
+  overflow: hidden;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .holdings-grid {

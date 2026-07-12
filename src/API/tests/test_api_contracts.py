@@ -61,6 +61,7 @@ class FakeSecurityDetailsProvider:
             dividend_current_year=3.72,
             dividend_growth_rate=0.0479,
             estimated_future_payout=3.72,
+            dividend_status="recent",
             sma20=312,
             sma50=307,
             sma200=291,
@@ -266,6 +267,7 @@ def test_security_details_refresh_persists_stock_and_payout_details():
     assert refreshed_security["price"] == 321.45
     assert refreshed_security["peRatio"] == 24.2
     assert refreshed_security["estimatedFuturePayout"] == 3.72
+    assert refreshed_security["dividendStatus"] == "recent"
     assert refreshed_security["payoutDetails"] == [
         {
             "exDividendDate": "2026-06-28",

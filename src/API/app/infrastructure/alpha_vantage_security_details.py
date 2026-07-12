@@ -118,6 +118,30 @@ def _payouts_since_year(
     return recent
 
 
+def _average_annual_growth_rate(
+    annual_totals: dict[int, float],
+    current_year: int,
+    projected_current_year_dividend: float | None,
+    *,
+    transitions: int = 5,
+) -> float | None:
+    totals = dict(annual_totals)
+    if projected_current_year_dividend is not None:
+        totals[current_year] = projected_current_year_dividend
+
+    growth_rates: list[float] = []
+    for year in range(current_year - transitions + 1, current_year + 1):
+        previous_total = totals.get(year - 1)
+        current_total = totals.get(year)
+        if not previous_total or current_total is None:
+            continue
+        growth_rates.append((current_total - previous_total) / previous_total)
+
+    if not growth_rates:
+        return None
+    return sum(growth_rates) / len(growth_rates)
+
+
 class AlphaVantageSecurityDetailsProvider:
     def __init__(self, api_key: str | None, timeout_seconds: float = 10.0) -> None:
         self._api_key = api_key
@@ -169,10 +193,10 @@ class AlphaVantageSecurityDetailsProvider:
         )
 
         current_year = datetime.now(tz=UTC).year
-        payout_details = _payout_details_from_dividends(dividends.get("data", []))
+        all_payout_details = _payout_details_from_dividends(dividends.get("data", []))
         daily_adjusted: dict = {}
         daily_adjusted_failed = False
-        if not payout_details:
+        if not all_payout_details:
             daily_adjusted, daily_adjusted_failed = self._try_get(
                 {
                     "function": "TIME_SERIES_DAILY_ADJUSTED",
@@ -180,14 +204,32 @@ class AlphaVantageSecurityDetailsProvider:
                     "outputsize": "compact",
                 }
             )
-            payout_details = _payout_details_from_daily_adjusted(daily_adjusted)
-        payout_details = _payouts_since_year(payout_details, current_year - 1)
-        dividend_totals = _annual_payout_totals(payout_details)
-        previous_dividend = dividend_totals.get(current_year - 1)
-        current_dividend = dividend_totals.get(current_year)
-        dividend_growth_rate = None
-        if previous_dividend and current_dividend is not None:
-            dividend_growth_rate = (current_dividend - previous_dividend) / previous_dividend
+            all_payout_details = _payout_details_from_daily_adjusted(daily_adjusted)
+        payout_details = _payouts_since_year(all_payout_details, current_year - 1)
+        dividend_status = (
+            "recent"
+            if payout_details
+            else "none_recent"
+            if all_payout_details
+            else "unavailable"
+            if dividends_failed and daily_adjusted_failed
+            else "none"
+        )
+        recent_dividend_totals = _annual_payout_totals(payout_details)
+        all_dividend_totals = _annual_payout_totals(all_payout_details)
+        previous_dividend = recent_dividend_totals.get(current_year - 1)
+        current_dividend = recent_dividend_totals.get(current_year)
+        estimated_future_payout = current_dividend if current_dividend is not None else None
+        projected_current_year_dividend = (
+            current_dividend + estimated_future_payout
+            if current_dividend is not None and estimated_future_payout is not None
+            else None
+        )
+        dividend_growth_rate = _average_annual_growth_rate(
+            all_dividend_totals,
+            current_year,
+            projected_current_year_dividend,
+        )
 
         quote_data = quote.get("Global Quote", {})
         price = (
@@ -232,7 +274,8 @@ class AlphaVantageSecurityDetailsProvider:
             dividend_previous_year=previous_dividend,
             dividend_current_year=current_dividend,
             dividend_growth_rate=dividend_growth_rate,
-            estimated_future_payout=current_dividend or previous_dividend,
+            estimated_future_payout=estimated_future_payout,
+            dividend_status=dividend_status,
             sma20=sma20,
             sma50=_to_float(overview.get("50DayMovingAverage")),
             sma200=_to_float(overview.get("200DayMovingAverage")),

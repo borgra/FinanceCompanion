@@ -40,6 +40,7 @@ def test_details_provider_keeps_quote_when_optional_endpoints_fail(monkeypatch):
     details = AlphaVantageSecurityDetailsProvider("test-key").get_details(security())
 
     assert details.price == 321.45
+    assert details.dividend_status == "unavailable"
     assert details.details_status == "partial"
 
 
@@ -70,6 +71,7 @@ def test_details_provider_prioritizes_dividends_before_later_partial_failures(mo
 
     assert requested_functions[:3] == ["DIVIDENDS", "GLOBAL_QUOTE", "OVERVIEW"]
     assert details.price == 512.88
+    assert details.dividend_status == "unavailable"
     assert details.pe_ratio == 23.04
     assert details.fifty_two_week_low == 349.2
     assert details.fifty_two_week_high == 551.05
@@ -87,6 +89,7 @@ def test_details_provider_marks_unavailable_when_all_optional_endpoints_fail(mon
 
     assert details.symbol == "FXAIX"
     assert details.price is None
+    assert details.dividend_status == "unavailable"
     assert details.details_status == "unavailable"
 
 
@@ -134,7 +137,9 @@ def test_details_provider_uses_daily_adjusted_for_price_and_dividends(monkeypatc
     assert details.thirty_day_yield == 0.0123
     assert details.dividend_current_year == 0.45
     assert details.dividend_previous_year == 0.4
-    assert details.dividend_growth_rate == 0.12499999999999997
+    assert details.estimated_future_payout == 0.45
+    assert details.dividend_growth_rate == 1.25
+    assert details.dividend_status == "recent"
     assert details.payout_details[0].ex_dividend_date == "2026-06-28"
     assert details.payout_details[0].amount == 0.45
     assert details.payout_details[0].source == "daily_adjusted"
@@ -258,7 +263,137 @@ def test_details_provider_populates_voo_without_premium_adjusted_daily_call(monk
     assert details.sma50 == 535.1
     assert details.sma200 == 508.4
     assert details.dividend_current_year == 1.25
+    assert details.estimated_future_payout == 1.25
+    assert details.dividend_growth_rate is None
+    assert details.dividend_status == "recent"
     assert [payout.ex_dividend_date for payout in details.payout_details] == ["2026-06-28"]
     assert details.payout_details[0].payment_date == "2026-07-02"
     assert details.payout_details[0].source == "dividends"
     assert details.details_status == "fresh"
+
+
+def test_details_provider_marks_symbols_with_only_old_dividends_as_none_recent(monkeypatch):
+    def fake_get(url, params, timeout, headers):
+        function = params["function"]
+        if function == "DIVIDENDS":
+            return FakeResponse(
+                {
+                    "data": [
+                        {
+                            "ex_dividend_date": "2020-02-13",
+                            "declaration_date": "2019-12-16",
+                            "record_date": "2020-02-14",
+                            "payment_date": "2020-03-06",
+                            "amount": "2.055",
+                        }
+                    ]
+                }
+            )
+        if function == "GLOBAL_QUOTE":
+            return FakeResponse({"Global Quote": {"05. price": "229.66"}})
+        return FakeResponse({})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    details = AlphaVantageSecurityDetailsProvider("test-key").get_details(security("BA"))
+
+    assert details.price == 229.66
+    assert details.dividend_status == "none_recent"
+    assert details.dividend_previous_year is None
+    assert details.dividend_current_year is None
+    assert details.estimated_future_payout is None
+    assert details.payout_details == []
+
+
+def test_details_provider_calculates_growth_from_trailing_average(monkeypatch):
+    def fake_get(url, params, timeout, headers):
+        function = params["function"]
+        if function == "DIVIDENDS":
+            return FakeResponse(
+                {
+                    "data": [
+                        {
+                            "ex_dividend_date": "2026-07-31",
+                            "declaration_date": "2026-07-07",
+                            "record_date": "2026-07-31",
+                            "payment_date": "2026-08-14",
+                            "amount": "0.271",
+                        },
+                        {
+                            "ex_dividend_date": "2026-06-30",
+                            "declaration_date": "2026-06-09",
+                            "record_date": "2026-06-30",
+                            "payment_date": "2026-07-15",
+                            "amount": "1.6225",
+                        },
+                        {
+                            "ex_dividend_date": "2025-12-31",
+                            "declaration_date": "2025-12-09",
+                            "record_date": "2025-12-31",
+                            "payment_date": "2026-01-15",
+                            "amount": "3.21",
+                        },
+                        {
+                            "ex_dividend_date": "2024-12-31",
+                            "declaration_date": "2024-12-09",
+                            "record_date": "2024-12-31",
+                            "payment_date": "2025-01-15",
+                            "amount": "3.00",
+                        },
+                        {
+                            "ex_dividend_date": "2023-12-31",
+                            "declaration_date": "2023-12-09",
+                            "record_date": "2023-12-31",
+                            "payment_date": "2024-01-15",
+                            "amount": "2.80",
+                        },
+                        {
+                            "ex_dividend_date": "2022-12-31",
+                            "declaration_date": "2022-12-09",
+                            "record_date": "2022-12-31",
+                            "payment_date": "2023-01-15",
+                            "amount": "2.65",
+                        },
+                        {
+                            "ex_dividend_date": "2021-12-31",
+                            "declaration_date": "2021-12-09",
+                            "record_date": "2021-12-31",
+                            "payment_date": "2022-01-15",
+                            "amount": "2.55",
+                        },
+                        {
+                            "ex_dividend_date": "2020-12-31",
+                            "declaration_date": "2020-12-09",
+                            "record_date": "2020-12-31",
+                            "payment_date": "2021-01-15",
+                            "amount": "2.20",
+                        },
+                        {
+                            "ex_dividend_date": "2019-12-31",
+                            "declaration_date": "2019-12-09",
+                            "record_date": "2019-12-31",
+                            "payment_date": "2020-01-15",
+                            "amount": "2.00",
+                        },
+                    ]
+                }
+            )
+        if function == "GLOBAL_QUOTE":
+            return FakeResponse({"Global Quote": {"05. price": "63.31"}})
+        return FakeResponse({})
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    details = AlphaVantageSecurityDetailsProvider("test-key").get_details(security("O"))
+
+    assert round(details.dividend_current_year or 0, 4) == 1.8935
+    assert round(details.estimated_future_payout or 0, 4) == 1.8935
+    expected_growth_rates = [
+        (2.65 - 2.55) / 2.55,
+        (2.80 - 2.65) / 2.65,
+        (3.00 - 2.80) / 2.80,
+        (3.21 - 3.00) / 3.00,
+        ((1.8935 + 1.8935) - 3.21) / 3.21,
+    ]
+    expected_average_growth = sum(expected_growth_rates) / len(expected_growth_rates)
+    assert round(details.dividend_growth_rate or 0, 4) == round(expected_average_growth, 4)

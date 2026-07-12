@@ -182,6 +182,7 @@ class SecurityMetadataPayload(CamelModel):
     dividend_current_year: float | None = Field(default=None, serialization_alias="dividendCurrentYear")
     dividend_growth_rate: float | None = Field(default=None, serialization_alias="dividendGrowthRate")
     estimated_future_payout: float | None = Field(default=None, serialization_alias="estimatedFuturePayout")
+    dividend_status: str | None = Field(default=None, serialization_alias="dividendStatus")
     sma20: float | None = None
     sma50: float | None = None
     sma200: float | None = None
