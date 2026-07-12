@@ -25,11 +25,6 @@ type DividendMonth = {
   total: number;
 };
 
-const today = new Date();
-const currentYear = today.getFullYear();
-const todayKey = `${currentYear}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
-  today.getDate(),
-).padStart(2, '0')}`;
 const maxProjectedGrowthRate = 0.15;
 const minProjectedGrowthRate = -0.2;
 const monthLabels = [
@@ -116,20 +111,83 @@ const toDividendPayment = (
   };
 };
 
-const buildActualPayments = (holdings: Holding[], selectedYear: number): DividendPayment[] =>
-  holdings.flatMap((holding) => {
-    const quantity = totalQuantity(holding);
-    if (quantity <= 0) {
-      return [];
-    }
+const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 
-    return (holding.security.payoutDetails ?? [])
-      .filter((payout) => paymentYear(payout) === selectedYear)
-      .map((payout) => toDividendPayment(holding, payout, { isEstimate: false }));
-  });
+const getEstimatedDate = (targetYear: number, originalDate: string) => {
+  const monthDay = originalDate.slice(5, 10);
+  if (monthDay === '02-29' && !isLeapYear(targetYear)) {
+    return `${targetYear}-02-28`;
+  }
+  return `${targetYear}-${monthDay}`;
+};
 
-const buildCurrentYearPayments = (holdings: Holding[]): DividendPayment[] =>
-  holdings.flatMap((holding) => {
+const buildPaymentsForYear = (
+  holdings: Holding[],
+  selectedYear: number,
+  currentYear: number,
+  todayKey: string
+): DividendPayment[] => {
+  if (selectedYear < currentYear) {
+    return holdings.flatMap((holding) => {
+      const quantity = totalQuantity(holding);
+      if (quantity <= 0) {
+        return [];
+      }
+
+      const payouts = holding.security.payoutDetails ?? [];
+      return payouts
+        .filter((payout) => paymentYear(payout) === selectedYear)
+        .map((payout) => toDividendPayment(holding, payout, { isEstimate: false }));
+    });
+  }
+
+  if (selectedYear === currentYear) {
+    return holdings.flatMap((holding) => {
+      const quantity = totalQuantity(holding);
+      if (quantity <= 0) {
+        return [];
+      }
+
+      const growthRate = projectedGrowthRate(holding);
+      const payouts = holding.security.payoutDetails ?? [];
+
+      const definedPayouts = payouts.filter((payout) => paymentYear(payout) === currentYear);
+      const definedPayments = definedPayouts.map((payout) =>
+        toDividendPayment(holding, payout, {
+          isEstimate: payoutDate(payout) > todayKey,
+        }),
+      );
+
+      const priorYearPayouts = payouts.filter((payout) => paymentYear(payout) === currentYear - 1);
+      const estimatedPayments = priorYearPayouts
+        .map((payout) => {
+          const date = payoutDate(payout);
+          const estimatedDate = getEstimatedDate(currentYear, date);
+          return { payout, estimatedDate };
+        })
+        .filter(({ estimatedDate }) => {
+          if (estimatedDate <= todayKey) {
+            return false;
+          }
+          const month = monthIndex(estimatedDate);
+          const hasDefined = definedPayouts.some((p) => monthIndex(payoutDate(p)) === month);
+          return !hasDefined;
+        })
+        .map(({ payout, estimatedDate }) => {
+          const estimatedPerShareAmount = payout.amount * (1 + growthRate);
+          return toDividendPayment(holding, payout, {
+            date: estimatedDate,
+            isEstimate: true,
+            perShareAmount: estimatedPerShareAmount,
+          });
+        });
+
+      return [...definedPayments, ...estimatedPayments];
+    });
+  }
+
+  // selectedYear > currentYear
+  return holdings.flatMap((holding) => {
     const quantity = totalQuantity(holding);
     if (quantity <= 0) {
       return [];
@@ -137,48 +195,45 @@ const buildCurrentYearPayments = (holdings: Holding[]): DividendPayment[] =>
 
     const growthRate = projectedGrowthRate(holding);
     const payouts = holding.security.payoutDetails ?? [];
-    const actualPayments = payouts
-      .filter((payout) => paymentYear(payout) === currentYear && payoutDate(payout) <= todayKey)
-      .map((payout) => toDividendPayment(holding, payout, { isEstimate: false }));
-    const estimatedPayments = payouts
-      .filter((payout) => paymentYear(payout) === currentYear - 1)
-      .map((payout) => {
-        const date = payoutDate(payout);
-        const estimatedDate = `${currentYear}${date.slice(4)}`;
-        return { payout, estimatedDate };
+
+    const definedPayouts = payouts.filter((payout) => paymentYear(payout) === selectedYear);
+    const definedPayments = definedPayouts.map((payout) =>
+      toDividendPayment(holding, payout, {
+        isEstimate: payoutDate(payout) > todayKey,
+      }),
+    );
+
+    const currentYearPayments = buildPaymentsForYear([holding], currentYear, currentYear, todayKey);
+    const estimatedPayments = currentYearPayments
+      .map((payment) => {
+        const estimatedPerShareAmount = payment.perShareAmount * (1 + growthRate);
+        const estimatedDate = getEstimatedDate(selectedYear, payment.date);
+        return { payment, estimatedDate, estimatedPerShareAmount };
       })
-      .filter(({ estimatedDate }) => estimatedDate > todayKey)
-      .map(({ payout, estimatedDate }) => {
-        const estimatedPerShareAmount = payout.amount * (1 + growthRate);
-        return toDividendPayment(holding, payout, {
-          date: estimatedDate,
-          isEstimate: true,
-          perShareAmount: estimatedPerShareAmount,
-        });
-      });
+      .filter(({ estimatedDate }) => {
+        const month = monthIndex(estimatedDate);
+        const hasDefined = definedPayouts.some((p) => monthIndex(payoutDate(p)) === month);
+        return !hasDefined;
+      })
+      .map(({ payment, estimatedDate, estimatedPerShareAmount }) => ({
+        ...payment,
+        amount: estimatedPerShareAmount * payment.quantity,
+        date: estimatedDate,
+        isEstimate: true,
+        perShareAmount: estimatedPerShareAmount,
+      }));
 
-    return [...actualPayments, ...estimatedPayments];
+    return [...definedPayments, ...estimatedPayments];
   });
+};
 
-const buildEstimatedPayments = (holdings: Holding[], selectedYear: number): DividendPayment[] =>
-  buildCurrentYearPayments(holdings).map((payment) => {
-    const estimatedPerShareAmount = payment.perShareAmount * (1 + payment.growthRate);
-    return {
-      ...payment,
-      amount: estimatedPerShareAmount * payment.quantity,
-      date: `${selectedYear}${payment.date.slice(4)}`,
-      isEstimate: true,
-      perShareAmount: estimatedPerShareAmount,
-    };
-  });
-
-const buildMonthlyIncome = (holdings: Holding[], selectedYear: number): DividendMonth[] => {
-  const payments =
-    selectedYear === currentYear + 1
-      ? buildEstimatedPayments(holdings, selectedYear)
-      : selectedYear === currentYear
-        ? buildCurrentYearPayments(holdings)
-        : buildActualPayments(holdings, selectedYear);
+const buildMonthlyIncome = (
+  holdings: Holding[],
+  selectedYear: number,
+  currentYear: number,
+  todayKey: string
+): DividendMonth[] => {
+  const payments = buildPaymentsForYear(holdings, selectedYear, currentYear, todayKey);
 
   return monthLabels.map((label, index) => {
     const monthPayments = payments
@@ -196,11 +251,24 @@ const buildMonthlyIncome = (holdings: Holding[], selectedYear: number): Dividend
 };
 
 export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps) {
+  const today = useMemo(() => new Date(), []);
+  const currentYear = useMemo(() => today.getFullYear(), [today]);
+  const todayKey = useMemo(() => {
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${currentYear}-${mm}-${dd}`;
+  }, [today, currentYear]);
+
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [expandedMonths, setExpandedMonths] = useState<Set<number>>(() => new Set());
+
+  useEffect(() => {
+    // If the mocked/resolved currentYear changes, align selectedYear
+    setSelectedYear(currentYear);
+  }, [currentYear]);
 
   useEffect(() => {
     void (async () => {
@@ -216,7 +284,7 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
     })();
   }, [holdingRepository]);
 
-  const months = useMemo(() => buildMonthlyIncome(holdings, selectedYear), [holdings, selectedYear]);
+  const months = useMemo(() => buildMonthlyIncome(holdings, selectedYear, currentYear, todayKey), [holdings, selectedYear, currentYear, todayKey]);
   const annualTotal = months.reduce((sum, month) => sum + month.total, 0);
   const maxMonthTotal = Math.max(...months.map((month) => month.total), 0);
   const populatedMonthCount = months.filter((month) => month.total > 0).length;
