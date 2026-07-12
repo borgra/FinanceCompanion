@@ -358,19 +358,18 @@ describe('InvestingPage', () => {
   it('correctly handles future manual payouts, prioritizing defined next-year payouts and mapping leap year Feb 29 to Feb 28', async () => {
     const RealDate = globalThis.Date;
     const mockDate = new RealDate('2025-01-15T12:00:00Z');
-    // @ts-expect-error Date is a read-only global property but we override it for mock time
-    globalThis.Date = function (...args: string[]) {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    (globalThis as any).Date = function (...args: any[]) {
       if (args.length > 0) {
-        // @ts-expect-error RealDate needs constructor invocation matching
-        return new RealDate(...args);
+        return new (RealDate as any)(...args);
       }
       return mockDate;
     };
-    // @ts-expect-error Date is read-only
-    globalThis.Date.now = () => mockDate.getTime();
-    globalThis.Date.UTC = RealDate.UTC;
-    globalThis.Date.parse = RealDate.parse;
-    globalThis.Date.prototype = RealDate.prototype;
+    (globalThis as any).Date.now = () => mockDate.getTime();
+    (globalThis as any).Date.UTC = RealDate.UTC;
+    (globalThis as any).Date.parse = RealDate.parse;
+    (globalThis as any).Date.prototype = RealDate.prototype;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
     const mockHolding: Holding = {
       id: 'holding-test',
       security: {
@@ -450,7 +449,8 @@ describe('InvestingPage', () => {
     const augPriorBtn = screen.getByRole('button', { name: /Aug, 1 payment, \$30\.00/i });
     expect(augPriorBtn.closest('article')).not.toHaveClass('passive-income-estimate');
 
-    // @ts-expect-error Date is read-only
-    globalThis.Date = RealDate;
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    (globalThis as any).Date = RealDate;
+    /* eslint-enable @typescript-eslint/no-explicit-any */
   });
 });
