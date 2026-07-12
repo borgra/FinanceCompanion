@@ -1268,33 +1268,46 @@ export function AccountPage({
                 Add Account
               </button>
             </div>
-            <div className="excel-table-fullwidth">
-              <FinanceTable wrapperStyle={{ margin: 0 }}>
-                <thead>
-                  <tr>
-                    <FinanceTableHeaderCell>Account Name</FinanceTableHeaderCell>
-                    <FinanceTableHeaderCell>Type</FinanceTableHeaderCell>
-                    <FinanceTableHeaderCell>APY</FinanceTableHeaderCell>
-                    <FinanceTableHeaderCell>Current Balance</FinanceTableHeaderCell>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedAccounts.map((acc) => {
-                    const balance = currentBalanceByAccountId.get(acc.id) ?? 0;
-                    return (
-                      <tr key={acc.id} style={{ cursor: 'pointer' }} onClick={() => {
+            <div className="accounts-vertical-stack" role="list">
+              {sortedAccounts.map((acc) => {
+                const balance = currentBalanceByAccountId.get(acc.id) ?? 0;
+                return (
+                  <div
+                    key={acc.id}
+                    className="account-selector-item"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setSelectedAccountId(acc.id);
+                      setViewMode('account');
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
                         setSelectedAccountId(acc.id);
                         setViewMode('account');
-                      }}>
-                        <td className="excel-bold-col" style={{ fontWeight: 'bold' }}>{acc.name}</td>
-                        <td>{acc.type}</td>
-                        <td>{acc.yieldRate}%</td>
-                        <td style={{ fontFamily: 'Consolas, monospace', fontWeight: 'bold' }}>{formatMoney(balance)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </FinanceTable>
+                      }
+                    }}
+                  >
+                    <div className="account-selector-item-left">
+                      <span
+                        className="material-symbols-outlined"
+                        style={{ fontSize: '1.25rem', color: accountTypeIconColor(acc.type) }}
+                        aria-hidden="true"
+                      >
+                        {accountTypeIcon(acc.type)}
+                      </span>
+                      <span className="account-selector-item-name">{acc.name}</span>
+                      <span className="account-selector-item-type">({acc.type})</span>
+                    </div>
+                    <div className="account-selector-item-right">
+                      <span className="account-selector-item-bal">
+                        Current Balance: {formatMoney(balance)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
         </section>
