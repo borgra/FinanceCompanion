@@ -69,6 +69,7 @@ class BudgetCategoryPayload(CamelModel):
     name: str
     color_hex: str = Field(serialization_alias="colorHex")
     icon: str = "category"
+    is_essential: bool = Field(default=True, serialization_alias="isEssential")
     created_at: str = Field(serialization_alias="createdAt")
     updated_at: str = Field(serialization_alias="updatedAt")
     sub_categories: list[BudgetSubCategoryPayload] = Field(serialization_alias="subCategories")
@@ -78,12 +79,14 @@ class BudgetCategoryCreateRequest(CamelModel):
     name: str
     color_hex: str = Field(serialization_alias="colorHex")
     icon: str = "category"
+    is_essential: bool = Field(default=True, serialization_alias="isEssential")
 
 
 class BudgetCategoryUpdateRequest(CamelModel):
     name: str
     color_hex: str = Field(serialization_alias="colorHex")
     icon: str = "category"
+    is_essential: bool = Field(default=True, serialization_alias="isEssential")
 
 
 class BudgetSubCategoryCreateRequest(CamelModel):

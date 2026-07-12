@@ -124,6 +124,7 @@ def _budget_category_from_entity(entity: dict) -> BudgetCategory:
         created_at=entity["createdAt"],
         updated_at=entity["updatedAt"],
         icon=entity.get("icon", "category"),
+        is_essential=bool(entity.get("isEssential", True)),
         sub_categories=sub_categories,
     )
 
@@ -136,6 +137,7 @@ def _budget_category_to_entity(user_id: str, category: BudgetCategory) -> dict:
         "name": category.name,
         "colorHex": category.color_hex,
         "icon": category.icon,
+        "isEssential": category.is_essential,
         "createdAt": category.created_at,
         "updatedAt": category.updated_at,
         "subCategoriesJson": json.dumps([asdict(s) for s in category.sub_categories]),
@@ -586,7 +588,7 @@ class CosmosBudgetRepository:
         self._client.create_entity(entity)
         return deepcopy(category)
 
-    def update_category_for_user(self, user_id: str, category_id: str, name: str, color_hex: str, icon: str) -> BudgetCategory:
+    def update_category_for_user(self, user_id: str, category_id: str, name: str, color_hex: str, icon: str, is_essential: bool) -> BudgetCategory:
         try:
             entity = self._client.get_entity(user_id, f"budget_category:{category_id}")
         except ResourceNotFoundError as exc:
@@ -596,6 +598,7 @@ class CosmosBudgetRepository:
         category.name = name
         category.color_hex = color_hex
         category.icon = icon
+        category.is_essential = is_essential
         category.updated_at = now_iso()
 
         updated_entity = _budget_category_to_entity(user_id, category)

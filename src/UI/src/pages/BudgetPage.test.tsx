@@ -38,7 +38,8 @@ describe('BudgetPage', () => {
 
     expect(await screen.findByText('Monthly Posture')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /Expand Housing category/i })).toBeInTheDocument();
-    expect(screen.getByText('Income Budgeted')).toBeInTheDocument();
+    expect(screen.getByText('Essential coverage')).toBeInTheDocument();
+    expect(screen.getByText('Total coverage')).toBeInTheDocument();
     expect(screen.getByText('Budget category list')).toBeInTheDocument();
     expect(screen.getByText('Master categories')).toBeInTheDocument();
     expect(screen.getByLabelText('Sort categories')).toHaveValue('amount');
@@ -116,5 +117,23 @@ describe('BudgetPage', () => {
 
     await user.hover(screen.getByRole('button', { name: /Housing: \$1,450\.00/i }));
     expect(within(screen.getByLabelText('Budget allocation')).getByText('50.0%')).toBeInTheDocument();
+  });
+
+  it('updates essential coverage when a category is reclassified', async () => {
+    const user = userEvent.setup();
+    render(
+      <BudgetPage
+        budgetRepository={createMockBudgetRepository()}
+        incomeRepository={createMockIncomeSourceRepository({ initialSources: [incomeSource()] })}
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /Expand Lifestyle category/i }));
+    const classification = screen.getByRole('checkbox');
+    expect(classification).not.toBeChecked();
+
+    await user.click(classification);
+    expect(classification).toBeChecked();
+    expect(screen.getAllByText('38.7%')).toHaveLength(2);
   });
 });

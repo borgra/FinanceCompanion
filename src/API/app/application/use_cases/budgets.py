@@ -22,8 +22,8 @@ class UpdateBudgetCategory:
     def __init__(self, repository: BudgetRepository) -> None:
         self._repository = repository
 
-    def execute(self, user_id: str, category_id: str, name: str, color_hex: str, icon: str) -> BudgetCategory:
-        return self._repository.update_category_for_user(user_id, category_id, name, color_hex, icon)
+    def execute(self, user_id: str, category_id: str, name: str, color_hex: str, icon: str, is_essential: bool) -> BudgetCategory:
+        return self._repository.update_category_for_user(user_id, category_id, name, color_hex, icon, is_essential)
 
 
 class DeleteBudgetCategory:

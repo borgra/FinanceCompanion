@@ -3,6 +3,7 @@ export type BudgetCategory = {
   name: string;
   colorHex: string;
   icon: string;
+  isEssential: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -25,6 +26,7 @@ export type BudgetCategoryDraft = {
   name: string;
   colorHex: string;
   icon: string;
+  isEssential: boolean;
 };
 
 export type BudgetSubCategoryDraft = {

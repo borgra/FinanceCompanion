@@ -4,10 +4,10 @@ import { HttpClient } from './httpClient';
 
 export const createBudgetApiRepository = (client: HttpClient): BudgetRepository => ({
   listCategoriesWithSubCategories: () => client.get<BudgetCategoryWithSubCategories[]>('/budget/categories'),
-  createCategory: (name: string, colorHex: string, icon: string) =>
-    client.post<BudgetCategory>('/budget/categories', { name, colorHex, icon }),
-  updateCategory: (id: string, name: string, colorHex: string, icon: string) =>
-    client.put<BudgetCategory>(`/budget/categories/${id}`, { name, colorHex, icon }),
+  createCategory: (name: string, colorHex: string, icon: string, isEssential: boolean) =>
+    client.post<BudgetCategory>('/budget/categories', { name, colorHex, icon, isEssential }),
+  updateCategory: (id: string, name: string, colorHex: string, icon: string, isEssential: boolean) =>
+    client.put<BudgetCategory>(`/budget/categories/${id}`, { name, colorHex, icon, isEssential }),
   deleteCategory: (id: string) => client.delete(`/budget/categories/${id}`),
   createSubCategory: (categoryId: string, name: string, monthlyAmountUsd: number) =>
     client.post<BudgetSubCategory>('/budget/sub-categories', { categoryId, name, monthlyAmountUsd }),

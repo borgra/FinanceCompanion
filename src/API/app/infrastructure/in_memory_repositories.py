@@ -71,6 +71,7 @@ def _budget_category_from_dict(data: dict) -> BudgetCategory:
         created_at=data["createdAt"],
         updated_at=data["updatedAt"],
         icon=data.get("icon", "category"),
+        is_essential=bool(data.get("isEssential", True)),
         sub_categories=[_budget_sub_category_from_dict(item) for item in data.get("subCategories", [])],
     )
 
@@ -297,12 +298,13 @@ class InMemoryBudgetRepository:
         items.append(deepcopy(category))
         return deepcopy(category)
 
-    def update_category_for_user(self, user_id: str, category_id: str, name: str, color_hex: str, icon: str) -> BudgetCategory:
+    def update_category_for_user(self, user_id: str, category_id: str, name: str, color_hex: str, icon: str, is_essential: bool) -> BudgetCategory:
         for item in self._store.budget_categories.setdefault(user_id, []):
             if item.id == category_id:
                 item.name = name
                 item.color_hex = color_hex
                 item.icon = icon
+                item.is_essential = is_essential
                 item.updated_at = now_iso()
                 return deepcopy(item)
         raise NotFoundError("Budget category not found.")

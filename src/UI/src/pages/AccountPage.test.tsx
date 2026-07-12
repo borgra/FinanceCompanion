@@ -41,6 +41,7 @@ const renderPage = (initialAccounts?: Account[], defaultViewMode: 'aggregate' | 
         name: 'Housing',
         colorHex: '#4de3ff',
         icon: 'home',
+        isEssential: true,
         createdAt: '2026-06-30T00:00:00.000Z',
         updatedAt: '2026-06-30T00:00:00.000Z',
         subCategories: [
@@ -758,4 +759,3 @@ describe('AccountPage', () => {
     expect(screen.getAllByText('Chase Checking').length).toBeGreaterThan(0);
   });
 });
-

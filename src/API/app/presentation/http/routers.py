@@ -182,6 +182,7 @@ def create_budget_category(request: BudgetCategoryCreateRequest, user=Depends(re
         created_at=timestamp,
         updated_at=timestamp,
         icon=request.icon,
+        is_essential=request.is_essential,
     )
     return to_budget_category_payload(container.create_budget_category.execute(user.user_id, category))
 
@@ -189,7 +190,7 @@ def create_budget_category(request: BudgetCategoryCreateRequest, user=Depends(re
 @router.put("/budget/categories/{category_id}", response_model=BudgetCategoryPayload)
 def update_budget_category(category_id: str, request: BudgetCategoryUpdateRequest, user=Depends(require_session_user), container=Depends(get_container)) -> BudgetCategoryPayload:
     return to_budget_category_payload(
-        container.update_budget_category.execute(user.user_id, category_id, request.name, request.color_hex, request.icon)
+        container.update_budget_category.execute(user.user_id, category_id, request.name, request.color_hex, request.icon, request.is_essential)
     )
 
 

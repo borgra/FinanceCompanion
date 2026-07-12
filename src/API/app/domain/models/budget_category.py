@@ -13,4 +13,5 @@ class BudgetCategory:
     created_at: str
     updated_at: str
     icon: str = "category"
+    is_essential: bool = True
     sub_categories: list[BudgetSubCategory] = field(default_factory=list)

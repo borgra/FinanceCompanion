@@ -6,8 +6,8 @@ import type {
 
 export type BudgetRepository = {
   listCategoriesWithSubCategories: () => Promise<BudgetCategoryWithSubCategories[]>;
-  createCategory: (name: string, colorHex: string, icon: string) => Promise<BudgetCategory>;
-  updateCategory: (id: string, name: string, colorHex: string, icon: string) => Promise<BudgetCategory>;
+  createCategory: (name: string, colorHex: string, icon: string, isEssential: boolean) => Promise<BudgetCategory>;
+  updateCategory: (id: string, name: string, colorHex: string, icon: string, isEssential: boolean) => Promise<BudgetCategory>;
   deleteCategory: (id: string) => Promise<void>;
 
   createSubCategory: (
@@ -33,6 +33,7 @@ const seedCategories = (): BudgetCategory[] => [
     name: 'Housing',
     colorHex: '#38bdf8',
     icon: 'home',
+    isEssential: true,
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
@@ -41,6 +42,7 @@ const seedCategories = (): BudgetCategory[] => [
     name: 'Utilities',
     colorHex: '#a78bfa',
     icon: 'bolt',
+    isEssential: true,
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
@@ -49,6 +51,7 @@ const seedCategories = (): BudgetCategory[] => [
     name: 'Groceries',
     colorHex: '#f59e0b',
     icon: 'shopping_cart',
+    isEssential: true,
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
@@ -57,6 +60,7 @@ const seedCategories = (): BudgetCategory[] => [
     name: 'Transportation',
     colorHex: '#14b8a6',
     icon: 'directions_car',
+    isEssential: true,
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
@@ -65,6 +69,7 @@ const seedCategories = (): BudgetCategory[] => [
     name: 'Healthcare',
     colorHex: '#fb7185',
     icon: 'health_and_safety',
+    isEssential: true,
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
@@ -73,6 +78,7 @@ const seedCategories = (): BudgetCategory[] => [
     name: 'Lifestyle',
     colorHex: '#f97316',
     icon: 'restaurant',
+    isEssential: false,
     createdAt: '2026-06-30T00:00:00.000Z',
     updatedAt: '2026-06-30T00:00:00.000Z',
   },
@@ -209,13 +215,14 @@ export function createMockBudgetRepository(): BudgetRepository {
     return clone(result);
   };
 
-  const createCategory = async (name: string, colorHex: string, icon: string) => {
+  const createCategory = async (name: string, colorHex: string, icon: string, isEssential: boolean) => {
     const timestamp = nowIso();
     const next: BudgetCategory = {
       id: `cat-${crypto.randomUUID()}`,
       name,
       colorHex,
       icon,
+      isEssential,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -223,13 +230,13 @@ export function createMockBudgetRepository(): BudgetRepository {
     return clone(next);
   };
 
-  const updateCategory = async (id: string, name: string, colorHex: string, icon: string) => {
+  const updateCategory = async (id: string, name: string, colorHex: string, icon: string, isEssential: boolean) => {
     const timestamp = nowIso();
     const existing = categories.find((c) => c.id === id);
     if (!existing) {
       throw new Error('Category not found.');
     }
-    const updated = { ...existing, name, colorHex, icon, updatedAt: timestamp };
+    const updated = { ...existing, name, colorHex, icon, isEssential, updatedAt: timestamp };
     categories = categories.map((c) => (c.id === id ? updated : c));
     return clone(updated);
   };

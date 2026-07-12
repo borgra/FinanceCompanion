@@ -2214,6 +2214,23 @@ button.security-result:hover {
   gap: 6px;
 }
 
+.budget-essential-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 2px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface);
+}
+
+.budget-essential-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--md-sys-color-primary);
+}
+
 .budget-progress-header {
   display: flex;
   justify-content: space-between;
@@ -2775,7 +2792,7 @@ button.security-result:hover {
 }
 
 .budget-accordion-panel .budget-category-inline-editor {
-  grid-template-columns: minmax(260px, 1fr) minmax(230px, auto) minmax(150px, auto);
+  grid-template-columns: minmax(240px, 1fr) minmax(220px, auto) minmax(140px, auto) minmax(130px, auto);
 }
 
 .budget-accordion-panel .subcategory-header,

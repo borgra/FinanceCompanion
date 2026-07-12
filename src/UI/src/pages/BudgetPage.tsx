@@ -98,6 +98,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryColorHex, setNewCategoryColorHex] = useState('#00e676');
   const [newCategoryIcon, setNewCategoryIcon] = useState('category');
+  const [newCategoryIsEssential, setNewCategoryIsEssential] = useState(true);
   const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState<BudgetSort>('amount');
   const [hoveredCategoryId, setHoveredCategoryId] = useState<string | undefined>();
@@ -109,6 +110,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     setNewCategoryName('');
     setNewCategoryColorHex('#00e676');
     setNewCategoryIcon('category');
+    setNewCategoryIsEssential(true);
     setIsAddCatModalOpen(false);
   };
 
@@ -128,13 +130,22 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
       0,
     );
     const totalYear = totalMonth * 12;
+    const essentialMonth = derivedCategoriesForTotals.reduce(
+      (sum, cat) => sum + (cat.isEssential
+        ? cat.subCategories.reduce((subTotal, sub) => subTotal + sub.monthlyAmountUsd, 0)
+        : 0),
+      0,
+    );
+    const essentialYear = essentialMonth * 12;
 
     const percentGross =
       incomeTotals.yearlyGross > 0 ? (totalYear / incomeTotals.yearlyGross) * 100 : undefined;
     const percentNet =
       incomeTotals.yearlyNet > 0 ? (totalYear / incomeTotals.yearlyNet) * 100 : undefined;
+    const essentialPercentNet =
+      incomeTotals.yearlyNet > 0 ? (essentialYear / incomeTotals.yearlyNet) * 100 : undefined;
 
-    return { totalMonth, totalYear, percentGross, percentNet };
+    return { totalMonth, totalYear, essentialMonth, essentialYear, percentGross, percentNet, essentialPercentNet };
   }, [derivedCategoriesForTotals, incomeTotals]);
 
   const monthlyMargin = incomeTotals.monthlyNet - totals.totalMonth;
@@ -310,13 +321,15 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
       if (
         draftCategory.name !== initial.name ||
         draftCategory.colorHex !== initial.colorHex ||
-        draftCategory.icon !== initial.icon
+        draftCategory.icon !== initial.icon ||
+        draftCategory.isEssential !== initial.isEssential
       ) {
         await budgetRepository.updateCategory(
           initial.id,
           draftCategory.name.trim(),
           draftCategory.colorHex,
           draftCategory.icon,
+          draftCategory.isEssential,
         );
       }
 
@@ -380,10 +393,11 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
   const createCategory = async () => {
     const name = newCategoryName.trim();
     if (!name) return;
-    await budgetRepository.createCategory(name, newCategoryColorHex, newCategoryIcon);
+    await budgetRepository.createCategory(name, newCategoryColorHex, newCategoryIcon, newCategoryIsEssential);
     setNewCategoryName('');
     setNewCategoryColorHex('#00e676');
     setNewCategoryIcon('category');
+    setNewCategoryIsEssential(true);
     setIsAddCatModalOpen(false);
     await refreshCategories();
   };
@@ -495,14 +509,23 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
               <div className="budget-progress-panel">
                 <div className="budget-progress-header">
-                <span>Income Budgeted</span>
-                <strong>{incomeLoading ? '—' : formatPercent(totals.percentNet)}</strong>
-              </div>
+                  <span>Essential coverage</span>
+                  <strong>{incomeLoading ? '—' : formatPercent(totals.essentialPercentNet)}</strong>
+                </div>
                 <div className="budget-progress-track" aria-hidden="true">
-                <span
-                  className={`budget-progress-fill ${isOverBudget ? 'budget-progress-fill-over' : ''}`}
-                  style={{ width: `${clampPercent(allocationRate)}%` }}
-                />
+                  <span className="budget-progress-fill" style={{ width: `${clampPercent(totals.essentialPercentNet ?? 0)}%` }} />
+                </div>
+              </div>
+              <div className="budget-progress-panel">
+                <div className="budget-progress-header">
+                  <span>Total coverage</span>
+                  <strong>{incomeLoading ? '—' : formatPercent(totals.percentNet)}</strong>
+                </div>
+                <div className="budget-progress-track" aria-hidden="true">
+                  <span
+                    className={`budget-progress-fill ${isOverBudget ? 'budget-progress-fill-over' : ''}`}
+                    style={{ width: `${clampPercent(allocationRate)}%` }}
+                  />
                 </div>
               </div>
             </div>
@@ -650,6 +673,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                           <span className="budget-category-meta">
                             {effectiveCat.subCategories.length} component
                             {effectiveCat.subCategories.length === 1 ? '' : 's'}
+                            {' · '}{effectiveCat.isEssential ? 'Essential' : 'Discretionary'}
                           </span>
                         </span>
                         <span className="budget-category-metrics">
@@ -758,6 +782,17 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                               >
                                 {categoryIcons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                               </select>
+                            </label>
+                            <label className="budget-essential-toggle">
+                              <input
+                                type="checkbox"
+                                checked={draftCategory.isEssential}
+                                onChange={(event) => {
+                                  setDraftCategory((prev) => prev ? { ...prev, isEssential: event.target.checked } : prev);
+                                  setIsDirty(true);
+                                }}
+                              />
+                              <span>{draftCategory.isEssential ? 'Essential' : 'Discretionary'}</span>
                             </label>
                           </div>
 
@@ -926,6 +961,10 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                 <select aria-label="New category icon" value={newCategoryIcon} onChange={(event) => setNewCategoryIcon(event.target.value)}>
                   {categoryIcons.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
+              </label>
+              <label className="budget-essential-toggle">
+                <input type="checkbox" checked={newCategoryIsEssential} onChange={(event) => setNewCategoryIsEssential(event.target.checked)} />
+                <span>{newCategoryIsEssential ? 'Essential' : 'Discretionary'}</span>
               </label>
             </div>
 

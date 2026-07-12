@@ -149,9 +149,11 @@ def test_seeded_contracts_are_served_after_authentication():
         "income-source-dividends",
     }
     assert budget_payload[0]["id"] == "cat-housing"
+    assert budget_payload[0]["isEssential"] is True
     assert budget_payload[0]["subCategories"][0]["id"] == "sub-house"
     assert len(budget_payload) == 11
     assert any(category["id"] == "cat-savings" for category in budget_payload)
+    assert next(category for category in budget_payload if category["id"] == "cat-savings")["isEssential"] is False
     assert account_payload[0]["id"] == "acc-lfcu"
     assert account_payload[0]["assignedIncomeSourceIds"] == ["income-source-primary", "income-source-side"]
     assert account_payload[0]["savingsAccountId"] == "acc-hys"
@@ -183,6 +185,40 @@ def test_seeded_contracts_are_served_after_authentication():
         + ira_account["monthlyRecords"][0]["invest"]
     ) == account_payload[0]["monthlyRecords"][0]["invest"]
     assert session_response.json()["email"] == "steveborgra@gmail.com"
+
+
+def test_budget_category_essential_classification_persists_through_updates():
+    client = build_test_client()
+    authenticate(client)
+
+    created = client.post(
+        "/api/v1/budget/categories",
+        json={
+            "name": "Investing",
+            "colorHex": "#a78bfa",
+            "icon": "savings",
+            "isEssential": False,
+        },
+    )
+
+    assert created.status_code == 201
+    category = created.json()
+    assert category["isEssential"] is False
+
+    updated = client.put(
+        f"/api/v1/budget/categories/{category['id']}",
+        json={
+            "name": "Investing",
+            "colorHex": "#a78bfa",
+            "icon": "savings",
+            "isEssential": True,
+        },
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["isEssential"] is True
+    listed = client.get("/api/v1/budget/categories")
+    assert next(item for item in listed.json() if item["id"] == category["id"])["isEssential"] is True
 
 
 def test_income_source_can_only_be_assigned_to_one_account():
