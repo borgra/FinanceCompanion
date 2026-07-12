@@ -690,7 +690,7 @@ describe('AccountPage', () => {
     expect(updatedSavingsAcc?.monthlyRecords[0].savings).toBe(200);
   });
 
-  it('renders Aggregate Dashboard by default with emergency fund configs and chart', async () => {
+  it('renders Bank Dashboard by default with emergency fund configs and chart', async () => {
     const mockAccounts: Account[] = [
       {
         id: 'acc-checking-1',
@@ -722,17 +722,20 @@ describe('AccountPage', () => {
 
     renderPage(mockAccounts, 'aggregate');
 
-    // 1. Verify Aggregate Dashboard header and details
-    expect(await screen.findByRole('heading', { name: /aggregate dashboard/i })).toBeInTheDocument();
+    // 1. Verify Bank Dashboard header and details
+    expect(await screen.findByText('Bank Dashboard', { selector: 'h2' })).toBeInTheDocument();
     expect(screen.getByText('Combined view of all checking and savings accounts.')).toBeInTheDocument();
 
-    // 2. Verify emergency fund coverage multiple:
+    // 2. Verify emergency fund coverage multiples:
     // Total aggregate balance is $82,500.00.
     // Monthly net income (from primary job active source) is $120,000 / 12 * 75% = $7,500.
-    // 82,500 / 7,500 = 11.0 months.
+    // Income Coverage: 82,500 / 7,500 = 11.0 months.
+    // Monthly budget is $1,450.00 (Rent 1350 + HOA 100).
+    // Budget Coverage: 82,500 / 1,450 = 56.9 months.
     expect(screen.getAllByText('$82,500.00').length).toBeGreaterThan(0);
     expect(screen.getAllByText('$7,500.00').length).toBeGreaterThan(0);
     expect(screen.getByText('11.0 months')).toBeInTheDocument();
+    expect(screen.getByText('56.9 months')).toBeInTheDocument();
 
     // 3. Verify emergency fund threshold input
     const thresholdInput = screen.getByLabelText('Minimum threshold');

@@ -229,6 +229,7 @@ export function AccountPage({
   const [loadError, setLoadError] = useState<string | undefined>();
 
   const [viewMode, setViewMode] = useState<'aggregate' | 'account'>(defaultViewMode);
+  const [hoveredMonth, setHoveredMonth] = useState<string | null>(null);
   const [threshold, setThreshold] = useState<number>(() => {
     const saved = localStorage.getItem('finance-companion-emergency-threshold');
     return saved ? Number(saved) : 20000;
@@ -923,6 +924,16 @@ export function AccountPage({
     return Math.round(totalNet);
   }, [incomeSources, currentProjectionMonth.dateCode]);
 
+  const totalMonthlyBudget = useMemo(() => {
+    let sum = 0;
+    budgetCategories.forEach((cat) => {
+      cat.subCategories.forEach((sub) => {
+        sum += sub.monthlyAmountUsd;
+      });
+    });
+    return sum;
+  }, [budgetCategories]);
+
   const currentAggregateBalance = useMemo(() => {
     return sortedAccounts.reduce((sum, account) => {
       const balance = currentBalanceByAccountId.get(account.id) ?? 0;
@@ -980,7 +991,7 @@ export function AccountPage({
             type="button"
             onClick={() => setViewMode('aggregate')}
           >
-            Aggregate Dashboard
+            Bank Dashboard
           </button>
           <button
             aria-selected={viewMode === 'account'}
@@ -995,66 +1006,142 @@ export function AccountPage({
       </section>
 
       {viewMode === 'aggregate' ? (
-        <section className="aggregate-dashboard-workspace" aria-labelledby="aggregate-dashboard-heading" style={{ maxWidth: '100%', margin: '0 auto 40px auto' }}>
+        <section className="aggregate-dashboard-workspace" aria-labelledby="bank-dashboard-heading" style={{ maxWidth: '100%', margin: '0 auto 40px auto' }}>
           <div style={{ marginBottom: '24px' }}>
-            <h2 id="aggregate-dashboard-heading" style={{ fontSize: '1.25rem', fontFamily: 'var(--md-sys-font-display)', fontWeight: 800 }}>
-              Aggregate Dashboard
+            <h2 id="bank-dashboard-heading" style={{ fontSize: '1.25rem', fontFamily: 'var(--md-sys-font-display)', fontWeight: 800 }}>
+              Bank Dashboard
             </h2>
             <p style={{ color: 'var(--md-sys-color-on-surface-variant)', fontSize: '0.9rem' }}>
               Combined view of all checking and savings accounts.
             </p>
           </div>
 
-          <div className="passive-income-summary-grid" style={{ marginBottom: '24px' }}>
-            <div className="passive-income-summary-card">
-              <span>Total Current Balance</span>
-              <strong>{formatMoney(currentAggregateBalance)}</strong>
-            </div>
-            <div className="passive-income-summary-card">
-              <span>Monthly Net Income</span>
-              <strong>{formatMoney(totalMonthlyIncome)}</strong>
-            </div>
-            <div className="passive-income-summary-card">
-              <span>Emergency Fund Coverage</span>
-              <strong>
-                {totalMonthlyIncome > 0 
-                  ? `${(currentAggregateBalance / totalMonthlyIncome).toFixed(1)} months` 
-                  : 'N/A'}
-              </strong>
-            </div>
-          </div>
-
+          {/* Square Cards Grid */}
           <div style={{
-            border: '1.5px solid var(--md-sys-color-outline-variant)',
-            borderRadius: 'var(--md-sys-shape-corner-m)',
-            padding: '20px',
-            marginBottom: '32px',
-            backgroundColor: 'rgba(255, 255, 255, 0.015)'
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '20px',
+            marginBottom: '32px'
           }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 800, marginBottom: '8px' }}>Emergency Fund</h3>
-            <p style={{ color: 'var(--md-sys-color-on-surface-variant)', fontSize: '0.85rem', marginBottom: '16px' }}>
-              Define the minimum Bank Account threshold (across all accounts) to monitor coverage.
-            </p>
-            <div className="modal-form" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
-              <label className="field" style={{ flex: '1 1 240px', maxWidth: '320px', marginBottom: 0 }}>
-                <span>Minimum Threshold</span>
-                <div className="input-wrapper">
-                  <span className="input-prefix" aria-hidden="true">$</span>
-                  <input
-                    aria-label="Minimum threshold"
-                    type="number"
-                    value={threshold || ''}
-                    onChange={(e) => setThreshold(Number(e.target.value) || 0)}
-                    placeholder="0.00"
-                  />
+            {/* Card 1: Income Coverage Paradigm */}
+            <div style={{
+              border: '1.5px solid var(--md-sys-color-outline-variant)',
+              borderRadius: 'var(--md-sys-shape-corner-m)',
+              padding: '20px',
+              backgroundColor: 'rgba(255, 255, 255, 0.015)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              aspectRatio: '1 / 1',
+              minHeight: '220px'
+            }}>
+              <div>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Income Coverage
+                </span>
+                <h3 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--md-sys-color-primary)', margin: '12px 0 6px 0' }}>
+                  {totalMonthlyIncome > 0 
+                    ? `${(currentAggregateBalance / totalMonthlyIncome).toFixed(1)} months` 
+                    : 'N/A'}
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  Emergency fund multiple based on net monthly income.
+                </span>
+              </div>
+              <div style={{ borderTop: '1px solid var(--md-sys-color-outline-variant)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Total Balance</span>
+                  <span style={{ fontWeight: 'bold', fontFamily: 'Consolas, monospace' }}>{formatMoney(currentAggregateBalance)}</span>
                 </div>
-              </label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Monthly Income</span>
+                  <span style={{ fontWeight: 'bold', fontFamily: 'Consolas, monospace', color: '#34d399' }}>{formatMoney(totalMonthlyIncome)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Budget Coverage Paradigm */}
+            <div style={{
+              border: '1.5px solid var(--md-sys-color-outline-variant)',
+              borderRadius: 'var(--md-sys-shape-corner-m)',
+              padding: '20px',
+              backgroundColor: 'rgba(255, 255, 255, 0.015)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              aspectRatio: '1 / 1',
+              minHeight: '220px'
+            }}>
+              <div>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Budget Coverage
+                </span>
+                <h3 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--md-sys-color-primary)', margin: '12px 0 6px 0' }}>
+                  {totalMonthlyBudget > 0 
+                    ? `${(currentAggregateBalance / totalMonthlyBudget).toFixed(1)} months` 
+                    : 'N/A'}
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  Emergency fund multiple based on monthly budget.
+                </span>
+              </div>
+              <div style={{ borderTop: '1px solid var(--md-sys-color-outline-variant)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Total Balance</span>
+                  <span style={{ fontWeight: 'bold', fontFamily: 'Consolas, monospace' }}>{formatMoney(currentAggregateBalance)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--md-sys-color-on-surface-variant)' }}>Monthly Budget</span>
+                  <span style={{ fontWeight: 'bold', fontFamily: 'Consolas, monospace', color: 'var(--md-sys-color-error)' }}>{formatMoney(totalMonthlyBudget)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Emergency Fund Config Card */}
+            <div style={{
+              border: '1.5px solid var(--md-sys-color-outline-variant)',
+              borderRadius: 'var(--md-sys-shape-corner-m)',
+              padding: '20px',
+              backgroundColor: 'rgba(255, 255, 255, 0.015)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              aspectRatio: '1 / 1',
+              minHeight: '220px'
+            }}>
+              <div>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Emergency Fund
+                </span>
+                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: '12px 0 6px 0' }}>
+                  Threshold Configuration
+                </h3>
+                <span style={{ fontSize: '0.78rem', color: 'var(--md-sys-color-on-surface-variant)' }}>
+                  Minimum target balance across all bank accounts.
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label className="field" style={{ margin: 0 }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Minimum Threshold</span>
+                  <div className="input-wrapper">
+                    <span className="input-prefix" aria-hidden="true">$</span>
+                    <input
+                      aria-label="Minimum threshold"
+                      type="number"
+                      value={threshold || ''}
+                      onChange={(e) => setThreshold(Number(e.target.value) || 0)}
+                      placeholder="0.00"
+                      style={{ textAlign: 'right' }}
+                    />
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
 
           <section className="passive-income-chart-section" aria-labelledby="aggregate-chart-heading" style={{ marginBottom: '32px' }}>
             <div className="passive-income-section-heading">
-              <h3 id="aggregate-chart-heading">Aggregate Balance Projection</h3>
+              <h3 id="aggregate-chart-heading">Bank Dashboard Balance Projection</h3>
               <span>
                 Bars are colored <span style={{ color: '#34d399', fontWeight: 'bold' }}>Green</span> when &gt;= threshold, and <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>Amber</span> when below.
               </span>
@@ -1068,12 +1155,20 @@ export function AccountPage({
               <div className="passive-income-bars">
                 {monthlyAggregates.map((month) => {
                   const isAbove = month.total >= threshold;
-                  const height = maxAggregateMonthTotal > 0 
-                    ? Math.max((month.total / maxAggregateMonthTotal) * 100, 3) 
-                    : 0;
-                  const barGradient = isAbove 
-                    ? 'linear-gradient(180deg, #34d399, #059669)' 
-                    : 'linear-gradient(180deg, #fbbf24, #d97706)';
+                  
+                  // Compute checking + savings account contributions for this month
+                  const contributions = sortedAccounts.map((account) => {
+                    const records = computeAccountRecords(account, incomeSources, projectionMonths);
+                    const record = records.find((r) => r.month === month.name);
+                    return {
+                      name: account.name,
+                      amount: Math.max(record?.net ?? 0, 0),
+                    };
+                  });
+
+                  const greenShades = ['#059669', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0'];
+                  const amberShades = ['#d97706', '#f59e0b', '#fbbf24', '#fcd34d', '#fde68a'];
+
                   const trackBorderColor = isAbove
                     ? 'rgba(52, 211, 153, 0.42)'
                     : 'rgba(251, 191, 36, 0.42)';
@@ -1081,21 +1176,84 @@ export function AccountPage({
                     ? 'rgba(52, 211, 153, 0.04)'
                     : 'rgba(251, 191, 36, 0.04)';
 
+                  const isHovered = hoveredMonth === month.name;
+
                   return (
                     <div
                       className="passive-income-bar-item"
                       key={month.name}
-                      style={{ display: 'grid', gridTemplateRows: 'minmax(150px, 1fr) 20px 20px', gap: '4px', textAlign: 'center' }}
+                      onMouseEnter={() => setHoveredMonth(month.name)}
+                      onMouseLeave={() => setHoveredMonth(null)}
+                      style={{ display: 'grid', gridTemplateRows: 'minmax(150px, 1fr) 20px 20px', gap: '4px', textAlign: 'center', position: 'relative' }}
                     >
+                      {/* Hover Tooltip Breakdown */}
+                      {isHovered && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: '100%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          marginBottom: '8px',
+                          backgroundColor: 'var(--md-sys-color-surface-container-high)',
+                          border: '1.5px solid var(--md-sys-color-outline-variant)',
+                          borderRadius: 'var(--md-sys-shape-corner-s)',
+                          padding: '8px 12px',
+                          zIndex: 100,
+                          width: '220px',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                          pointerEvents: 'none',
+                        }}>
+                          <div style={{ fontWeight: 'bold', fontSize: '0.75rem', marginBottom: '6px', borderBottom: '1px solid var(--md-sys-color-outline-variant)', paddingBottom: '4px', textAlign: 'left' }}>
+                            {month.name} Breakdown
+                          </div>
+                          {contributions.map((contrib) => (
+                            <div key={contrib.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', gap: '8px', marginBottom: '3px' }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '130px', textAlign: 'left' }}>
+                                {contrib.name}
+                              </span>
+                              <span style={{ fontWeight: 'bold', fontFamily: 'Consolas, monospace' }}>
+                                {formatMoney(contrib.amount)}
+                              </span>
+                            </div>
+                          ))}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', fontWeight: 'bold', marginTop: '6px', borderTop: '1px solid var(--md-sys-color-outline-variant)', paddingTop: '4px' }}>
+                            <span>Total</span>
+                            <span>{formatMoney(month.total)}</span>
+                          </div>
+                        </div>
+                      )}
+
                       <span 
                         className="passive-income-bar-track" 
                         aria-hidden="true"
-                        style={{ borderColor: trackBorderColor, backgroundColor: trackBgColor }}
+                        style={{
+                          borderColor: trackBorderColor,
+                          backgroundColor: trackBgColor,
+                          display: 'flex',
+                          flexDirection: 'column-reverse',
+                          alignItems: 'stretch'
+                        }}
                       >
-                        <span 
-                          className="passive-income-bar" 
-                          style={{ height: `${height}%`, background: barGradient }} 
-                        />
+                        {contributions.map((contrib, idx) => {
+                          const segmentHeight = maxAggregateMonthTotal > 0
+                            ? (contrib.amount / maxAggregateMonthTotal) * 100
+                            : 0;
+                          const segmentColor = isAbove
+                            ? greenShades[idx % greenShades.length]
+                            : amberShades[idx % amberShades.length];
+
+                          return (
+                            <span
+                              key={contrib.name}
+                              style={{
+                                height: `${segmentHeight}%`,
+                                backgroundColor: segmentColor,
+                                display: 'block',
+                                transition: 'height var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard)'
+                              }}
+                            />
+                          );
+                        })}
                       </span>
                       <strong style={{ fontSize: '0.68rem', fontFamily: 'Consolas, monospace' }}>
                         {formatMoney(month.total)}
