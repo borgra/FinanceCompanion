@@ -1152,7 +1152,7 @@ export function AccountPage({
                 <span>{formatMoney(maxAggregateMonthTotal / 2)}</span>
                 <span>$0</span>
               </div>
-              <div className="passive-income-bars">
+              <div className="passive-income-bars" style={{ overflow: 'visible' }}>
                 {monthlyAggregates.map((month) => {
                   const isAbove = month.total >= threshold;
                   
