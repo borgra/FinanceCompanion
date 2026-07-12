@@ -21,6 +21,7 @@ from app.presentation.http.mappers import (
     to_income_source_payload,
     to_security_details_refresh_result_payload,
     to_security_metadata_payload,
+    to_security_payout_details,
     to_user_response,
 )
 from app.presentation.http.schemas import (
@@ -35,11 +36,13 @@ from app.presentation.http.schemas import (
     BudgetSubCategoryPayload,
     BudgetSubCategoryUpdateRequest,
     HoldingCreateRequest,
+    HoldingManualPayoutsRequest,
     HoldingPayload,
     IncomeSourcePayload,
     IncomeSourceStatusRequest,
     IncomeSourceUpsertRequest,
     SecurityDetailsRefreshResultPayload,
+    SecurityDetailsRefreshRequest,
     SecurityMetadataPayload,
     UserResponse,
 )
@@ -306,8 +309,15 @@ def create_holding(request: HoldingCreateRequest, user=Depends(require_session_u
 
 
 @router.post("/holdings/security-details/refresh", response_model=SecurityDetailsRefreshResultPayload)
-def refresh_held_security_details(user=Depends(require_session_user), container=Depends(get_container)) -> SecurityDetailsRefreshResultPayload:
-    result = container.refresh_held_security_details.execute(user.user_id)
+def refresh_held_security_details(
+    request: SecurityDetailsRefreshRequest | None = None,
+    user=Depends(require_session_user),
+    container=Depends(get_container),
+) -> SecurityDetailsRefreshResultPayload:
+    result = container.refresh_held_security_details.execute(
+        user.user_id,
+        replace_manual_payouts=request.replace_manual_payouts if request else False,
+    )
     return to_security_details_refresh_result_payload(
         result.holdings,
         result.failed_symbols,
@@ -315,13 +325,41 @@ def refresh_held_security_details(user=Depends(require_session_user), container=
 
 
 @router.post("/holdings/{holding_id}/security-details/refresh", response_model=HoldingPayload)
-def refresh_holding_security_details(holding_id: str, user=Depends(require_session_user), container=Depends(get_container)) -> HoldingPayload:
+def refresh_holding_security_details(
+    holding_id: str,
+    request: SecurityDetailsRefreshRequest | None = None,
+    user=Depends(require_session_user),
+    container=Depends(get_container),
+) -> HoldingPayload:
     try:
         return to_holding_payload(
-            container.refresh_holding_security_details.execute(user.user_id, holding_id)
+            container.refresh_holding_security_details.execute(
+                user.user_id,
+                holding_id,
+                replace_manual_payouts=request.replace_manual_payouts if request else False,
+            )
         )
     except SecurityDetailsUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except DomainError as exc:
+        raise _domain_error_to_http(exc) from exc
+
+
+@router.put("/holdings/{holding_id}/manual-payouts", response_model=HoldingPayload)
+def update_manual_payouts(
+    holding_id: str,
+    request: HoldingManualPayoutsRequest,
+    user=Depends(require_session_user),
+    container=Depends(get_container),
+) -> HoldingPayload:
+    try:
+        return to_holding_payload(
+            container.update_manual_payout_details.execute(
+                user.user_id,
+                holding_id,
+                [to_security_payout_details(item) for item in request.manual_payout_details],
+            )
+        )
     except DomainError as exc:
         raise _domain_error_to_http(exc) from exc
 

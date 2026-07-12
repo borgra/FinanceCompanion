@@ -1,6 +1,7 @@
 import type {
   Holding,
   HoldingDraft,
+  SecurityPayoutDetails,
   SecurityDetailsRefreshResult,
   SecurityMetadata,
 } from './holding';
@@ -11,8 +12,9 @@ export type HoldingRepository = {
   createHolding: (draft: HoldingDraft) => Promise<Holding>;
   updateHolding: (id: string, draft: HoldingDraft) => Promise<Holding>;
   deleteHolding: (id: string) => Promise<void>;
-  refreshHoldingSecurityDetails: (id: string) => Promise<Holding>;
-  refreshHeldSecurityDetails: () => Promise<SecurityDetailsRefreshResult>;
+  refreshHoldingSecurityDetails: (id: string, options?: { replaceManualPayouts?: boolean }) => Promise<Holding>;
+  refreshHeldSecurityDetails: (options?: { replaceManualPayouts?: boolean }) => Promise<SecurityDetailsRefreshResult>;
+  updateManualPayoutDetails: (id: string, payouts: SecurityPayoutDetails[]) => Promise<Holding>;
 };
 
 const nowIso = () => new Date().toISOString();
@@ -103,6 +105,24 @@ const securityCatalog: SecurityMetadata[] = [
     price: 29,
     sector: 'Diversified',
     industry: 'Dividend Equity',
+    payoutDetails: [
+      { exDividendDate: '2026-06-25', paymentDate: '2026-06-30', amount: 0.26, source: 'seed' },
+      { exDividendDate: '2025-12-11', paymentDate: '2025-12-15', amount: 0.25, source: 'seed' },
+    ],
+  },
+  {
+    symbol: 'JEPQ',
+    name: 'JPMorgan Nasdaq Equity Premium Income ETF',
+    exchange: 'NASDAQ',
+    assetType: 'ETF',
+    currency: 'USD',
+    price: 61,
+    sector: 'Diversified',
+    industry: 'Option Income',
+    payoutDetails: [
+      { exDividendDate: '2026-07-01', paymentDate: '2026-07-06', amount: 0.63658, source: 'seed' },
+      { exDividendDate: '2025-09-02', amount: 0.44195, source: 'seed' },
+    ],
   },
 ];
 
@@ -186,7 +206,7 @@ export function createMockHoldingRepository(): HoldingRepository {
       }
       holdings = holdings.filter((holding) => holding.id !== id);
     },
-    refreshHoldingSecurityDetails: async (id) => {
+    refreshHoldingSecurityDetails: async (id, options) => {
       const existing = holdings.find((holding) => holding.id === id);
       if (!existing) {
         throw new Error('Holding not found.');
@@ -206,6 +226,13 @@ export function createMockHoldingRepository(): HoldingRepository {
         security: {
           ...existing.security,
           ...catalogSecurity,
+          payoutDetails:
+            existing.security.manualPayoutDetails?.length && !options?.replaceManualPayouts
+              ? existing.security.manualPayoutDetails
+              : catalogSecurity?.payoutDetails ?? existing.security.payoutDetails,
+          manualPayoutDetails: options?.replaceManualPayouts
+            ? []
+            : existing.security.manualPayoutDetails,
           detailsStatus: 'fresh',
           detailsUpdatedAt: nowIso(),
         },
@@ -218,7 +245,7 @@ export function createMockHoldingRepository(): HoldingRepository {
         accountPositions: updated.accountPositions.map((position) => ({ ...position })),
       };
     },
-    refreshHeldSecurityDetails: async () => {
+    refreshHeldSecurityDetails: async (options) => {
       const refreshed = await Promise.all(
         holdings.map((holding) => {
           if (isUpdatedToday(holding.security.detailsUpdatedAt)) {
@@ -232,6 +259,13 @@ export function createMockHoldingRepository(): HoldingRepository {
             security: {
               ...holding.security,
               ...catalogSecurity,
+              payoutDetails:
+                holding.security.manualPayoutDetails?.length && !options?.replaceManualPayouts
+                  ? holding.security.manualPayoutDetails
+                  : catalogSecurity?.payoutDetails ?? holding.security.payoutDetails,
+              manualPayoutDetails: options?.replaceManualPayouts
+                ? []
+                : holding.security.manualPayoutDetails,
               detailsStatus: 'fresh',
               detailsUpdatedAt: nowIso(),
             },
@@ -249,6 +283,23 @@ export function createMockHoldingRepository(): HoldingRepository {
         })),
         failedSymbols: [],
       };
+    },
+    updateManualPayoutDetails: async (id, payouts) => {
+      const existing = holdings.find((holding) => holding.id === id);
+      if (!existing) {
+        throw new Error('Holding not found.');
+      }
+      const updated: Holding = {
+        ...existing,
+        security: {
+          ...existing.security,
+          payoutDetails: payouts,
+          manualPayoutDetails: payouts,
+        },
+        updatedAt: nowIso(),
+      };
+      holdings = holdings.map((holding) => (holding.id === id ? updated : holding));
+      return updated;
     },
   };
 }

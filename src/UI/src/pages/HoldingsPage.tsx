@@ -7,7 +7,7 @@ import {
 } from '../components/FinanceTable';
 import type { Account } from '../domain/account';
 import type { AccountRepository } from '../domain/accountRepository';
-import type { Holding, SecurityMetadata } from '../domain/holding';
+import type { Holding, SecurityMetadata, SecurityPayoutDetails } from '../domain/holding';
 import type { HoldingRepository } from '../domain/holdingRepository';
 
 type HoldingsPageProps = {
@@ -32,27 +32,24 @@ const formatMoney = (value: number) => (value === 0 ? '$   -   ' : currencyForma
 
 const parseQuantity = (value: string) => Number(value.replace(/[,\s]/g, '')) || 0;
 
-const getLatestPayout = (holding: Holding) =>
-  [...(holding.security.payoutDetails ?? [])].sort((left, right) =>
-    right.exDividendDate.localeCompare(left.exDividendDate),
-  )[0];
+const refreshThrottleMs = 3000;
 
-const formatPayoutSummary = (holding: Holding) => {
-  const latestPayout = getLatestPayout(holding);
-  const estimatedPayout = holding.security.estimatedFuturePayout;
+const wait = (milliseconds: number) =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
 
-  if (!latestPayout && estimatedPayout == null) {
-    return null;
+const formatLastUpdated = (value?: string | null) => {
+  if (!value) {
+    return 'Not updated';
   }
 
-  const parts: string[] = [];
-  if (latestPayout) {
-    parts.push(`Last payout ${formatMoney(latestPayout.amount)} on ${latestPayout.exDividendDate}`);
+  const updatedAt = new Date(value);
+  if (Number.isNaN(updatedAt.getTime())) {
+    return 'Last updated date unavailable';
   }
-  if (estimatedPayout != null) {
-    parts.push(`Est. annual ${formatMoney(estimatedPayout)}`);
-  }
-  return parts.join(' · ');
+
+  return `Last updated ${updatedAt.toLocaleDateString()}`;
 };
 
 const mergeRefreshedSecurityDetails = (
@@ -87,7 +84,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [refreshingHoldingIds, setRefreshingHoldingIds] = useState<Set<string>>(() => new Set());
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [editingPayoutHolding, setEditingPayoutHolding] = useState<Holding | null>(null);
+  const [payoutDrafts, setPayoutDrafts] = useState<SecurityPayoutDetails[]>([]);
+  const [isSavingPayouts, setIsSavingPayouts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -101,17 +102,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         ]);
         setAccounts(nextAccounts.filter((account) => account.type === 'Investment'));
         setHoldings(nextHoldings);
-        void (async () => {
-          try {
-            setRefreshingHoldingIds(new Set(nextHoldings.map((holding) => holding.id)));
-            const result = await holdingRepository.refreshHeldSecurityDetails();
-            setHoldings((current) => mergeRefreshedSecurityDetails(current, result.holdings));
-          } catch {
-            // Keep saved holdings visible when the detail refresh is unavailable.
-          } finally {
-            setRefreshingHoldingIds(new Set());
-          }
-        })();
       } catch {
         setError('Unable to load holdings.');
       } finally {
@@ -181,6 +171,21 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setIsSearching(false);
   };
 
+  const openPayoutEditor = (holding: Holding) => {
+    setEditingPayoutHolding(holding);
+    setPayoutDrafts(
+      (holding.security.payoutDetails ?? []).map((payout) => ({ ...payout, mode: 'manual' })),
+    );
+    setError(null);
+  };
+
+  const closePayoutEditor = () => {
+    if (!isSavingPayouts) {
+      setEditingPayoutHolding(null);
+      setPayoutDrafts([]);
+    }
+  };
+
   const getQuantity = (holding: Holding, accountId: string) =>
     holding.accountPositions.find((position) => position.accountId === accountId)?.quantity ?? 0;
 
@@ -212,10 +217,22 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const refreshHoldingDetails = async (holdingId: string) => {
+    const holding = holdings.find((item) => item.id === holdingId);
+    const hasManualPayouts = Boolean(holding?.security.manualPayoutDetails?.length);
+    const replaceManualPayouts = hasManualPayouts
+      ? window.confirm(
+          `Replace ${holding?.security.symbol} manual payment data with the latest source data? Select Cancel to keep manual payment data.`,
+        )
+      : false;
     setRefreshingHoldingIds((current) => new Set(current).add(holdingId));
+    setError(null);
+    setSuccessMessage(null);
     try {
-      const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holdingId);
+      const refreshed = hasManualPayouts
+        ? await holdingRepository.refreshHoldingSecurityDetails(holdingId, { replaceManualPayouts })
+        : await holdingRepository.refreshHoldingSecurityDetails(holdingId);
       setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
+      setSuccessMessage(`${refreshed.security.symbol} was updated.`);
     } catch {
       setHoldings((current) =>
         current.map((holding) =>
@@ -230,12 +247,78 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
             : holding,
         ),
       );
+      setError('Unable to update holding details.');
     } finally {
       setRefreshingHoldingIds((current) => {
         const next = new Set(current);
         next.delete(holdingId);
         return next;
       });
+    }
+  };
+
+  const refreshAllHoldingDetails = async () => {
+    const holdingsToRefresh = [...holdings];
+    if (holdingsToRefresh.length === 0) {
+      return;
+    }
+
+    setIsRefreshingAll(true);
+    setError(null);
+    setSuccessMessage(null);
+    const failedSymbols: string[] = [];
+    const holdingsWithManualPayouts = holdingsToRefresh.filter(
+      (holding) => holding.security.manualPayoutDetails?.length,
+    );
+    const replaceManualPayouts = holdingsWithManualPayouts.length > 0
+      ? window.confirm(
+          `Replace manual payment data for all ${holdingsWithManualPayouts.length} affected holdings with source data? Select Cancel to keep all manual payment data.`,
+        )
+      : false;
+
+    try {
+      for (const [index, holding] of holdingsToRefresh.entries()) {
+        setRefreshingHoldingIds((current) => new Set(current).add(holding.id));
+        try {
+          const refreshed = holdingsWithManualPayouts.length > 0
+            ? await holdingRepository.refreshHoldingSecurityDetails(holding.id, { replaceManualPayouts })
+            : await holdingRepository.refreshHoldingSecurityDetails(holding.id);
+          setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
+        } catch {
+          failedSymbols.push(holding.security.symbol);
+          setHoldings((current) =>
+            current.map((item) =>
+              item.id === holding.id
+                ? {
+                    ...item,
+                    security: {
+                      ...item.security,
+                      detailsStatus: 'unavailable',
+                    },
+                  }
+                : item,
+            ),
+          );
+        } finally {
+          setRefreshingHoldingIds((current) => {
+            const next = new Set(current);
+            next.delete(holding.id);
+            return next;
+          });
+        }
+
+        if (index < holdingsToRefresh.length - 1) {
+          await wait(refreshThrottleMs);
+        }
+      }
+
+      if (failedSymbols.length > 0) {
+        setError(`Unable to update ${failedSymbols.join(', ')}.`);
+      } else {
+        setSuccessMessage('Holdings were updated.');
+      }
+    } finally {
+      setIsRefreshingAll(false);
     }
   };
 
@@ -257,26 +340,18 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           costBasis: null,
         })),
       });
-      const createdWithRefreshStatus = {
-        ...created,
-        security: {
-          ...created.security,
-          detailsStatus: 'refreshing',
-        },
-      };
       setHoldings((current) => {
         const existingIndex = current.findIndex((holding) => holding.id === created.id);
         if (existingIndex === -1) {
-          return [...current, createdWithRefreshStatus];
+          return [...current, created];
         }
 
         return current.map((holding) =>
-          holding.id === created.id ? createdWithRefreshStatus : holding,
+          holding.id === created.id ? created : holding,
         );
       });
       setSuccessMessage(`${created.security.symbol} was added.`);
       closeAddDialog();
-      void refreshHoldingDetails(created.id);
     } catch {
       setError('Unable to add holding.');
     } finally {
@@ -313,7 +388,45 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         current.map((holding) => updatedById.get(holding.id) ?? holding),
       );
       setDirtyHoldingIds(new Set());
+      const failedSymbols: string[] = [];
+
+      for (const [index, holding] of updatedHoldings.entries()) {
+        setRefreshingHoldingIds((current) => new Set(current).add(holding.id));
+        try {
+          const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holding.id);
+          setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
+        } catch {
+          failedSymbols.push(holding.security.symbol);
+          setHoldings((current) =>
+            current.map((item) =>
+              item.id === holding.id
+                ? {
+                    ...item,
+                    security: {
+                      ...item.security,
+                      detailsStatus: 'unavailable',
+                    },
+                  }
+                : item,
+            ),
+          );
+        } finally {
+          setRefreshingHoldingIds((current) => {
+            const next = new Set(current);
+            next.delete(holding.id);
+            return next;
+          });
+        }
+
+        if (index < updatedHoldings.length - 1) {
+          await wait(refreshThrottleMs);
+        }
+      }
+
       setSuccessMessage('Holdings saved.');
+      if (failedSymbols.length > 0) {
+        setError(`Holdings were saved, but ${failedSymbols.join(', ')} could not be updated.`);
+      }
     } catch {
       setError('Unable to save holdings.');
     } finally {
@@ -338,16 +451,53 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         next.delete(holding.id);
         return next;
       });
-      setRefreshingHoldingIds((current) => {
-        const next = new Set(current);
-        next.delete(holding.id);
-        return next;
-      });
       setSuccessMessage(`${holding.security.symbol} was removed.`);
     } catch {
       setError('Unable to remove holding.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const updatePayoutDraft = (
+    index: number,
+    field: keyof Pick<SecurityPayoutDetails, 'paymentDate' | 'exDividendDate' | 'amount'>,
+    value: string,
+  ) => {
+    setPayoutDrafts((current) =>
+      current.map((payout, payoutIndex) =>
+        payoutIndex === index
+          ? {
+              ...payout,
+              [field]: field === 'amount' ? Number(value) || 0 : value,
+            }
+          : payout,
+      ),
+    );
+  };
+
+  const saveManualPayouts = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingPayoutHolding) {
+      return;
+    }
+
+    const validPayouts = payoutDrafts.filter((payout) => payout.exDividendDate && payout.amount > 0);
+    setIsSavingPayouts(true);
+    setError(null);
+    try {
+      const updated = await holdingRepository.updateManualPayoutDetails(
+        editingPayoutHolding.id,
+        validPayouts.map((payout) => ({ ...payout, mode: 'manual' })),
+      );
+      setHoldings((current) => mergeRefreshedSecurityDetails(current, [updated]));
+      setSuccessMessage(`${updated.security.symbol} payment data was saved.`);
+      setEditingPayoutHolding(null);
+      setPayoutDrafts([]);
+    } catch {
+      setError('Unable to save manual payment data.');
+    } finally {
+      setIsSavingPayouts(false);
     }
   };
 
@@ -359,7 +509,24 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     <section className="holdings-workspace" aria-labelledby="holdings-heading">
       <div className="holdings-table-header">
         <div>
-          <h2 id="holdings-heading">Holdings</h2>
+          <div className="holdings-heading-row">
+            <h2 id="holdings-heading">Holdings</h2>
+            <button
+              className="link-button holdings-refresh-action"
+              type="button"
+              onClick={() => void refreshAllHoldingDetails()}
+              disabled={holdings.length === 0 || isRefreshingAll || isSaving}
+              aria-label="Update all holdings"
+              title="Update all holdings"
+            >
+              <span
+                className={`material-symbols-outlined ${isRefreshingAll ? 'holdings-spin' : ''}`}
+                aria-hidden="true"
+              >
+                sync
+              </span>
+            </button>
+          </div>
           <p>Manage share quantities by investment account.</p>
         </div>
         <div className="funding-section-actions">
@@ -417,17 +584,12 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   0,
                 );
                 const price = holding.security.price ?? 0;
-                const payoutSummary = formatPayoutSummary(holding);
 
                 return (
                   <tr key={holding.id}>
                     <td className="holdings-security-cell">
                       <strong>{holding.security.name}</strong>
-                      {payoutSummary ? <small>{payoutSummary}</small> : null}
-                      {refreshingHoldingIds.has(holding.id) ? <small>Refreshing details</small> : null}
-                      {holding.security.detailsStatus === 'unavailable' ? (
-                        <small>Details unavailable</small>
-                      ) : null}
+                      <small>{formatLastUpdated(holding.security.detailsUpdatedAt)}</small>
                     </td>
                     <td>
                       <span className="excel-cell-val">{holding.security.symbol}</span>
@@ -459,15 +621,44 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                       </td>
                     ))}
                     <td>
-                      <button
-                        className="link-button link-button-danger holdings-remove-action"
-                        type="button"
-                        onClick={() => void removeHolding(holding)}
-                        disabled={isSaving}
-                        aria-label={`Remove ${holding.security.symbol} holding`}
-                      >
-                        <span className="material-symbols-outlined" aria-hidden="true">delete</span>
-                      </button>
+                      <div className="holdings-row-actions">
+                        <button
+                          className="link-button holdings-refresh-action"
+                          type="button"
+                          onClick={() => openPayoutEditor(holding)}
+                          disabled={isSaving || refreshingHoldingIds.has(holding.id)}
+                          aria-label={`Edit ${holding.security.symbol} payments`}
+                          title={`Edit ${holding.security.symbol} payments`}
+                        >
+                          <span className="material-symbols-outlined" aria-hidden="true">payments</span>
+                        </button>
+                        <button
+                          className="link-button holdings-refresh-action"
+                          type="button"
+                          onClick={() => void refreshHoldingDetails(holding.id)}
+                          disabled={isSaving || refreshingHoldingIds.has(holding.id)}
+                          aria-label={`Update ${holding.security.symbol} holding`}
+                          title={`Update ${holding.security.symbol}`}
+                        >
+                          <span
+                            className={`material-symbols-outlined ${
+                              refreshingHoldingIds.has(holding.id) ? 'holdings-spin' : ''
+                            }`}
+                            aria-hidden="true"
+                          >
+                            sync
+                          </span>
+                        </button>
+                        <button
+                          className="link-button link-button-danger holdings-remove-action"
+                          type="button"
+                          onClick={() => void removeHolding(holding)}
+                          disabled={isSaving || refreshingHoldingIds.has(holding.id)}
+                          aria-label={`Remove ${holding.security.symbol} holding`}
+                        >
+                          <span className="material-symbols-outlined" aria-hidden="true">delete</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -540,6 +731,77 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
               </button>
               <button className="primary-action" type="submit" disabled={!selectedSecurity || isSaving}>
                 Add Row
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {editingPayoutHolding ? (
+        <div className="modal-overlay" onClick={closePayoutEditor}>
+          <form
+            className="modal-container payment-editor-modal"
+            onSubmit={saveManualPayouts}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>{editingPayoutHolding.security.symbol} Payments</h2>
+            <p>Saving changes creates user-managed payment data that source refreshes preserve by default.</p>
+            <div className="payment-editor-table" role="group" aria-label="Manual payment records">
+              {payoutDrafts.map((payout, index) => (
+                <div className="payment-editor-row" key={`${payout.exDividendDate}-${index}`}>
+                  <label>
+                    <span>Payment date</span>
+                    <input
+                      type="date"
+                      value={payout.paymentDate || payout.exDividendDate}
+                      onChange={(event) => updatePayoutDraft(index, 'paymentDate', event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>Ex-date</span>
+                    <input
+                      type="date"
+                      value={payout.exDividendDate}
+                      onChange={(event) => updatePayoutDraft(index, 'exDividendDate', event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <span>Per share</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.0001"
+                      value={payout.amount}
+                      onChange={(event) => updatePayoutDraft(index, 'amount', event.target.value)}
+                    />
+                  </label>
+                  <button
+                    className="link-button link-button-danger"
+                    type="button"
+                    aria-label={`Remove payment ${index + 1}`}
+                    onClick={() => setPayoutDrafts((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">delete</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={() => setPayoutDrafts((current) => [
+                ...current,
+                { exDividendDate: '', paymentDate: '', amount: 0, mode: 'manual', source: 'user' },
+              ])}
+            >
+              Add payment
+            </button>
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" onClick={closePayoutEditor}>
+                Cancel
+              </button>
+              <button className="primary-action" type="submit" disabled={isSavingPayouts}>
+                {isSavingPayouts ? 'Saving...' : 'Save payments'}
               </button>
             </div>
           </form>

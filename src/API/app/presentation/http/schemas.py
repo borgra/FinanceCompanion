@@ -163,6 +163,7 @@ class SecurityPayoutDetailsPayload(CamelModel):
     record_date: str | None = Field(default=None, serialization_alias="recordDate")
     payment_date: str | None = Field(default=None, serialization_alias="paymentDate")
     source: str | None = None
+    mode: str = "source"
 
 
 class SecurityMetadataPayload(CamelModel):
@@ -192,6 +193,10 @@ class SecurityMetadataPayload(CamelModel):
         default_factory=list,
         serialization_alias="payoutDetails",
     )
+    manual_payout_details: list[SecurityPayoutDetailsPayload] = Field(
+        default_factory=list,
+        serialization_alias="manualPayoutDetails",
+    )
 
 
 class HoldingAccountPositionPayload(CamelModel):
@@ -216,3 +221,13 @@ class HoldingCreateRequest(CamelModel):
 class SecurityDetailsRefreshResultPayload(CamelModel):
     holdings: list[HoldingPayload]
     failed_symbols: list[str] = Field(default_factory=list, serialization_alias="failedSymbols")
+
+
+class HoldingManualPayoutsRequest(CamelModel):
+    manual_payout_details: list[SecurityPayoutDetailsPayload] = Field(
+        serialization_alias="manualPayoutDetails",
+    )
+
+
+class SecurityDetailsRefreshRequest(CamelModel):
+    replace_manual_payouts: bool = Field(default=False, serialization_alias="replaceManualPayouts")

@@ -5,6 +5,7 @@ export type SecurityPayoutDetails = {
   recordDate?: string | null;
   paymentDate?: string | null;
   source?: string | null;
+  mode?: 'source' | 'manual';
 };
 
 export type SecurityMetadata = {
@@ -30,6 +31,7 @@ export type SecurityMetadata = {
   detailsUpdatedAt?: string | null;
   detailsStatus?: string | null;
   payoutDetails?: SecurityPayoutDetails[];
+  manualPayoutDetails?: SecurityPayoutDetails[];
 };
 
 export type HoldingAccountPosition = {

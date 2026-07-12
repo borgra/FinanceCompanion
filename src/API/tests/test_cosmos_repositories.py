@@ -307,7 +307,7 @@ def test_holding_stores_security_identity_and_details_separately(mock_table_clie
     assert "dividends" not in security_details
     assert json.loads(entity["dividendsJson"]) == {
         "status": "recent",
-        "payouts": [
+        "sourcePayouts": [
             {
                 "exDividendDate": "2026-06-28",
                 "amount": 0.45,
@@ -315,8 +315,10 @@ def test_holding_stores_security_identity_and_details_separately(mock_table_clie
                 "recordDate": None,
                 "paymentDate": "2026-07-02",
                 "source": "dividends",
+                "mode": "source",
             }
         ],
+        "manualPayouts": [],
     }
     positions = json.loads(entity["accountPositionsJson"])
     assert positions == [
@@ -405,7 +407,8 @@ def test_holding_writes_none_recent_dividend_section_without_null_totals(mock_ta
     entity = mock_table_client.create_entity.call_args[0][0]
     assert json.loads(entity["dividendsJson"]) == {
         "status": "none_recent",
-        "payouts": [],
+        "sourcePayouts": [],
+        "manualPayouts": [],
     }
 
 

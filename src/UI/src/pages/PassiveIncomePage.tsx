@@ -19,12 +19,17 @@ type DividendPayment = {
 
 type DividendMonth = {
   index: number;
+  isEstimate: boolean;
   label: string;
   payments: DividendPayment[];
   total: number;
 };
 
-const currentYear = new Date().getFullYear();
+const today = new Date();
+const currentYear = today.getFullYear();
+const todayKey = `${currentYear}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+  today.getDate(),
+).padStart(2, '0')}`;
 const maxProjectedGrowthRate = 0.15;
 const minProjectedGrowthRate = -0.2;
 const monthLabels = [
@@ -85,6 +90,32 @@ const monthIndex = (date: string) => {
   return index >= 0 && index < 12 ? index : null;
 };
 
+const toDividendPayment = (
+  holding: Holding,
+  payout: SecurityPayoutDetails,
+  {
+    date = payoutDate(payout),
+    isEstimate,
+    perShareAmount = payout.amount,
+  }: {
+    date?: string;
+    isEstimate: boolean;
+    perShareAmount?: number;
+  },
+): DividendPayment => {
+  const quantity = totalQuantity(holding);
+  return {
+    amount: perShareAmount * quantity,
+    date,
+    growthRate: projectedGrowthRate(holding),
+    holdingName: holding.security.name,
+    isEstimate,
+    perShareAmount,
+    quantity,
+    symbol: holding.security.symbol,
+  };
+};
+
 const buildActualPayments = (holdings: Holding[], selectedYear: number): DividendPayment[] =>
   holdings.flatMap((holding) => {
     const quantity = totalQuantity(holding);
@@ -94,19 +125,10 @@ const buildActualPayments = (holdings: Holding[], selectedYear: number): Dividen
 
     return (holding.security.payoutDetails ?? [])
       .filter((payout) => paymentYear(payout) === selectedYear)
-      .map((payout) => ({
-        amount: payout.amount * quantity,
-        date: payoutDate(payout),
-        growthRate: projectedGrowthRate(holding),
-        holdingName: holding.security.name,
-        isEstimate: false,
-        perShareAmount: payout.amount,
-        quantity,
-        symbol: holding.security.symbol,
-      }));
+      .map((payout) => toDividendPayment(holding, payout, { isEstimate: false }));
   });
 
-const buildEstimatedPayments = (holdings: Holding[], selectedYear: number): DividendPayment[] =>
+const buildCurrentYearPayments = (holdings: Holding[]): DividendPayment[] =>
   holdings.flatMap((holding) => {
     const quantity = totalQuantity(holding);
     if (quantity <= 0) {
@@ -114,29 +136,49 @@ const buildEstimatedPayments = (holdings: Holding[], selectedYear: number): Divi
     }
 
     const growthRate = projectedGrowthRate(holding);
-    return (holding.security.payoutDetails ?? [])
-      .filter((payout) => paymentYear(payout) === currentYear)
+    const payouts = holding.security.payoutDetails ?? [];
+    const actualPayments = payouts
+      .filter((payout) => paymentYear(payout) === currentYear && payoutDate(payout) <= todayKey)
+      .map((payout) => toDividendPayment(holding, payout, { isEstimate: false }));
+    const estimatedPayments = payouts
+      .filter((payout) => paymentYear(payout) === currentYear - 1)
       .map((payout) => {
         const date = payoutDate(payout);
+        const estimatedDate = `${currentYear}${date.slice(4)}`;
+        return { payout, estimatedDate };
+      })
+      .filter(({ estimatedDate }) => estimatedDate > todayKey)
+      .map(({ payout, estimatedDate }) => {
         const estimatedPerShareAmount = payout.amount * (1 + growthRate);
-        return {
-          amount: estimatedPerShareAmount * quantity,
-          date: `${selectedYear}${date.slice(4)}`,
-          growthRate,
-          holdingName: holding.security.name,
+        return toDividendPayment(holding, payout, {
+          date: estimatedDate,
           isEstimate: true,
           perShareAmount: estimatedPerShareAmount,
-          quantity,
-          symbol: holding.security.symbol,
-        };
+        });
       });
+
+    return [...actualPayments, ...estimatedPayments];
+  });
+
+const buildEstimatedPayments = (holdings: Holding[], selectedYear: number): DividendPayment[] =>
+  buildCurrentYearPayments(holdings).map((payment) => {
+    const estimatedPerShareAmount = payment.perShareAmount * (1 + payment.growthRate);
+    return {
+      ...payment,
+      amount: estimatedPerShareAmount * payment.quantity,
+      date: `${selectedYear}${payment.date.slice(4)}`,
+      isEstimate: true,
+      perShareAmount: estimatedPerShareAmount,
+    };
   });
 
 const buildMonthlyIncome = (holdings: Holding[], selectedYear: number): DividendMonth[] => {
   const payments =
     selectedYear === currentYear + 1
       ? buildEstimatedPayments(holdings, selectedYear)
-      : buildActualPayments(holdings, selectedYear);
+      : selectedYear === currentYear
+        ? buildCurrentYearPayments(holdings)
+        : buildActualPayments(holdings, selectedYear);
 
   return monthLabels.map((label, index) => {
     const monthPayments = payments
@@ -145,6 +187,7 @@ const buildMonthlyIncome = (holdings: Holding[], selectedYear: number): Dividend
 
     return {
       index,
+      isEstimate: monthPayments.some((payment) => payment.isEstimate),
       label,
       payments: monthPayments,
       total: monthPayments.reduce((sum, payment) => sum + payment.amount, 0),
@@ -155,7 +198,6 @@ const buildMonthlyIncome = (holdings: Holding[], selectedYear: number): Dividend
 export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps) {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [expandedMonths, setExpandedMonths] = useState<Set<number>>(() => new Set());
@@ -167,17 +209,9 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
         const loadedHoldings = await holdingRepository.listHoldings();
         setHoldings(loadedHoldings);
         setIsLoading(false);
-        setIsRefreshing(true);
-        try {
-          const refreshed = await holdingRepository.refreshHeldSecurityDetails();
-          setHoldings(refreshed.holdings);
-        } finally {
-          setIsRefreshing(false);
-        }
       } catch {
         setError('Passive income could not be loaded.');
         setIsLoading(false);
-        setIsRefreshing(false);
       }
     })();
   }, [holdingRepository]);
@@ -228,7 +262,7 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
             type="button"
             onClick={() => moveYear(-1)}
             disabled={selectedYear <= currentYear - 1}
-            aria-label="Show prior year"
+            aria-label={selectedYear === currentYear + 1 ? 'Show current year' : 'Show prior year'}
           >
             <span className="material-symbols-outlined" aria-hidden="true">chevron_left</span>
           </button>
@@ -248,7 +282,6 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
         </div>
       </div>
 
-      {isRefreshing ? <p className="status-copy">Refreshing payout details...</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
 
       <div className="passive-income-summary-grid">
@@ -269,7 +302,13 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
       <section className="passive-income-chart-section" aria-labelledby="passive-income-chart-heading">
         <div className="passive-income-section-heading">
           <h3 id="passive-income-chart-heading">Monthly Income</h3>
-          <span>{isEstimateYear ? 'Estimated from current-year payments and security growth rates' : 'Actual payout rows'}</span>
+          <span>
+            {isEstimateYear
+              ? 'Estimated from the completed current-year schedule and security growth rates'
+              : selectedYear === currentYear
+                ? 'Actual payments to date, with remaining months estimated'
+                : 'Actual payout rows'}
+          </span>
         </div>
         <div className="passive-income-chart" role="img" aria-label={`${selectedYear} dividend income by month`}>
           <div className="passive-income-y-axis">
@@ -282,7 +321,7 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
               const height = maxMonthTotal > 0 ? Math.max((month.total / maxMonthTotal) * 100, 3) : 0;
               return (
                 <button
-                  className="passive-income-bar-item"
+                  className={`passive-income-bar-item${month.isEstimate ? ' passive-income-estimate' : ''}`}
                   key={month.label}
                   type="button"
                   onClick={() => toggleMonth(month.index)}
@@ -306,7 +345,10 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
         {months.map((month) => {
           const isExpanded = expandedMonths.has(month.index);
           return (
-            <article className="passive-income-month" key={month.label}>
+            <article
+              className={`passive-income-month${month.isEstimate ? ' passive-income-estimate' : ''}`}
+              key={month.label}
+            >
               <button
                 className="passive-income-month-toggle"
                 type="button"
@@ -323,6 +365,7 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
                 <span className="passive-income-month-name">{month.label}</span>
                 <span className="passive-income-month-count">
                   {month.payments.length === 1 ? '1 payment' : `${month.payments.length} payments`}
+                  {month.isEstimate ? ' · estimated' : ''}
                 </span>
                 <strong>{formatMoney(month.total)}</strong>
               </button>
@@ -342,7 +385,9 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
                       </div>
                       {month.payments.map((payment) => (
                         <div
-                          className="passive-income-payment-row"
+                          className={`passive-income-payment-row${
+                            payment.isEstimate ? ' passive-income-payment-estimate' : ''
+                          }`}
                           key={`${payment.symbol}-${payment.date}-${payment.perShareAmount}`}
                         >
                           <span>{payment.date}</span>

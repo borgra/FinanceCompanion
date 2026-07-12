@@ -11,6 +11,7 @@ class SecurityPayoutDetails:
     record_date: str | None = None
     payment_date: str | None = None
     source: str | None = None
+    mode: str = "source"
 
 
 @dataclass(slots=True)
@@ -38,3 +39,5 @@ class SecurityMetadata:
     details_updated_at: str | None = None
     details_status: str | None = None
     payout_details: list[SecurityPayoutDetails] = field(default_factory=list)
+    source_payout_details: list[SecurityPayoutDetails] = field(default_factory=list)
+    manual_payout_details: list[SecurityPayoutDetails] = field(default_factory=list)

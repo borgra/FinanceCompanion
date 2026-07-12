@@ -266,7 +266,10 @@ def test_details_provider_populates_voo_without_premium_adjusted_daily_call(monk
     assert details.estimated_future_payout == 1.25
     assert details.dividend_growth_rate is None
     assert details.dividend_status == "recent"
-    assert [payout.ex_dividend_date for payout in details.payout_details] == ["2026-06-28"]
+    assert [payout.ex_dividend_date for payout in details.payout_details] == [
+        "2026-06-28",
+        "2024-12-20",
+    ]
     assert details.payout_details[0].payment_date == "2026-07-02"
     assert details.payout_details[0].source == "dividends"
     assert details.details_status == "fresh"
@@ -302,7 +305,7 @@ def test_details_provider_marks_symbols_with_only_old_dividends_as_none_recent(m
     assert details.dividend_previous_year is None
     assert details.dividend_current_year is None
     assert details.estimated_future_payout is None
-    assert details.payout_details == []
+    assert [payout.ex_dividend_date for payout in details.payout_details] == ["2020-02-13"]
 
 
 def test_details_provider_calculates_growth_from_trailing_average(monkeypatch):

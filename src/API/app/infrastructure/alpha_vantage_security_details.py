@@ -22,6 +22,12 @@ def _to_float(value) -> float | None:
         return None
 
 
+def _to_optional_text(value) -> str | None:
+    if value in (None, "", "None", "N/A", "-"):
+        return None
+    return str(value)
+
+
 def _latest_sma(payload: dict) -> float | None:
     closes = _daily_closes(payload)
     if len(closes) < 20:
@@ -64,9 +70,9 @@ def _payout_details_from_dividends(items: list[dict]) -> list[SecurityPayoutDeta
             SecurityPayoutDetails(
                 ex_dividend_date=ex_date,
                 amount=amount,
-                declaration_date=item.get("declaration_date") or None,
-                record_date=item.get("record_date") or None,
-                payment_date=item.get("payment_date") or None,
+                declaration_date=_to_optional_text(item.get("declaration_date")),
+                record_date=_to_optional_text(item.get("record_date")),
+                payment_date=_to_optional_text(item.get("payment_date")),
                 source="dividends",
             )
         )
@@ -205,20 +211,19 @@ class AlphaVantageSecurityDetailsProvider:
                 }
             )
             all_payout_details = _payout_details_from_daily_adjusted(daily_adjusted)
-        payout_details = _payouts_since_year(all_payout_details, current_year - 1)
+        recent_payout_details = _payouts_since_year(all_payout_details, current_year - 1)
         dividend_status = (
             "recent"
-            if payout_details
+            if recent_payout_details
             else "none_recent"
             if all_payout_details
             else "unavailable"
             if dividends_failed and daily_adjusted_failed
             else "none"
         )
-        recent_dividend_totals = _annual_payout_totals(payout_details)
         all_dividend_totals = _annual_payout_totals(all_payout_details)
-        previous_dividend = recent_dividend_totals.get(current_year - 1)
-        current_dividend = recent_dividend_totals.get(current_year)
+        previous_dividend = all_dividend_totals.get(current_year - 1)
+        current_dividend = all_dividend_totals.get(current_year)
         estimated_future_payout = current_dividend if current_dividend is not None else None
         projected_current_year_dividend = (
             current_dividend + estimated_future_payout
@@ -280,5 +285,6 @@ class AlphaVantageSecurityDetailsProvider:
             sma50=_to_float(overview.get("50DayMovingAverage")),
             sma200=_to_float(overview.get("200DayMovingAverage")),
             details_status=details_status,
-            payout_details=payout_details,
+            payout_details=all_payout_details,
+            source_payout_details=all_payout_details,
         )

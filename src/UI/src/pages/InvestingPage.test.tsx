@@ -2,7 +2,9 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Account } from '../domain/account';
+import type { Holding } from '../domain/holding';
 import { createMockAccountRepository } from '../domain/accountRepository';
+import type { HoldingRepository } from '../domain/holdingRepository';
 import { createMockHoldingRepository } from '../domain/holdingRepository';
 import { createMockIncomeSourceRepository } from '../domain/incomeSourceRepository';
 import { InvestingPage } from './InvestingPage';
@@ -69,10 +71,19 @@ describe('InvestingPage', () => {
   });
 
   it('adds a searched security to investment accounts', async () => {
+    const holdingRepository = createMockHoldingRepository();
+    const refreshHoldingSecurityDetails = vi.spyOn(
+      holdingRepository,
+      'refreshHoldingSecurityDetails',
+    );
+    const updateManualPayoutDetails = vi.spyOn(
+      holdingRepository,
+      'updateManualPayoutDetails',
+    );
     render(
       <InvestingPage
         accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
-        holdingRepository={createMockHoldingRepository()}
+        holdingRepository={holdingRepository}
         incomeRepository={createMockIncomeSourceRepository()}
       />,
     );
@@ -90,6 +101,7 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('Holdings saved.')).toBeInTheDocument();
+    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('columnheader', { name: 'Security' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Ticker' })).toBeInTheDocument();
     expect(
@@ -97,16 +109,25 @@ describe('InvestingPage', () => {
     ).toHaveClass('excel-col-editable-header');
     expect(screen.getByRole('cell', { name: /^Vanguard Total Stock Market ETF/ })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'VTI' })).toBeInTheDocument();
+    expect(screen.getByText(/Last updated/)).toBeInTheDocument();
     expect(screen.getByLabelText('VTI quantity for Fidelity Taxable Brokerage')).toHaveValue(
       '12.5',
     );
     expect(screen.getByRole('cell', { name: '$3,937.50' })).toBeInTheDocument();
-    expect(
-      await screen.findByText(/Last payout \$0.45 on 2026-06-28/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/Est\. annual \$3.72/)).toBeInTheDocument();
+    expect(screen.queryByText(/Last payout \$0.45 on 2026-06-28/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Est\. annual \$3.72/)).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'P/E' })).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'SMA200' })).not.toBeInTheDocument();
+
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit VTI payments' }));
+    expect(await screen.findByRole('heading', { name: 'VTI Payments' })).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Payment date')).toHaveLength(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Save payments' }));
+
+    expect(await screen.findByText('VTI payment data was saved.')).toBeInTheDocument();
+    expect(updateManualPayoutDetails).toHaveBeenCalledTimes(1);
   });
 
   it('reuses an existing holding when the same security is added again', async () => {
@@ -156,7 +177,89 @@ describe('InvestingPage', () => {
     expect(screen.getByText('No holdings have been added yet.')).toBeInTheDocument();
   });
 
-  it('shows passive income by month with prior actuals and next year estimates', async () => {
+  it('updates all holdings manually with a three second throttle', async () => {
+    const holdings: Holding[] = [
+      {
+        id: 'holding-vti',
+        security: {
+          symbol: 'VTI',
+          name: 'Vanguard Total Stock Market ETF',
+          exchange: 'NYSE Arca',
+          assetType: 'ETF',
+          currency: 'USD',
+          price: 315,
+        },
+        accountPositions: [{ accountId: 'acc-taxable-brokerage', quantity: 10, costBasis: null }],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'holding-schd',
+        security: {
+          symbol: 'SCHD',
+          name: 'Schwab US Dividend Equity ETF',
+          exchange: 'NYSE Arca',
+          assetType: 'ETF',
+          currency: 'USD',
+          price: 29,
+        },
+        accountPositions: [{ accountId: 'acc-taxable-brokerage', quantity: 20, costBasis: null }],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    const refreshHoldingSecurityDetails = vi.fn(async (id: string) => {
+      const holding = holdings.find((item) => item.id === id);
+      if (!holding) {
+        throw new Error('Holding not found.');
+      }
+      return {
+        ...holding,
+        security: {
+          ...holding.security,
+          detailsStatus: 'fresh',
+          detailsUpdatedAt: '2026-07-12T00:00:00.000Z',
+        },
+      };
+    });
+    const holdingRepository: HoldingRepository = {
+      searchSecurities: vi.fn(async () => []),
+      listHoldings: vi.fn(async () => holdings),
+      createHolding: vi.fn(),
+      updateHolding: vi.fn(),
+      deleteHolding: vi.fn(),
+      refreshHoldingSecurityDetails,
+      refreshHeldSecurityDetails: vi.fn(),
+      updateManualPayoutDetails: vi.fn(),
+    };
+
+    render(
+      <InvestingPage
+        accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
+        holdingRepository={holdingRepository}
+        incomeRepository={createMockIncomeSourceRepository()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
+    expect(await screen.findByRole('cell', { name: 'VTI' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Update all holdings' }));
+
+    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
+    expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(1, 'holding-vti');
+
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 2900);
+    });
+    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
+
+    expect(await screen.findByText('Holdings were updated.', {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(2);
+    expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(2, 'holding-schd');
+  }, 10000);
+
+  it('shows passive income by month with prior actuals and current and next-year estimates', async () => {
     const holdingRepository = createMockHoldingRepository();
     const currentYear = new Date().getFullYear();
     render(
@@ -186,6 +289,9 @@ describe('InvestingPage', () => {
     expect(screen.getByText('Dividend income')).toBeInTheDocument();
     expect(screen.getAllByText('$5.63').length).toBeGreaterThan(0);
 
+    const decemberEstimate = screen.getByRole('button', { name: /Dec, 1 payment, \$5\.24/i });
+    expect(decemberEstimate.closest('article')).toHaveClass('passive-income-estimate');
+
     await userEvent.click(screen.getByRole('button', { name: /Jul, 1 payment, \$5\.63/i }));
 
     expect(screen.getByText(`${currentYear}-07-02`)).toBeInTheDocument();
@@ -206,9 +312,16 @@ describe('InvestingPage', () => {
     expect(screen.getByText('Estimated income')).toBeInTheDocument();
     expect(screen.getAllByText('$5.89').length).toBeGreaterThan(0);
 
-    await userEvent.click(screen.getByRole('button', { name: /Jul, 1 payment, \$5\.89/i }));
+    const nextYearJulyEstimate = screen.getByRole('button', { name: /Jul, 1 payment, \$5\.89/i });
+    expect(nextYearJulyEstimate.closest('article')).toHaveClass('passive-income-estimate');
+    await userEvent.click(nextYearJulyEstimate);
 
     expect(screen.getByText(`${currentYear + 1}-07-02`)).toBeInTheDocument();
     expect(screen.getByText('4.79% growth estimate')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show current year' }));
+
+    expect(screen.getByText(String(currentYear))).toBeInTheDocument();
+    expect(screen.getByText('Current year')).toBeInTheDocument();
   });
 });

@@ -604,7 +604,47 @@ SEED_ACCOUNTS = {
 }
 
 SEED_HOLDINGS = {
-    "user-steve": []
+    "user-steve": [
+        {
+            "id": "holding-msft",
+            "security": {
+                "symbol": "MSFT", "name": "Microsoft Corporation", "exchange": "NASDAQ",
+                "assetType": "Equity", "currency": "USD", "price": 510,
+                "payoutDetails": [
+                    {"exDividendDate": "2026-05-14", "paymentDate": "2026-06-12", "amount": 0.83, "source": "seed"},
+                    {"exDividendDate": "2025-11-20", "paymentDate": "2025-12-12", "amount": 0.83, "source": "seed"},
+                ],
+            },
+            "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 12, "costBasis": None}],
+            "createdAt": SEED_TIMESTAMP, "updatedAt": SEED_TIMESTAMP,
+        },
+        {
+            "id": "holding-schd",
+            "security": {
+                "symbol": "SCHD", "name": "Schwab U.S. Dividend Equity ETF", "exchange": "NYSE Arca",
+                "assetType": "ETF", "currency": "USD", "price": 29,
+                "payoutDetails": [
+                    {"exDividendDate": "2026-06-25", "paymentDate": "2026-06-30", "amount": 0.26, "source": "seed"},
+                    {"exDividendDate": "2025-12-11", "paymentDate": "2025-12-15", "amount": 0.25, "source": "seed"},
+                ],
+            },
+            "accountPositions": [{"accountId": "acc-roth-ira", "quantity": 40, "costBasis": None}],
+            "createdAt": SEED_TIMESTAMP, "updatedAt": SEED_TIMESTAMP,
+        },
+        {
+            "id": "holding-jepq",
+            "security": {
+                "symbol": "JEPQ", "name": "JPMorgan Nasdaq Equity Premium Income ETF", "exchange": "NASDAQ",
+                "assetType": "ETF", "currency": "USD", "price": 61,
+                "payoutDetails": [
+                    {"exDividendDate": "2026-07-01", "paymentDate": "2026-07-06", "amount": 0.63658, "source": "seed"},
+                    {"exDividendDate": "2025-09-02", "paymentDate": None, "amount": 0.44195, "source": "seed"},
+                ],
+            },
+            "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 25, "costBasis": None}],
+            "createdAt": SEED_TIMESTAMP, "updatedAt": SEED_TIMESTAMP,
+        },
+    ]
 }
 
 

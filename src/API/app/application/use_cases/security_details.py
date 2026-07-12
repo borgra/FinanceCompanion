@@ -40,13 +40,23 @@ def should_refresh_security_details(security: SecurityMetadata) -> bool:
     return updated_date < datetime.now(tz=UTC).date()
 
 
+def _effective_payout_details(
+    source_payout_details: list,
+    manual_payout_details: list,
+) -> list:
+    return manual_payout_details or source_payout_details
+
+
 def merge_security_details(
     current: SecurityMetadata,
     details: SecurityMetadata,
     *,
     status: str,
     updated_at: str,
+    replace_manual_payouts: bool = False,
 ) -> SecurityMetadata:
+    source_payout_details = details.source_payout_details or details.payout_details
+    manual_payout_details = [] if replace_manual_payouts else current.manual_payout_details
     return SecurityMetadata(
         symbol=current.symbol,
         name=details.name or current.name,
@@ -70,7 +80,9 @@ def merge_security_details(
         sma200=_coalesce(details.sma200, current.sma200),
         details_updated_at=updated_at,
         details_status=details.details_status or status,
-        payout_details=details.payout_details or current.payout_details,
+        payout_details=_effective_payout_details(source_payout_details, manual_payout_details),
+        source_payout_details=source_payout_details,
+        manual_payout_details=manual_payout_details,
     )
 
 
@@ -83,14 +95,17 @@ class RefreshHoldingSecurityDetails:
         self._repository = repository
         self._provider = provider
 
-    def execute(self, user_id: str, holding_id: str) -> Holding:
+    def execute(
+        self,
+        user_id: str,
+        holding_id: str,
+        *,
+        replace_manual_payouts: bool = False,
+    ) -> Holding:
         holdings = self._repository.list_for_user(user_id)
         holding = next((item for item in holdings if item.id == holding_id), None)
         if holding is None:
             raise NotFoundError("Holding not found.")
-
-        if not should_refresh_security_details(holding.security):
-            return holding
 
         details = self._provider.get_details(holding.security)
         timestamp = now_iso()
@@ -101,6 +116,7 @@ class RefreshHoldingSecurityDetails:
                 details,
                 status="fresh",
                 updated_at=timestamp,
+                replace_manual_payouts=replace_manual_payouts,
             ),
             updated_at=timestamp,
         )
@@ -116,15 +132,18 @@ class RefreshHeldSecurityDetails:
         self._repository = repository
         self._provider = provider
 
-    def execute(self, user_id: str) -> SecurityDetailsRefreshResult:
+    def execute(
+        self,
+        user_id: str,
+        *,
+        replace_manual_payouts: bool = False,
+    ) -> SecurityDetailsRefreshResult:
         holdings = self._repository.list_for_user(user_id)
         details_by_symbol: dict[str, SecurityMetadata] = {}
         failed_symbols: list[str] = []
 
         for holding in holdings:
             symbol = holding.security.symbol
-            if not should_refresh_security_details(holding.security):
-                continue
             if symbol in details_by_symbol or symbol in failed_symbols:
                 continue
 
@@ -148,6 +167,7 @@ class RefreshHeldSecurityDetails:
                     details,
                     status="fresh",
                     updated_at=timestamp,
+                    replace_manual_payouts=replace_manual_payouts,
                 ),
                 updated_at=timestamp,
             )

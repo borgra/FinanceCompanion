@@ -208,6 +208,7 @@ def to_security_payout_details(payload: SecurityPayoutDetailsPayload) -> Securit
         record_date=payload.record_date,
         payment_date=payload.payment_date,
         source=payload.source,
+        mode=payload.mode,
     )
 
 
@@ -219,6 +220,7 @@ def to_security_payout_details_payload(item: SecurityPayoutDetails) -> SecurityP
         record_date=item.record_date,
         payment_date=item.payment_date,
         source=item.source,
+        mode=item.mode,
     )
 
 
@@ -250,6 +252,10 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
             to_security_payout_details(item)
             for item in payload.payout_details
         ],
+        manual_payout_details=[
+            to_security_payout_details(item)
+            for item in payload.manual_payout_details
+        ],
     )
 
 
@@ -280,6 +286,10 @@ def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayl
         payout_details=[
             to_security_payout_details_payload(payout)
             for payout in item.payout_details
+        ],
+        manual_payout_details=[
+            to_security_payout_details_payload(payout)
+            for payout in item.manual_payout_details
         ],
     )
 

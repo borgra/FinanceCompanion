@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 
 from azure.core.exceptions import ResourceNotFoundError
@@ -239,7 +239,20 @@ def _account_to_entity(user_id: str, account: Account) -> dict:
 
 def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
     dividends = data.get("dividends") or {}
-    payouts_data = dividends.get("payouts") or data.get("payoutDetails", [])
+    source_payouts_data = (
+        dividends.get("sourcePayouts")
+        or dividends.get("payouts")
+        or data.get("payoutDetails", [])
+    )
+    manual_payouts_data = dividends.get("manualPayouts") or data.get("manualPayoutDetails", [])
+    source_payout_details = [
+        replace(_security_payout_details_from_dict(item), mode="source")
+        for item in source_payouts_data
+    ]
+    manual_payout_details = [
+        replace(_security_payout_details_from_dict(item), mode="manual")
+        for item in manual_payouts_data
+    ]
     return SecurityMetadata(
         symbol=data["symbol"],
         name=data["name"],
@@ -285,10 +298,9 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         sma200=_optional_float(data.get("sma200")),
         details_updated_at=data.get("detailsUpdatedAt"),
         details_status=data.get("detailsStatus"),
-        payout_details=[
-            _security_payout_details_from_dict(item)
-            for item in payouts_data
-        ],
+        payout_details=manual_payout_details or source_payout_details,
+        source_payout_details=source_payout_details,
+        manual_payout_details=manual_payout_details,
     )
 
 
@@ -311,6 +323,7 @@ def _security_payout_details_to_dict(payout: SecurityPayoutDetails) -> dict:
         "recordDate": payout.record_date,
         "paymentDate": payout.payment_date,
         "source": payout.source,
+        "mode": payout.mode,
     }
 
 
@@ -338,12 +351,16 @@ def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
 
 
 def _security_dividends_to_dict(security: SecurityMetadata) -> dict | None:
-    payouts = [
+    source_payouts = [
         _security_payout_details_to_dict(payout)
-        for payout in security.payout_details
+        for payout in (security.source_payout_details or security.payout_details)
+    ]
+    manual_payouts = [
+        _security_payout_details_to_dict(payout)
+        for payout in security.manual_payout_details
     ]
     status = security.dividend_status
-    if not status and not payouts and all(
+    if not status and not source_payouts and not manual_payouts and all(
         value is None
         for value in [
             security.dividend_previous_year,
@@ -356,7 +373,8 @@ def _security_dividends_to_dict(security: SecurityMetadata) -> dict | None:
 
     data = {
         "status": status or "recent",
-        "payouts": payouts,
+        "sourcePayouts": source_payouts,
+        "manualPayouts": manual_payouts,
     }
     optional_values = {
         "previousYear": security.dividend_previous_year,

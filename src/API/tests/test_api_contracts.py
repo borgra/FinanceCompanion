@@ -240,7 +240,7 @@ def test_security_can_be_searched_and_added_to_multiple_accounts():
 
     holdings_response = client.get("/api/v1/holdings")
     assert holdings_response.status_code == 200
-    assert holdings_response.json()[0]["security"]["symbol"] == "VTI"
+    assert any(item["security"]["symbol"] == "VTI" for item in holdings_response.json())
 
 
 def test_security_details_refresh_persists_stock_and_payout_details():
@@ -274,10 +274,11 @@ def test_security_details_refresh_persists_stock_and_payout_details():
             "amount": 0.45,
             "declarationDate": "2026-06-10",
             "recordDate": "2026-06-29",
-            "paymentDate": "2026-07-02",
-            "source": "dividends",
-        }
-    ]
+                "paymentDate": "2026-07-02",
+                "source": "dividends",
+                "mode": "source",
+            }
+        ]
 
     holdings_response = client.get("/api/v1/holdings")
 
@@ -338,6 +339,44 @@ def test_existing_security_add_reuses_holding_and_keeps_saved_details():
         for item in holdings_response.json()
         if item["security"]["symbol"] == "VTI"
     ]) == 1
+
+
+def test_manual_payouts_persist_until_a_refresh_explicitly_replaces_them():
+    client = build_test_client()
+    authenticate(client)
+    holding_id = "holding-jepq"
+
+    manual_response = client.put(
+        f"/api/v1/holdings/{holding_id}/manual-payouts",
+        json={
+            "manualPayoutDetails": [
+                {
+                    "exDividendDate": "2025-09-02",
+                    "paymentDate": "2025-09-05",
+                    "amount": 0.44195,
+                    "source": "user",
+                }
+            ]
+        },
+    )
+
+    assert manual_response.status_code == 200
+    assert manual_response.json()["security"]["payoutDetails"][0]["paymentDate"] == "2025-09-05"
+    assert manual_response.json()["security"]["payoutDetails"][0]["mode"] == "manual"
+
+    preserved_response = client.post(f"/api/v1/holdings/{holding_id}/security-details/refresh")
+
+    assert preserved_response.status_code == 200
+    assert preserved_response.json()["security"]["payoutDetails"][0]["mode"] == "manual"
+
+    replaced_response = client.post(
+        f"/api/v1/holdings/{holding_id}/security-details/refresh",
+        json={"replaceManualPayouts": True},
+    )
+
+    assert replaced_response.status_code == 200
+    assert replaced_response.json()["security"]["manualPayoutDetails"] == []
+    assert replaced_response.json()["security"]["payoutDetails"][0]["mode"] == "source"
 
 
 def test_delete_holding_removes_security_from_holdings():

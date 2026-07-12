@@ -903,6 +903,12 @@ p {
   font-size: 1.05rem;
 }
 
+.holdings-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .holdings-table-header p {
   margin-top: 2px;
   font-size: 0.78rem;
@@ -910,6 +916,12 @@ p {
 
 .holdings-finance-table {
   margin-top: 0;
+}
+
+.holdings-finance-table tbody td {
+  height: 52px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .holdings-security-cell {
@@ -923,19 +935,37 @@ p {
   color: var(--md-sys-color-on-surface);
 }
 
-.holdings-security-cell span {
+.holdings-security-cell small {
   color: var(--md-sys-color-on-surface-variant);
   font-size: 0.74rem;
 }
 
+.holdings-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.holdings-refresh-action,
 .holdings-remove-action {
   min-height: 28px;
   width: 28px;
   padding: 0;
 }
 
+.holdings-refresh-action .material-symbols-outlined,
 .holdings-remove-action .material-symbols-outlined {
   font-size: 1.1rem;
+}
+
+.holdings-spin {
+  animation: holdings-spin 0.8s linear infinite;
+}
+
+@keyframes holdings-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .passive-income-workspace {
@@ -1121,6 +1151,17 @@ p {
     linear-gradient(180deg, rgba(0, 230, 118, 0.92), rgba(56, 189, 248, 0.72));
 }
 
+.passive-income-estimate .passive-income-bar {
+  background:
+    linear-gradient(180deg, rgba(250, 204, 21, 0.94), rgba(244, 114, 182, 0.74));
+}
+
+.passive-income-bar-item.passive-income-estimate:hover .passive-income-bar-track,
+.passive-income-bar-item.passive-income-estimate[aria-expanded='true'] .passive-income-bar-track {
+  border-color: rgba(250, 204, 21, 0.64);
+  background-color: rgba(250, 204, 21, 0.08);
+}
+
 .passive-income-bar-item strong {
   color: var(--md-sys-color-on-surface);
   font-family: Consolas, monospace;
@@ -1140,6 +1181,11 @@ p {
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-s);
   background-color: rgba(255, 255, 255, 0.012);
+}
+
+.passive-income-month.passive-income-estimate {
+  border-color: rgba(250, 204, 21, 0.42);
+  background-color: rgba(250, 204, 21, 0.035);
 }
 
 .passive-income-month-toggle {
@@ -1212,6 +1258,10 @@ p {
 
 .passive-income-payment-row:first-child {
   border-top: 0;
+}
+
+.passive-income-payment-row.passive-income-payment-estimate {
+  background-color: rgba(250, 204, 21, 0.045);
 }
 
 .passive-income-payment-header {
@@ -3101,6 +3151,57 @@ button.security-result:hover {
   padding: 24px 28px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   animation: slideUp var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
+}
+
+.payment-editor-modal {
+  width: min(860px, calc(100% - 32px));
+}
+
+.payment-editor-table {
+  display: flex;
+  max-height: min(48vh, 420px);
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.payment-editor-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) minmax(110px, 0.8fr) 32px;
+  gap: 8px;
+  align-items: end;
+  padding: 8px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+}
+
+.payment-editor-row label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.payment-editor-row input {
+  min-width: 0;
+  height: 34px;
+  padding: 5px 7px;
+}
+
+.payment-editor-row .link-button {
+  min-height: 34px;
+  width: 32px;
+  padding: 0;
+}
+
+@media (max-width: 640px) {
+  .payment-editor-row {
+    grid-template-columns: 1fr 1fr 1fr 32px;
+  }
 }
 
 .modal-container h2 {
