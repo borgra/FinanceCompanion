@@ -358,7 +358,6 @@ def _security_details_to_dict(security: SecurityMetadata) -> dict:
         "thirtyDayYield": security.thirty_day_yield,
         "fiftyTwoWeekLow": security.fifty_two_week_low,
         "fiftyTwoWeekHigh": security.fifty_two_week_high,
-        "dividends": _security_dividends_to_dict(security),
         "sma20": security.sma20,
         "sma50": security.sma50,
         "sma200": security.sma200,
@@ -372,14 +371,18 @@ def _security_metadata_from_entity(entity: dict) -> SecurityMetadata:
         return _security_metadata_from_dict(json.loads(entity["securityJson"]))
 
     security_details = json.loads(entity.get("securityDetails", "{}"))
-    return _security_metadata_from_dict({
+    dividends = json.loads(entity.get("dividendsJson", "{}"))
+    data = {
         "symbol": entity["securitySymbol"],
         "name": entity["securityName"],
         "exchange": entity["securityExchange"],
         "assetType": entity["securityAssetType"],
         "currency": entity["securityCurrency"],
         **security_details,
-    })
+    }
+    if dividends:
+        data["dividends"] = dividends
+    return _security_metadata_from_dict(data)
 
 
 def _holding_account_position_from_dict(data: dict) -> HoldingAccountPosition:
@@ -425,6 +428,7 @@ def _holding_to_entity(user_id: str, holding: Holding) -> dict:
         "createdAt": holding.created_at,
         "updatedAt": holding.updated_at,
         "securityDetails": json.dumps(_security_details_to_dict(holding.security)),
+        "dividendsJson": json.dumps(_security_dividends_to_dict(holding.security)),
         "accountPositionsJson": json.dumps([
             _holding_account_position_to_dict(item)
             for item in holding.account_positions

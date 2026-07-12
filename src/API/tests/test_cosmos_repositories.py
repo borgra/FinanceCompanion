@@ -304,7 +304,8 @@ def test_holding_stores_security_identity_and_details_separately(mock_table_clie
     assert security_details["sector"] == "Diversified"
     assert security_details["industry"] == "Broad Market"
     assert "payoutDetails" not in security_details
-    assert security_details["dividends"] == {
+    assert "dividends" not in security_details
+    assert json.loads(entity["dividendsJson"]) == {
         "previousYear": None,
         "currentYear": None,
         "growthRate": None,
@@ -341,24 +342,24 @@ def test_holding_reads_new_dividend_section(mock_table_client):
             "securityCurrency": "USD",
             "securityDetails": json.dumps({
                 "price": 80.12,
-                "dividends": {
-                    "previousYear": 2.65,
-                    "currentYear": 1.34,
-                    "growthRate": -0.4943,
-                    "estimatedFuturePayout": 1.34,
-                    "payouts": [
-                        {
-                            "exDividendDate": "2026-06-25",
-                            "amount": 0.26,
-                            "declarationDate": "2026-06-20",
-                            "recordDate": "2026-06-26",
-                            "paymentDate": "2026-07-01",
-                            "source": "dividends",
-                        }
-                    ],
-                },
                 "detailsUpdatedAt": "2026-07-11T19:21:28.294379Z",
                 "detailsStatus": "fresh",
+            }),
+            "dividendsJson": json.dumps({
+                "previousYear": 2.65,
+                "currentYear": 1.34,
+                "growthRate": -0.4943,
+                "estimatedFuturePayout": 1.34,
+                "payouts": [
+                    {
+                        "exDividendDate": "2026-06-25",
+                        "amount": 0.26,
+                        "declarationDate": "2026-06-20",
+                        "recordDate": "2026-06-26",
+                        "paymentDate": "2026-07-01",
+                        "source": "dividends",
+                    }
+                ],
             }),
             "accountPositionsJson": json.dumps([
                 {"accountId": "acc-1", "quantity": 25.0, "costBasis": 1900},
@@ -378,6 +379,53 @@ def test_holding_reads_new_dividend_section(mock_table_client):
     assert security.estimated_future_payout == 1.34
     assert security.payout_details[0].ex_dividend_date == "2026-06-25"
     assert security.payout_details[0].payment_date == "2026-07-01"
+
+
+def test_holding_reads_legacy_dividend_section_inside_security_details(mock_table_client):
+    repo = CosmosHoldingRepository(mock_table_client)
+    mock_table_client.query_entities.return_value = [
+        {
+            "PartitionKey": "user-123",
+            "RowKey": "holding:holding-1",
+            "entityId": "holding-1",
+            "securitySymbol": "O",
+            "securityName": "Realty Income Corp",
+            "securityExchange": "United States",
+            "securityAssetType": "Equity",
+            "securityCurrency": "USD",
+            "securityDetails": json.dumps({
+                "price": 63.31,
+                "dividends": {
+                    "previousYear": 3.2155,
+                    "currentYear": 1.8935,
+                    "growthRate": -0.4111,
+                    "estimatedFuturePayout": 1.8935,
+                    "payouts": [
+                        {
+                            "exDividendDate": "2026-07-31",
+                            "amount": 0.271,
+                            "declarationDate": "2026-07-07",
+                            "recordDate": "2026-07-31",
+                            "paymentDate": "2026-08-14",
+                            "source": "dividends",
+                        }
+                    ],
+                },
+            }),
+            "accountPositionsJson": json.dumps([
+                {"accountId": "acc-1", "quantity": 50.0, "costBasis": None},
+            ]),
+            "createdAt": "2026-07-12T01:09:42.896504Z",
+            "updatedAt": "2026-07-12T01:09:47.544867Z",
+        }
+    ]
+
+    holdings = repo.list_for_user("user-123")
+
+    security = holdings[0].security
+    assert security.dividend_previous_year == 3.2155
+    assert security.dividend_current_year == 1.8935
+    assert security.payout_details[0].ex_dividend_date == "2026-07-31"
 
 
 def test_holding_reads_security_details_attribute(mock_table_client):
