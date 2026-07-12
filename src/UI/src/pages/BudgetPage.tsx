@@ -49,8 +49,6 @@ const emptyIncomeTotals = (): IncomeTotals => ({
 
 const tmpId = () => `tmp-${crypto.randomUUID()}`;
 
-type BudgetSort = 'amount' | 'name';
-
 const budgetColors = [
   { name: 'Green', value: '#00e676' },
   { name: 'Sky', value: '#38bdf8' },
@@ -100,7 +98,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
   const [newCategoryIcon, setNewCategoryIcon] = useState('category');
   const [newCategoryIsEssential, setNewCategoryIsEssential] = useState(true);
   const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<BudgetSort>('amount');
   const [hoveredCategoryId, setHoveredCategoryId] = useState<string | undefined>();
 
   const [newSubName, setNewSubName] = useState('');
@@ -174,12 +171,14 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     });
   }, [derivedCategoriesForTotals, totals.totalMonth]);
 
-  const sortedCategories = useMemo(() => {
-    return [...categorySummaries].sort((a, b) => {
-      if (sortBy === 'name') return a.category.name.localeCompare(b.category.name);
-      return b.monthlyAmount - a.monthlyAmount || a.category.name.localeCompare(b.category.name);
-    });
-  }, [categorySummaries, sortBy]);
+  const categoryGroups = useMemo(() => {
+    const sortByAmount = (a: typeof categorySummaries[number], b: typeof categorySummaries[number]) =>
+      b.monthlyAmount - a.monthlyAmount || a.category.name.localeCompare(b.category.name);
+    return [
+      { label: 'Essential', categories: categorySummaries.filter((item) => item.category.isEssential).sort(sortByAmount) },
+      { label: 'Discretionary', categories: categorySummaries.filter((item) => !item.category.isEssential).sort(sortByAmount) },
+    ].filter((group) => group.categories.length > 0);
+  }, [categorySummaries]);
 
   const pieSegments = useMemo(() => {
     let start = 0;
@@ -509,8 +508,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
               <div className="budget-progress-panel">
                 <div className="budget-progress-header">
-                  <span>Essential coverage</span>
-                  <strong>{incomeLoading ? '—' : formatPercent(totals.essentialPercentNet)}</strong>
+                  <span>Essential Budget: {formatMoney(totals.essentialMonth)}</span>
                 </div>
                 <div className="budget-progress-track" aria-hidden="true">
                   <span className="budget-progress-fill" style={{ width: `${clampPercent(totals.essentialPercentNet ?? 0)}%` }} />
@@ -518,8 +516,7 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               </div>
               <div className="budget-progress-panel">
                 <div className="budget-progress-header">
-                  <span>Total coverage</span>
-                  <strong>{incomeLoading ? '—' : formatPercent(totals.percentNet)}</strong>
+                  <span>Total Budget: {formatMoney(totals.totalMonth)}</span>
                 </div>
                 <div className="budget-progress-track" aria-hidden="true">
                   <span
@@ -600,13 +597,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               <p>Expand a category to edit the group and the line items that make it up.</p>
             </div>
             <div className="budget-master-actions">
-              <label className="budget-sort-control">
-                <span>Sort</span>
-                <select aria-label="Sort categories" value={sortBy} onChange={(event) => setSortBy(event.target.value as BudgetSort)}>
-                  <option value="amount">Amount: high to low</option>
-                  <option value="name">Name: A to Z</option>
-                </select>
-              </label>
               <button className="primary-action" type="button" onClick={() => setIsAddCatModalOpen(true)}>
                 <span className="material-symbols-outlined" aria-hidden="true">add</span>
                 Add Category
@@ -626,8 +616,12 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               <p>Add a category to start building your master budget list.</p>
             </div>
           ) : (
-            <div className="budget-category-list budget-accordion-list" role="list">
-              {sortedCategories.map(({ category: cat }) => {
+            <div className="budget-category-list budget-accordion-list">
+              {categoryGroups.map((group) => (
+                <section className="budget-category-group" key={group.label} aria-labelledby={`budget-category-group-${group.label.toLowerCase()}`}>
+                  <h3 id={`budget-category-group-${group.label.toLowerCase()}`}>{group.label}</h3>
+                  <div role="list">
+              {group.categories.map(({ category: cat }) => {
                 const isExpanded = cat.id === selectedCategoryId;
                 const effectiveCat =
                   isExpanded && draftCategory ? draftCategory : cat;
@@ -910,6 +904,9 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
                   </article>
                 );
               })}
+                  </div>
+                </section>
+              ))}
             </div>
           )}
 

@@ -2356,6 +2356,32 @@ button.security-result:hover {
   gap: 6px;
 }
 
+.budget-category-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.budget-category-group + .budget-category-group {
+  margin-top: 14px;
+}
+
+.budget-category-group h3 {
+  margin: 0 2px;
+  font-family: var(--md-sys-font-display);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.budget-category-group [role='list'] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .budget-category-card {
   --category-color: #64748b;
   background:

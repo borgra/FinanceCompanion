@@ -38,11 +38,13 @@ describe('BudgetPage', () => {
 
     expect(await screen.findByText('Monthly Posture')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /Expand Housing category/i })).toBeInTheDocument();
-    expect(screen.getByText('Essential coverage')).toBeInTheDocument();
-    expect(screen.getByText('Total coverage')).toBeInTheDocument();
+    expect(screen.getByText('Essential Budget: $2,620.00')).toBeInTheDocument();
+    expect(screen.getByText('Total Budget: $2,900.00')).toBeInTheDocument();
     expect(screen.getByText('Budget category list')).toBeInTheDocument();
     expect(screen.getByText('Master categories')).toBeInTheDocument();
-    expect(screen.getByLabelText('Sort categories')).toHaveValue('amount');
+    expect(screen.queryByLabelText('Sort categories')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Essential', level: 3 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Discretionary', level: 3 })).toBeInTheDocument();
     expect(screen.getByLabelText('Budget allocation')).toBeInTheDocument();
     expect(screen.queryByText('Yearly Budget')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Expand Housing category/i })).toHaveAttribute(
@@ -102,7 +104,7 @@ describe('BudgetPage', () => {
     );
   });
 
-  it('allows category sorting and exposes allocation details from the legend', async () => {
+  it('keeps category groups amount-descending and exposes allocation details from the legend', async () => {
     const user = userEvent.setup();
     render(
       <BudgetPage
@@ -111,9 +113,8 @@ describe('BudgetPage', () => {
       />,
     );
 
-    const sort = await screen.findByLabelText('Sort categories');
-    await user.selectOptions(sort, 'name');
-    expect(sort).toHaveValue('name');
+    expect(await screen.findByRole('heading', { name: 'Essential', level: 3 })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Sort categories')).not.toBeInTheDocument();
 
     await user.hover(screen.getByRole('button', { name: /Housing: \$1,450\.00/i }));
     expect(within(screen.getByLabelText('Budget allocation')).getByText('50.0%')).toBeInTheDocument();
@@ -134,6 +135,6 @@ describe('BudgetPage', () => {
 
     await user.click(classification);
     expect(classification).toBeChecked();
-    expect(screen.getAllByText('38.7%')).toHaveLength(2);
+    expect(screen.getAllByText('Essential Budget: $2,900.00')).toHaveLength(1);
   });
 });
