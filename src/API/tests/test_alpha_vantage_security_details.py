@@ -43,7 +43,7 @@ def test_details_provider_keeps_quote_when_optional_endpoints_fail(monkeypatch):
     assert details.details_status == "partial"
 
 
-def test_details_provider_prioritizes_quote_price_before_later_partial_failures(monkeypatch):
+def test_details_provider_prioritizes_dividends_before_later_partial_failures(monkeypatch):
     requested_functions = []
 
     def fake_get(url, params, timeout, headers):
@@ -68,7 +68,7 @@ def test_details_provider_prioritizes_quote_price_before_later_partial_failures(
 
     details = AlphaVantageSecurityDetailsProvider("test-key").get_details(security("MSFT"))
 
-    assert requested_functions[:2] == ["GLOBAL_QUOTE", "OVERVIEW"]
+    assert requested_functions[:3] == ["DIVIDENDS", "GLOBAL_QUOTE", "OVERVIEW"]
     assert details.price == 512.88
     assert details.pe_ratio == 23.04
     assert details.fifty_two_week_low == 349.2
@@ -225,6 +225,13 @@ def test_details_provider_populates_voo_without_premium_adjusted_daily_call(monk
                             "record_date": "2026-06-29",
                             "payment_date": "2026-07-02",
                             "amount": "1.25",
+                        },
+                        {
+                            "ex_dividend_date": "2024-12-20",
+                            "declaration_date": "2024-12-01",
+                            "record_date": "2024-12-21",
+                            "payment_date": "2025-01-02",
+                            "amount": "1.05",
                         }
                     ]
                 }
@@ -236,10 +243,10 @@ def test_details_provider_populates_voo_without_premium_adjusted_daily_call(monk
     details = AlphaVantageSecurityDetailsProvider("test-key").get_details(security("VOO"))
 
     assert requested_functions == [
+        "DIVIDENDS",
         "GLOBAL_QUOTE",
         "OVERVIEW",
         "TIME_SERIES_DAILY",
-        "DIVIDENDS",
     ]
     assert details.name == "Vanguard S&P 500 ETF"
     assert details.price == 551.23
@@ -251,6 +258,7 @@ def test_details_provider_populates_voo_without_premium_adjusted_daily_call(monk
     assert details.sma50 == 535.1
     assert details.sma200 == 508.4
     assert details.dividend_current_year == 1.25
+    assert [payout.ex_dividend_date for payout in details.payout_details] == ["2026-06-28"]
     assert details.payout_details[0].payment_date == "2026-07-02"
     assert details.payout_details[0].source == "dividends"
     assert details.details_status == "fresh"

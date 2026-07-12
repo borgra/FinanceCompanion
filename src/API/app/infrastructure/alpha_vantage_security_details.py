@@ -103,6 +103,21 @@ def _annual_payout_totals(payouts: list[SecurityPayoutDetails]) -> dict[int, flo
     return dict(totals)
 
 
+def _payouts_since_year(
+    payouts: list[SecurityPayoutDetails],
+    earliest_year: int,
+) -> list[SecurityPayoutDetails]:
+    recent: list[SecurityPayoutDetails] = []
+    for payout in payouts:
+        try:
+            payout_year = int(payout.ex_dividend_date[:4])
+        except ValueError:
+            continue
+        if payout_year >= earliest_year:
+            recent.append(payout)
+    return recent
+
+
 class AlphaVantageSecurityDetailsProvider:
     def __init__(self, api_key: str | None, timeout_seconds: float = 10.0) -> None:
         self._api_key = api_key
@@ -142,6 +157,7 @@ class AlphaVantageSecurityDetailsProvider:
         if not self._api_key or self._api_key == "not-configured":
             raise SecurityDetailsUnavailableError("Security details are not configured.")
 
+        dividends, dividends_failed = self._try_get({"function": "DIVIDENDS", "symbol": symbol})
         quote, quote_failed = self._try_get({"function": "GLOBAL_QUOTE", "symbol": symbol})
         overview, overview_failed = self._try_get({"function": "OVERVIEW", "symbol": symbol})
         daily, daily_failed = self._try_get(
@@ -151,7 +167,6 @@ class AlphaVantageSecurityDetailsProvider:
                 "outputsize": "compact",
             }
         )
-        dividends, dividends_failed = self._try_get({"function": "DIVIDENDS", "symbol": symbol})
 
         current_year = datetime.now(tz=UTC).year
         payout_details = _payout_details_from_dividends(dividends.get("data", []))
@@ -166,6 +181,7 @@ class AlphaVantageSecurityDetailsProvider:
                 }
             )
             payout_details = _payout_details_from_daily_adjusted(daily_adjusted)
+        payout_details = _payouts_since_year(payout_details, current_year - 1)
         dividend_totals = _annual_payout_totals(payout_details)
         previous_dividend = dividend_totals.get(current_year - 1)
         current_dividend = dividend_totals.get(current_year)
