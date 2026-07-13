@@ -491,3 +491,32 @@ def test_holding_import_updates_matching_tickers_and_rejects_invalid_rows():
         {"symbol": "VTI", "name": "Vanguard", "price": 0},
     ]})
     assert invalid_price.status_code == 422
+
+
+def test_holding_import_updates_only_listed_account_positions():
+    client = build_test_client()
+    authenticate(client)
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    created = client.post("/api/v1/holdings", json={
+        "security": security,
+        "accountPositions": [
+            {"accountId": "acc-taxable-brokerage", "quantity": 12, "costBasis": None},
+            {"accountId": "acc-401k", "quantity": 2, "costBasis": 200},
+        ],
+    })
+    assert created.status_code == 201
+
+    response = client.put("/api/v1/holdings/import", json={"rows": [{
+        "symbol": security["symbol"],
+        "name": security["name"],
+        "price": security["price"],
+        "accountPositions": [
+            {"accountId": "acc-401k", "quantity": 43, "costBasis": None},
+        ],
+    }]})
+
+    assert response.status_code == 200
+    assert response.json()["holdings"][0]["accountPositions"] == [
+        {"accountId": "acc-taxable-brokerage", "quantity": 12.0, "costBasis": None},
+        {"accountId": "acc-401k", "quantity": 43.0, "costBasis": 200.0},
+    ]

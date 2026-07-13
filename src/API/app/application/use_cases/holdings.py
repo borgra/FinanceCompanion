@@ -69,13 +69,42 @@ class ImportHoldingDetails:
             if holding is None:
                 unmatched.append(symbol)
                 continue
-            if holding.security.name == name and holding.security.price == price:
+            updates_by_account_id = {
+                position.account_id: position for position in account_positions
+            }
+            existing_account_ids = {
+                position.account_id for position in holding.account_positions
+            }
+            merged_positions = [
+                HoldingAccountPosition(
+                    account_id=existing.account_id,
+                    quantity=updates_by_account_id[existing.account_id].quantity,
+                    cost_basis=(
+                        existing.cost_basis
+                        if updates_by_account_id[existing.account_id].cost_basis is None
+                        else updates_by_account_id[existing.account_id].cost_basis
+                    ),
+                )
+                if existing.account_id in updates_by_account_id
+                else existing
+                for existing in holding.account_positions
+            ]
+            merged_positions.extend(
+                position
+                for position in account_positions
+                if position.account_id not in existing_account_ids
+            )
+            if (
+                holding.security.name == name
+                and holding.security.price == price
+                and holding.account_positions == merged_positions
+            ):
                 updated.append(holding)
                 continue
             refreshed = replace(
                 holding,
                 security=replace(holding.security, name=name, price=price, details_updated_at=timestamp, details_status="manual"),
-                account_positions=account_positions,
+                account_positions=merged_positions,
                 updated_at=timestamp,
             )
             updated.append(self._repository.update_for_user(user_id, holding.id, refreshed))
@@ -121,4 +150,3 @@ class UpdateManualPayoutDetails:
             updated_at=timestamp,
         )
         return self._repository.update_for_user(user_id, holding_id, updated)
-

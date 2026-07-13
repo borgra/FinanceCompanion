@@ -8,6 +8,7 @@ import { SettingsConfigurationPanel } from './SettingsConfigurationPanel';
 import { SettingsBudgetPanel } from './SettingsBudgetPanel';
 import { AccountPage } from './AccountPage';
 import { InvestingPage } from './InvestingPage';
+import { NetWorthPage } from './NetWorthPage';
 
 export type LandingPageProps = {
   repository: IncomeSourceRepository;
@@ -19,7 +20,7 @@ export type LandingPageProps = {
 export function LandingPage({ repository, budgetRepository, accountRepository, holdingRepository }: LandingPageProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [activeSectionId, setActiveSectionId] =
-    useState<'income' | 'budget' | 'accounts' | 'investing'>('budget');
+    useState<'income' | 'budget' | 'accounts' | 'investing' | 'net-worth'>('budget');
 
   return (
     <div className="landing-background">
@@ -32,10 +33,11 @@ export function LandingPage({ repository, budgetRepository, accountRepository, h
             { id: 'budget', label: 'Budget', icon: 'account_balance_wallet' },
             { id: 'accounts', label: 'Banking', icon: 'account_balance' },
             { id: 'investing', label: 'Investing', icon: 'show_chart' },
+            { id: 'net-worth', label: 'Net Worth', icon: 'savings' },
           ]}
           activeSectionId={activeSectionId}
           onActiveSectionChange={(nextId) =>
-            setActiveSectionId(nextId as 'income' | 'budget' | 'accounts' | 'investing')
+            setActiveSectionId(nextId as 'income' | 'budget' | 'accounts' | 'investing' | 'net-worth')
           }
           getPanel={(activeId) => {
             if (activeId === 'budget') {
@@ -61,6 +63,15 @@ export function LandingPage({ repository, budgetRepository, accountRepository, h
                   accountRepository={accountRepository}
                   holdingRepository={holdingRepository}
                   incomeRepository={repository}
+                />
+              );
+            }
+            if (activeId === 'net-worth') {
+              return (
+                <NetWorthPage
+                  accountRepository={accountRepository}
+                  incomeRepository={repository}
+                  holdingRepository={holdingRepository}
                 />
               );
             }

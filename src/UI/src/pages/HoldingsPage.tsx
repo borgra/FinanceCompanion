@@ -61,22 +61,25 @@ const formatLastUpdated = (value?: string | null) => {
 
 const importAccountHeader = (account: Account) => `Account: ${account.name} (${account.id})`;
 
-const parseHoldingImport = (csv: string, investmentAccounts: Account[]): HoldingImportRow[] => {
+export const parseHoldingImport = (csv: string, investmentAccounts: Account[]): HoldingImportRow[] => {
   const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
   if (lines.length < 2 || lines.length > HOLDINGS_IMPORT_MAX_ROWS + 1) throw new Error('The file must contain 1 to 500 data rows.');
   const headers = lines[0].split(',').map((header) => header.trim());
-  const expectedHeaders = ['Ticker', 'Name', 'Price', ...investmentAccounts.map(importAccountHeader)];
-  if (headers.length !== expectedHeaders.length || headers.some((header, index) => header !== expectedHeaders[index])) throw new Error('Use the downloaded template without changing the account columns.');
+  const requiredHeaders = ['Ticker', 'Name', 'Price'];
+  if (headers.length < requiredHeaders.length + 1 || requiredHeaders.some((header, index) => header !== headers[index])) throw new Error('Include Ticker, Name, Price, and at least one Account column from the downloaded template.');
+  const accountByHeader = new Map(investmentAccounts.map((account) => [importAccountHeader(account), account]));
+  const selectedAccounts = headers.slice(requiredHeaders.length).map((header) => accountByHeader.get(header));
+  if (selectedAccounts.some((account) => !account) || new Set(selectedAccounts.map((account) => account?.id)).size !== selectedAccounts.length) throw new Error('Each Account column must match a configured investment account and may appear only once.');
   const symbols = new Set<string>();
   return lines.slice(1).map((line, index) => {
     const values = line.split(',').map((value) => value.trim());
     const [symbol, name, rawPrice, ...rawQuantities] = values;
     const price = Number(rawPrice);
-    if (values.length !== expectedHeaders.length || !/^[A-Za-z0-9.-]{1,20}$/.test(symbol) || !name || name.length > 200 || !Number.isFinite(price) || price <= 0 || price > 1_000_000) throw new Error(`Row ${index + 2} is invalid.`);
+    if (values.length !== headers.length || !/^[A-Za-z0-9.-]{1,20}$/.test(symbol) || !name || name.length > 200 || !Number.isFinite(price) || price <= 0 || price > 1_000_000) throw new Error(`Row ${index + 2} is invalid.`);
     const accountPositions = rawQuantities.map((rawQuantity, quantityIndex) => {
       const quantity = rawQuantity === '' ? 0 : Number(rawQuantity);
       if (!Number.isFinite(quantity) || quantity < 0 || quantity > 1_000_000_000) throw new Error(`Row ${index + 2} has an invalid account quantity.`);
-      return { accountId: investmentAccounts[quantityIndex].id, quantity, costBasis: null };
+      return { accountId: selectedAccounts[quantityIndex]!.id, quantity, costBasis: null };
     });
     const normalized = symbol.toUpperCase();
     if (symbols.has(normalized)) throw new Error(`Ticker ${normalized} appears more than once.`);
@@ -941,4 +944,3 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     </section>
   );
 }
-
