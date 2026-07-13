@@ -106,7 +106,7 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('Holdings saved.')).toBeInTheDocument();
-    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
+    expect(refreshHoldingSecurityDetails).not.toHaveBeenCalled();
     expect(screen.getByRole('columnheader', { name: 'Security' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Ticker' })).toBeInTheDocument();
     expect(
@@ -114,7 +114,7 @@ describe('InvestingPage', () => {
     ).toHaveClass('excel-col-editable-header');
     expect(screen.getByRole('cell', { name: /^Vanguard Total Stock Market ETF/ })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'VTI' })).toBeInTheDocument();
-    expect(screen.getByText(/Last updated/)).toBeInTheDocument();
+    expect(screen.getByText('Not updated')).toBeInTheDocument();
     expect(screen.getByLabelText('VTI quantity for Fidelity Taxable Brokerage')).toHaveValue(
       '12.5',
     );
@@ -124,7 +124,7 @@ describe('InvestingPage', () => {
     expect(screen.queryByRole('columnheader', { name: 'P/E' })).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'SMA200' })).not.toBeInTheDocument();
 
-    expect(screen.queryByText('Not updated')).not.toBeInTheDocument();
+    expect(screen.getByText('Not updated')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit VTI payments' }));
     expect(await screen.findByRole('heading', { name: 'VTI Payments' })).toBeInTheDocument();
@@ -135,6 +135,36 @@ describe('InvestingPage', () => {
     expect(updateManualPayoutDetails).toHaveBeenCalledTimes(1);
   });
 
+  it('allows a positive manual price in the holdings table and saves it', async () => {
+    const holdingRepository = createMockHoldingRepository();
+    const updateHolding = vi.spyOn(holdingRepository, 'updateHolding');
+    render(
+      <InvestingPage
+        accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
+        holdingRepository={holdingRepository}
+        incomeRepository={createMockIncomeSourceRepository()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
+    await userEvent.type(screen.getByLabelText('Security'), 'vti');
+    await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
+
+    const priceInput = screen.getByLabelText('VTI price');
+    await userEvent.click(priceInput);
+    await userEvent.clear(priceInput);
+    await userEvent.type(priceInput, '325.25');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await screen.findByText('Holdings saved.');
+    expect(updateHolding).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        security: expect.objectContaining({ price: 325.25 }),
+      }),
+    );
+  });
   it('allows a manual ticker when security search is unavailable', async () => {
     const holdingRepository = createMockHoldingRepository();
     vi.spyOn(holdingRepository, 'searchSecurities').mockRejectedValue(new Error('Unavailable'));
@@ -370,6 +400,8 @@ describe('InvestingPage', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     await screen.findByText('Holdings saved.');
+    await userEvent.click(screen.getByRole('button', { name: 'Update VTI holding' }));
+    await screen.findByText('VTI was updated.');
 
     await userEvent.click(screen.getByRole('tab', { name: 'Passive Income' }));
 
@@ -513,3 +545,5 @@ describe('InvestingPage', () => {
     /* eslint-enable @typescript-eslint/no-explicit-any */
   });
 });
+
+

@@ -134,3 +134,27 @@ def test_bulk_refresh_refreshes_all_requested_details():
     assert provider.requested_symbols == ["VTI", "MSFT"]
     assert result.failed_symbols == []
     assert [item.security.price for item in result.holdings] == [321.45, 321.45]
+
+
+def test_refresh_preserves_a_manually_saved_price_when_the_provider_returns_null():
+    class NullPriceProvider:
+        def get_details(self, security: SecurityMetadata):
+            return SecurityMetadata(
+                symbol=security.symbol,
+                name=security.name,
+                exchange=security.exchange,
+                asset_type=security.asset_type,
+                currency=security.currency,
+                price=None,
+            )
+
+    manually_priced = holding("holding-1")
+    manually_priced.security.price = 325.25
+    repository = FakeHoldingRepository([manually_priced])
+
+    refreshed = RefreshHoldingSecurityDetails(repository, NullPriceProvider()).execute(
+        "user-123",
+        "holding-1",
+    )
+
+    assert refreshed.security.price == 325.25

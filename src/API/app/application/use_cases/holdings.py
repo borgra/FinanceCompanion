@@ -55,6 +55,31 @@ class UpdateHolding:
         return self._repository.update_for_user(user_id, holding_id, holding)
 
 
+class ImportHoldingDetails:
+    def __init__(self, repository: HoldingRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, rows: list[tuple[str, str, float]]) -> tuple[list[Holding], list[str]]:
+        holdings_by_symbol = {holding.security.symbol.casefold(): holding for holding in self._repository.list_for_user(user_id)}
+        updated: list[Holding] = []
+        unmatched: list[str] = []
+        timestamp = now_iso()
+        for symbol, name, price in rows:
+            holding = holdings_by_symbol.get(symbol.casefold())
+            if holding is None:
+                unmatched.append(symbol)
+                continue
+            if holding.security.name == name and holding.security.price == price:
+                updated.append(holding)
+                continue
+            refreshed = replace(
+                holding,
+                security=replace(holding.security, name=name, price=price, details_updated_at=timestamp, details_status="manual"),
+                updated_at=timestamp,
+            )
+            updated.append(self._repository.update_for_user(user_id, holding.id, refreshed))
+        return updated, unmatched
+
 class DeleteHolding:
     def __init__(self, repository: HoldingRepository) -> None:
         self._repository = repository
@@ -95,3 +120,4 @@ class UpdateManualPayoutDetails:
             updated_at=timestamp,
         )
         return self._repository.update_for_user(user_id, holding_id, updated)
+

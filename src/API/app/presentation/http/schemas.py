@@ -178,7 +178,7 @@ class SecurityMetadataPayload(CamelModel):
     exchange: str
     asset_type: str = Field(serialization_alias="assetType")
     currency: str
-    price: float | None = None
+    price: float | None = Field(default=None, gt=0)
     sector: str | None = None
     industry: str | None = None
     pe_ratio: float | None = Field(default=None, serialization_alias="peRatio")
@@ -224,6 +224,20 @@ class HoldingCreateRequest(CamelModel):
     account_positions: list[HoldingAccountPositionPayload] = Field(serialization_alias="accountPositions")
 
 
+class HoldingImportRow(CamelModel):
+    symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9.-]+$")
+    name: str = Field(min_length=1, max_length=200)
+    price: float = Field(gt=0, le=1_000_000)
+
+
+class HoldingImportRequest(CamelModel):
+    rows: list[HoldingImportRow] = Field(min_length=1, max_length=500)
+
+
+class HoldingImportResponse(CamelModel):
+    holdings: list[HoldingPayload]
+    unmatched_symbols: list[str] = Field(default_factory=list, serialization_alias="unmatchedSymbols")
+
 class SecurityDetailsRefreshResultPayload(CamelModel):
     holdings: list[HoldingPayload]
     failed_symbols: list[str] = Field(default_factory=list, serialization_alias="failedSymbols")
@@ -237,3 +251,4 @@ class HoldingManualPayoutsRequest(CamelModel):
 
 class SecurityDetailsRefreshRequest(CamelModel):
     replace_manual_payouts: bool = Field(default=False, serialization_alias="replaceManualPayouts")
+

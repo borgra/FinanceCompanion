@@ -36,6 +36,8 @@ from app.presentation.http.schemas import (
     BudgetSubCategoryPayload,
     BudgetSubCategoryUpdateRequest,
     HoldingCreateRequest,
+    HoldingImportRequest,
+    HoldingImportResponse,
     HoldingManualPayoutsRequest,
     HoldingPayload,
     IncomeSourcePayload,
@@ -309,6 +311,17 @@ def create_holding(request: HoldingCreateRequest, user=Depends(require_session_u
     )
     return to_holding_payload(container.create_holding.execute(user.user_id, holding))
 
+
+@router.put("/holdings/import", response_model=HoldingImportResponse)
+def import_holding_details(request: HoldingImportRequest, user=Depends(require_session_user), container=Depends(get_container)) -> HoldingImportResponse:
+    symbols = [row.symbol.casefold() for row in request.rows]
+    if len(symbols) != len(set(symbols)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Each ticker may appear only once.")
+    updated, unmatched = container.import_holding_details.execute(
+        user.user_id,
+        [(row.symbol.strip().upper(), row.name.strip(), row.price) for row in request.rows],
+    )
+    return HoldingImportResponse(holdings=[to_holding_payload(item) for item in updated], unmatched_symbols=unmatched)
 
 @router.post("/holdings/security-details/refresh", response_model=SecurityDetailsRefreshResultPayload)
 def refresh_held_security_details(

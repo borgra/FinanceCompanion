@@ -20,6 +20,7 @@ from app.application.use_cases.income_sources import (
 from app.application.use_cases.holdings import (
     CreateHolding,
     DeleteHolding,
+    ImportHoldingDetails,
     ListHoldings,
     UpdateHolding,
     UpdateManualPayoutDetails,
@@ -68,6 +69,7 @@ class Container:
     list_holdings: ListHoldings
     create_holding: CreateHolding
     update_holding: UpdateHolding
+    import_holding_details: ImportHoldingDetails
     delete_holding: DeleteHolding
     update_manual_payout_details: UpdateManualPayoutDetails
     search_securities: SearchSecurities
@@ -150,6 +152,7 @@ def build_container(
         list_holdings=ListHoldings(holdings),
         create_holding=CreateHolding(holdings),
         update_holding=UpdateHolding(holdings),
+        import_holding_details=ImportHoldingDetails(holdings),
         delete_holding=DeleteHolding(holdings),
         update_manual_payout_details=UpdateManualPayoutDetails(holdings),
         search_securities=SearchSecurities(

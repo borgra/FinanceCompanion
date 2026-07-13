@@ -1,6 +1,8 @@
 import type {
   Holding,
   HoldingDraft,
+  HoldingImportResult,
+  HoldingImportRow,
   SecurityPayoutDetails,
   SecurityDetailsRefreshResult,
   SecurityMetadata,
@@ -11,6 +13,7 @@ export type HoldingRepository = {
   listHoldings: () => Promise<Holding[]>;
   createHolding: (draft: HoldingDraft) => Promise<Holding>;
   updateHolding: (id: string, draft: HoldingDraft) => Promise<Holding>;
+  importHoldingDetails?: (rows: HoldingImportRow[]) => Promise<HoldingImportResult>;
   deleteHolding: (id: string) => Promise<void>;
   refreshHoldingSecurityDetails: (id: string, options?: { replaceManualPayouts?: boolean }) => Promise<Holding>;
   refreshHeldSecurityDetails: (options?: { replaceManualPayouts?: boolean }) => Promise<SecurityDetailsRefreshResult>;
@@ -184,6 +187,21 @@ export function createMockHoldingRepository(): HoldingRepository {
       };
       holdings = [...holdings, next];
       return { ...next };
+    },
+    importHoldingDetails: async (rows) => {
+      const rowsBySymbol = new Map(rows.map((row) => [row.symbol.toLowerCase(), row]));
+      const matchedSymbols = new Set(holdings.map((holding) => holding.security.symbol.toLowerCase()));
+      const updatedIds = new Set<string>();
+      holdings = holdings.map((holding) => {
+        const row = rowsBySymbol.get(holding.security.symbol.toLowerCase());
+        if (!row) return holding;
+        updatedIds.add(holding.id);
+        return { ...holding, security: { ...holding.security, name: row.name, price: row.price, detailsStatus: 'manual', detailsUpdatedAt: nowIso() }, updatedAt: nowIso() };
+      });
+      return {
+        holdings: holdings.filter((holding) => updatedIds.has(holding.id)).map((holding) => ({ ...holding, security: { ...holding.security } })),
+        unmatchedSymbols: rows.filter((row) => !matchedSymbols.has(row.symbol.toLowerCase())).map((row) => row.symbol),
+      };
     },
     updateHolding: async (id, draft) => {
       const existing = holdings.find((holding) => holding.id === id);

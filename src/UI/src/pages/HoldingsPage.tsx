@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FinanceMoneyCellInput,
   FinanceMoneyCellValue,
@@ -7,7 +7,7 @@ import {
 } from '../components/FinanceTable';
 import type { Account } from '../domain/account';
 import type { AccountRepository } from '../domain/accountRepository';
-import type { Holding, SecurityMetadata, SecurityPayoutDetails } from '../domain/holding';
+import type { Holding, HoldingImportRow, SecurityMetadata, SecurityPayoutDetails } from '../domain/holding';
 import type { HoldingRepository } from '../domain/holdingRepository';
 
 type HoldingsPageProps = {
@@ -32,11 +32,14 @@ const formatMoney = (value: number) => (value === 0 ? '$   -   ' : currencyForma
 const formatPortfolioMoney = (value: number) => currencyFormatter.format(value);
 
 const parseQuantity = (value: string) => Number(value.replace(/[,\s]/g, '')) || 0;
+const parsePrice = (value: string) => Number(value.replace(/[$,\s]/g, ''));
 
 const securitySymbolFromInput = (value: string) => value.trim().toUpperCase();
 const isValidSecuritySymbol = (value: string) => /^[A-Z0-9.-]+$/.test(value);
 
 const refreshThrottleMs = 3000;
+const HOLDINGS_IMPORT_MAX_BYTES = 1024 * 1024;
+const HOLDINGS_IMPORT_MAX_ROWS = 500;
 
 const wait = (milliseconds: number) =>
   new Promise((resolve) => {
@@ -56,6 +59,25 @@ const formatLastUpdated = (value?: string | null) => {
   return `Last updated ${updatedAt.toLocaleDateString()}`;
 };
 
+const holdingsTemplate = "Ticker,Name,Price\r\nMSFT,Microsoft Corporation,510.25\r\n";
+
+const parseHoldingImport = (csv: string): HoldingImportRow[] => {
+  const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2 || lines.length > HOLDINGS_IMPORT_MAX_ROWS + 1) throw new Error('The file must contain 1 to 500 data rows.');
+  const headers = lines[0].split(',').map((header) => header.trim().toLowerCase());
+  if (headers.join(',') !== 'ticker,name,price') throw new Error('Use the downloaded template with Ticker, Name, and Price columns.');
+  const symbols = new Set<string>();
+  return lines.slice(1).map((line, index) => {
+    const values = line.split(',').map((value) => value.trim());
+    const [symbol, name, rawPrice] = values;
+    const price = Number(rawPrice);
+    if (values.length !== 3 || !/^[A-Za-z0-9.-]{1,20}$/.test(symbol) || !name || name.length > 200 || !Number.isFinite(price) || price <= 0 || price > 1_000_000) throw new Error(`Row ${index + 2} is invalid.`);
+    const normalized = symbol.toUpperCase();
+    if (symbols.has(normalized)) throw new Error(`Ticker ${normalized} appears more than once.`);
+    symbols.add(normalized);
+    return { symbol: normalized, name, price };
+  });
+};
 const mergeRefreshedSecurityDetails = (
   current: Holding[],
   refreshed: Holding[],
@@ -87,6 +109,8 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [refreshingHoldingIds, setRefreshingHoldingIds] = useState<Set<string>>(() => new Set());
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -275,6 +299,49 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setSuccessMessage(null);
   };
 
+  const updatePrice = (holdingId: string, rawValue: string) => {
+    const price = parsePrice(rawValue);
+    if (!Number.isFinite(price) || price <= 0) {
+      setError('Price must be greater than $0.00.');
+      return;
+    }
+
+    setHoldings((current) =>
+      current.map((holding) =>
+        holding.id === holdingId
+          ? { ...holding, security: { ...holding.security, price } }
+          : holding,
+      ),
+    );
+    setDirtyHoldingIds((current) => new Set(current).add(holdingId));
+    setError(null);
+    setSuccessMessage(null);
+  };
+
+  const downloadImportTemplate = () => {
+    const url = URL.createObjectURL(new Blob([holdingsTemplate], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'holdings-import-template.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importHoldingDetails = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if ((file.type && file.type !== 'text/csv') || !file.name.toLowerCase().endsWith('.csv')) { setError('Upload a CSV file created from the holdings template.'); return; }
+    if (file.size === 0 || file.size > HOLDINGS_IMPORT_MAX_BYTES) { setError('The import file must be between 1 byte and 1 MB.'); return; }
+    if (!holdingRepository.importHoldingDetails) { setError('Holdings import is unavailable.'); return; }
+    setIsImporting(true); setError(null); setSuccessMessage(null);
+    try {
+      const result = await holdingRepository.importHoldingDetails(parseHoldingImport(await file.text()));
+      setHoldings((current) => mergeRefreshedSecurityDetails(current, result.holdings));
+      setSuccessMessage(result.unmatchedSymbols.length ? `${result.holdings.length} holding details updated. No matching holding for ${result.unmatchedSymbols.join(', ')}.` : `${result.holdings.length} holding details updated.`);
+    } catch (importError) { setError(importError instanceof Error ? importError.message : 'Unable to import holding details.'); }
+    finally { setIsImporting(false); }
+  };
   const refreshHoldingDetails = async (holdingId: string) => {
     const holding = holdings.find((item) => item.id === holdingId);
     const hasManualPayouts = Boolean(holding?.security.manualPayoutDetails?.length);
@@ -455,45 +522,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         current.map((holding) => updatedById.get(holding.id) ?? holding),
       );
       setDirtyHoldingIds(new Set());
-      const failedSymbols: string[] = [];
-
-      for (const [index, holding] of updatedHoldings.entries()) {
-        setRefreshingHoldingIds((current) => new Set(current).add(holding.id));
-        try {
-          const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holding.id);
-          setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
-        } catch {
-          failedSymbols.push(holding.security.symbol);
-          setHoldings((current) =>
-            current.map((item) =>
-              item.id === holding.id
-                ? {
-                    ...item,
-                    security: {
-                      ...item.security,
-                      detailsStatus: 'unavailable',
-                    },
-                  }
-                : item,
-            ),
-          );
-        } finally {
-          setRefreshingHoldingIds((current) => {
-            const next = new Set(current);
-            next.delete(holding.id);
-            return next;
-          });
-        }
-
-        if (index < updatedHoldings.length - 1) {
-          await wait(refreshThrottleMs);
-        }
-      }
-
       setSuccessMessage('Holdings saved.');
-      if (failedSymbols.length > 0) {
-        setError(`Holdings were saved, but ${failedSymbols.join(', ')} could not be updated.`);
-      }
     } catch {
       setError('Unable to save holdings.');
     } finally {
@@ -597,6 +626,9 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           <p>Manage share quantities by investment account.</p>
         </div>
         <div className="funding-section-actions">
+          <input ref={importInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => void importHoldingDetails(event)} />
+          <button className="secondary-action compact-add-action" type="button" onClick={downloadImportTemplate}>Download template</button>
+          <button className="secondary-action compact-add-action" type="button" onClick={() => importInputRef.current?.click()} disabled={isImporting || isSaving}>{isImporting ? 'Importing...' : 'Import details'}</button>
           <button
             className="secondary-action compact-add-action"
             type="button"
@@ -634,7 +666,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
               <FinanceTableHeaderCell icon="show_chart">Security</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Ticker</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Total Qty</FinanceTableHeaderCell>
-              <FinanceTableHeaderCell>Price</FinanceTableHeaderCell>
+              <FinanceTableHeaderCell isEditable>Price</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Value</FinanceTableHeaderCell>
               {managedAccounts.map((account) => (
                 <FinanceTableHeaderCell key={account.id} icon="account_balance" isEditable>
@@ -675,7 +707,13 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                       />
                     </td>
                     <td>
-                      <FinanceMoneyCellValue value={price} formatValue={formatMoney} />
+                      <FinanceMoneyCellInput
+                          value={price}
+                          formatValue={formatMoney}
+                          onValueChange={(value) => updatePrice(holding.id, value)}
+                          focusId={`holding-${holding.id}-price`}
+                          aria-label={`${holding.security.symbol} price`}
+                        />
                     </td>
                     <td>
                       <FinanceMoneyCellValue
@@ -891,3 +929,4 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     </section>
   );
 }
+

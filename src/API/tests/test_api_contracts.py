@@ -460,3 +460,34 @@ def test_server_side_entra_settings_are_used_instead_of_request_overrides():
     )
 
     assert response.status_code == 200
+
+
+def test_holding_import_updates_matching_tickers_and_rejects_invalid_rows():
+    client = build_test_client()
+    authenticate(client)
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    created = client.post("/api/v1/holdings", json={
+        "security": security,
+        "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 1, "costBasis": None}],
+    })
+    assert created.status_code == 201
+
+    response = client.put("/api/v1/holdings/import", json={"rows": [
+        {"symbol": "VTI", "name": "Vanguard Total Market", "price": 325.25},
+        {"symbol": "NONE", "name": "Unknown", "price": 12.0},
+    ]})
+    assert response.status_code == 200
+    assert response.json()["holdings"][0]["security"]["name"] == "Vanguard Total Market"
+    assert response.json()["holdings"][0]["security"]["price"] == 325.25
+    assert response.json()["unmatchedSymbols"] == ["NONE"]
+
+    invalid = client.put("/api/v1/holdings/import", json={"rows": [
+        {"symbol": "VTI", "name": "Vanguard", "price": 1},
+        {"symbol": "vti", "name": "Duplicate", "price": 2},
+    ]})
+    assert invalid.status_code == 400
+
+    invalid_price = client.put("/api/v1/holdings/import", json={"rows": [
+        {"symbol": "VTI", "name": "Vanguard", "price": 0},
+    ]})
+    assert invalid_price.status_code == 422
