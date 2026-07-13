@@ -59,23 +59,29 @@ const formatLastUpdated = (value?: string | null) => {
   return `Last updated ${updatedAt.toLocaleDateString()}`;
 };
 
-const holdingsTemplate = "Ticker,Name,Price\r\nMSFT,Microsoft Corporation,510.25\r\n";
+const importAccountHeader = (account: Account) => `Account: ${account.name} (${account.id})`;
 
-const parseHoldingImport = (csv: string): HoldingImportRow[] => {
+const parseHoldingImport = (csv: string, investmentAccounts: Account[]): HoldingImportRow[] => {
   const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
   if (lines.length < 2 || lines.length > HOLDINGS_IMPORT_MAX_ROWS + 1) throw new Error('The file must contain 1 to 500 data rows.');
-  const headers = lines[0].split(',').map((header) => header.trim().toLowerCase());
-  if (headers.join(',') !== 'ticker,name,price') throw new Error('Use the downloaded template with Ticker, Name, and Price columns.');
+  const headers = lines[0].split(',').map((header) => header.trim());
+  const expectedHeaders = ['Ticker', 'Name', 'Price', ...investmentAccounts.map(importAccountHeader)];
+  if (headers.length !== expectedHeaders.length || headers.some((header, index) => header !== expectedHeaders[index])) throw new Error('Use the downloaded template without changing the account columns.');
   const symbols = new Set<string>();
   return lines.slice(1).map((line, index) => {
     const values = line.split(',').map((value) => value.trim());
-    const [symbol, name, rawPrice] = values;
+    const [symbol, name, rawPrice, ...rawQuantities] = values;
     const price = Number(rawPrice);
-    if (values.length !== 3 || !/^[A-Za-z0-9.-]{1,20}$/.test(symbol) || !name || name.length > 200 || !Number.isFinite(price) || price <= 0 || price > 1_000_000) throw new Error(`Row ${index + 2} is invalid.`);
+    if (values.length !== expectedHeaders.length || !/^[A-Za-z0-9.-]{1,20}$/.test(symbol) || !name || name.length > 200 || !Number.isFinite(price) || price <= 0 || price > 1_000_000) throw new Error(`Row ${index + 2} is invalid.`);
+    const accountPositions = rawQuantities.map((rawQuantity, quantityIndex) => {
+      const quantity = rawQuantity === '' ? 0 : Number(rawQuantity);
+      if (!Number.isFinite(quantity) || quantity < 0 || quantity > 1_000_000_000) throw new Error(`Row ${index + 2} has an invalid account quantity.`);
+      return { accountId: investmentAccounts[quantityIndex].id, quantity, costBasis: null };
+    });
     const normalized = symbol.toUpperCase();
     if (symbols.has(normalized)) throw new Error(`Ticker ${normalized} appears more than once.`);
     symbols.add(normalized);
-    return { symbol: normalized, name, price };
+    return { symbol: normalized, name, price, accountPositions };
   });
 };
 const mergeRefreshedSecurityDetails = (
@@ -110,6 +116,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [selectedHoldingId, setSelectedHoldingId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [refreshingHoldingIds, setRefreshingHoldingIds] = useState<Set<string>>(() => new Set());
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
@@ -189,7 +196,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   );
 
   const orderedHoldings = useMemo(
-    () => [...holdings].sort((a, b) => a.security.name.localeCompare(b.security.name)),
+    () => [...holdings].sort((a, b) => a.security.assetType.localeCompare(b.security.assetType) || a.security.name.localeCompare(b.security.name)),
     [holdings],
   );
 
@@ -319,7 +326,12 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const downloadImportTemplate = () => {
-    const url = URL.createObjectURL(new Blob([holdingsTemplate], { type: 'text/csv;charset=utf-8' }));
+    const template = [
+      ['Ticker', 'Name', 'Price', ...accounts.map(importAccountHeader)].join(','),
+      ['MSFT', 'Microsoft Corporation', '510.25', ...accounts.map(() => '0')].join(','),
+      '',
+    ].join('\r\n');
+    const url = URL.createObjectURL(new Blob([template], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
     link.download = 'holdings-import-template.csv';
@@ -336,7 +348,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     if (!holdingRepository.importHoldingDetails) { setError('Holdings import is unavailable.'); return; }
     setIsImporting(true); setError(null); setSuccessMessage(null);
     try {
-      const result = await holdingRepository.importHoldingDetails(parseHoldingImport(await file.text()));
+      const result = await holdingRepository.importHoldingDetails(parseHoldingImport(await file.text(), accounts));
       setHoldings((current) => mergeRefreshedSecurityDetails(current, result.holdings));
       setSuccessMessage(result.unmatchedSymbols.length ? `${result.holdings.length} holding details updated. No matching holding for ${result.unmatchedSymbols.join(', ')}.` : `${result.holdings.length} holding details updated.`);
     } catch (importError) { setError(importError instanceof Error ? importError.message : 'Unable to import holding details.'); }
@@ -692,7 +704,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                 const price = holding.security.price ?? 0;
 
                 return (
-                  <tr key={holding.id}>
+                  <tr key={holding.id} className={selectedHoldingId === holding.id ? 'holdings-row-selected' : undefined} onClick={() => setSelectedHoldingId(holding.id)}>
                     <td className="holdings-security-cell">
                       <strong>{holding.security.name}</strong>
                       <small>{formatLastUpdated(holding.security.detailsUpdatedAt)}</small>

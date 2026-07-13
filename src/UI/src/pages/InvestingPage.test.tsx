@@ -320,7 +320,7 @@ describe('InvestingPage', () => {
     expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(2, 'holding-schd');
   }, 10000);
 
-  it('summarizes investment values, sorts holdings by name, and supports quantity-grid navigation', async () => {
+  it('summarizes investment values, sorts holdings by asset type then name, and supports quantity-grid navigation', async () => {
     const accounts: Account[] = [
       investmentAccounts[0],
       { ...investmentAccounts[0], id: 'acc-401k', name: 'Fidelity 401k', investmentAccountType: '401k' },
@@ -366,8 +366,8 @@ describe('InvestingPage', () => {
     expect(screen.getByText('$200.00')).toBeInTheDocument();
 
     const rows = screen.getAllByRole('row');
-    expect(rows[1]).toHaveTextContent('Alpha Fund');
-    expect(rows[2]).toHaveTextContent('Zebra Income');
+    expect(rows[1]).toHaveTextContent('Zebra Income');
+    expect(rows[2]).toHaveTextContent('Alpha Fund');
 
     const alphaTaxable = screen.getByLabelText('ALPH quantity for Fidelity Taxable Brokerage');
     const alphaRetirement = screen.getByLabelText('ALPH quantity for Fidelity 401k');
@@ -375,7 +375,7 @@ describe('InvestingPage', () => {
     alphaTaxable.focus();
     fireEvent.keyDown(alphaTaxable, { key: 'ArrowRight' });
     await waitFor(() => expect(alphaRetirement).toHaveFocus());
-    fireEvent.keyDown(alphaRetirement, { key: 'ArrowDown' });
+    fireEvent.keyDown(alphaRetirement, { key: 'ArrowUp' });
     await waitFor(() => expect(zebraRetirement).toHaveFocus());
   });
 

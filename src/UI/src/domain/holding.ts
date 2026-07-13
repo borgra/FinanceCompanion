@@ -58,7 +58,7 @@ export type SecurityDetailsRefreshResult = {
   failedSymbols: string[];
 };
 
-export type HoldingImportRow = { symbol: string; name: string; price: number };
+export type HoldingImportRow = { symbol: string; name: string; price: number; accountPositions: HoldingAccountPosition[] };
 
 export type HoldingImportResult = {
   holdings: Holding[];

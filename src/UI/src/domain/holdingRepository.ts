@@ -196,7 +196,7 @@ export function createMockHoldingRepository(): HoldingRepository {
         const row = rowsBySymbol.get(holding.security.symbol.toLowerCase());
         if (!row) return holding;
         updatedIds.add(holding.id);
-        return { ...holding, security: { ...holding.security, name: row.name, price: row.price, detailsStatus: 'manual', detailsUpdatedAt: nowIso() }, updatedAt: nowIso() };
+        return { ...holding, security: { ...holding.security, name: row.name, price: row.price, detailsStatus: 'manual', detailsUpdatedAt: nowIso() }, accountPositions: row.accountPositions, updatedAt: nowIso() };
       });
       return {
         holdings: holdings.filter((holding) => updatedIds.has(holding.id)).map((holding) => ({ ...holding, security: { ...holding.security } })),

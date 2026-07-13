@@ -3574,3 +3574,26 @@ button.security-result:hover {
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+.holdings-finance-table {
+  max-height: min(70vh, 720px);
+  overflow: auto;
+}
+
+.holdings-finance-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.holdings-finance-table tbody tr {
+  cursor: pointer;
+}
+
+.holdings-finance-table tbody tr.holdings-row-selected > td {
+  background-color: color-mix(in srgb, var(--md-sys-color-primary) 16%, var(--md-sys-color-surface));
+}
+
+.holdings-finance-table tbody tr.holdings-row-selected > td:first-child {
+  box-shadow: inset 3px 0 0 var(--md-sys-color-primary);
+}

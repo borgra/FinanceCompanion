@@ -228,6 +228,9 @@ class HoldingImportRow(CamelModel):
     symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9.-]+$")
     name: str = Field(min_length=1, max_length=200)
     price: float = Field(gt=0, le=1_000_000)
+    account_positions: list[HoldingAccountPositionPayload] = Field(default_factory=list, serialization_alias="accountPositions")
+
+
 
 
 class HoldingImportRequest(CamelModel):

@@ -16,6 +16,7 @@ from app.presentation.http.mappers import (
     to_budget_category_payload,
     to_budget_sub_category_payload,
     to_holding,
+    to_holding_account_position,
     to_holding_payload,
     to_income_source,
     to_income_source_payload,
@@ -317,9 +318,24 @@ def import_holding_details(request: HoldingImportRequest, user=Depends(require_s
     symbols = [row.symbol.casefold() for row in request.rows]
     if len(symbols) != len(set(symbols)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Each ticker may appear only once.")
+    account_ids = {account.id for account in container.list_accounts.execute(user.user_id)}
+    for row in request.rows:
+        imported_account_ids = [position.account_id for position in row.account_positions]
+        if len(imported_account_ids) != len(set(imported_account_ids)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Each account may appear only once per ticker.")
+        if any(position.account_id not in account_ids for position in row.account_positions):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Imported account was not found.")
     updated, unmatched = container.import_holding_details.execute(
         user.user_id,
-        [(row.symbol.strip().upper(), row.name.strip(), row.price) for row in request.rows],
+        [
+            (
+                row.symbol.strip().upper(),
+                row.name.strip(),
+                row.price,
+                [to_holding_account_position(position) for position in row.account_positions],
+            )
+            for row in request.rows
+        ],
     )
     return HoldingImportResponse(holdings=[to_holding_payload(item) for item in updated], unmatched_symbols=unmatched)
 
