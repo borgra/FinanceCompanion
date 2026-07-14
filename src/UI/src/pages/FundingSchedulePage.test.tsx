@@ -319,4 +319,47 @@ describe('FundingSchedulePage', () => {
     expect(screen.getAllByText('$1,000.00')[0]).toBeInTheDocument();
     expect(screen.getAllByText('$200.00')[0]).toBeInTheDocument();
   });
+  it('presents yearly aggregate statistics and selects an allocation value for editing', async () => {
+    const checking = account({
+      id: 'checking-one',
+      name: 'Primary Checking',
+      type: 'Checking',
+    });
+    checking.monthlyRecords[0].invest = 1000;
+    const taxable = account({
+      id: 'taxable',
+      name: 'Brokerage',
+      type: 'Investment',
+      investmentAccountType: 'Taxable',
+    });
+    taxable.monthlyRecords[0].invest = 500;
+
+    const repository = createMockAccountRepository({
+      initialAccounts: [checking, taxable],
+    });
+    const incomeRepository = createMockIncomeSourceRepository({
+      initialSources: [incomeSource()],
+    });
+
+    render(
+      <FundingSchedulePage
+        accountRepository={repository}
+        incomeRepository={incomeRepository}
+      />,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Yearly Aggregate Statistics' })).toBeInTheDocument();
+    const summary = screen.getByLabelText('Funding schedule summary');
+    expect(summary).toHaveTextContent('All Accounts');
+    expect(summary.querySelector('.funding-schedule-summary-card-all')).toBeInTheDocument();
+    expect(summary.querySelector('.funding-schedule-summary-card-tax-advantaged')).toBeInTheDocument();
+    expect(screen.queryByText('All Accounts / Year')).not.toBeInTheDocument();
+
+    const allocation = screen.getByLabelText('Brokerage Jan-26 allocation');
+    await userEvent.click(allocation);
+
+    expect(allocation).toHaveValue('500');
+    expect(allocation).toHaveProperty('selectionStart', 0);
+    expect(allocation).toHaveProperty('selectionEnd', 3);
+  });
 });

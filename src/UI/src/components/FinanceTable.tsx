@@ -228,9 +228,14 @@ export function FinanceMoneyCellInput({
         inputMode={inputProps.inputMode ?? 'decimal'}
         value={isFocused ? draftValue : formatValue(value)}
         onChange={handleChange}
+        onClick={(event) => {
+          event.currentTarget.select();
+          inputProps.onClick?.(event);
+        }}
         onFocus={(event) => {
           setIsFocused(true);
           setDraftValue(value === 0 ? '' : String(value));
+          event.currentTarget.select();
           onFocus?.(event);
         }}
         onBlur={(event) => {

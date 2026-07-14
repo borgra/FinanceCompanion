@@ -49,20 +49,6 @@ const accountTypeIconColor = (type: AccountType) => {
   return '#a78bfa';
 };
 
-const toMonthInputValue = (dateValue: string) => dateValue.slice(0, 7);
-
-const toStoredMonthStart = (monthValue: string) => `${monthValue || '2026-01'}-01`;
-
-const formatMonthYear = (dateValue: string) => {
-  const [year, month] = toMonthInputValue(dateValue).split('-');
-  if (!year || !month) return dateValue;
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  }).format(new Date(Date.UTC(Number(year), Number(month) - 1, 1)));
-};
-
 const createColumnId = (name: string) => {
   const base = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return `${base || 'column'}-${crypto.randomUUID().slice(0, 6)}`;
@@ -83,6 +69,16 @@ const formatMoney = (amount: number) => {
 };
 
 const parseMoneyInput = (value: string) => Number(value.replace(/[$,\s]/g, '')) || 0;
+
+const formatAmountInput = (value: number) =>
+  new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
+
+const parseValidatedAmount = (value: string) => {
+  const normalized = value.replace(/,/g, '');
+  if (!/^\d*(?:\.\d{0,2})?$/.test(normalized) || normalized === '') return undefined;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) && amount >= 0 && amount <= maxAccountBalance ? amount : undefined;
+};
 
 const getMonthlyNetIncomeForMonth = (
   sources: IncomeSource[],
@@ -234,10 +230,28 @@ export function AccountPage({
     const saved = localStorage.getItem('finance-companion-emergency-threshold');
     return saved ? Number(saved) : 20000;
   });
+  const [thresholdInput, setThresholdInput] = useState(() => formatAmountInput(threshold));
+  const [thresholdError, setThresholdError] = useState<string | undefined>();
 
   useEffect(() => {
     localStorage.setItem('finance-companion-emergency-threshold', String(threshold));
   }, [threshold]);
+
+  const updateThreshold = (value: string) => {
+    setThresholdInput(value);
+    const amount = parseValidatedAmount(value);
+    if (amount === undefined) {
+      setThresholdError('Enter a non-negative amount with no more than two decimal places.');
+      return;
+    }
+    setThreshold(amount);
+    setThresholdError(undefined);
+  };
+
+  const formatThresholdOnBlur = () => {
+    const amount = parseValidatedAmount(thresholdInput);
+    if (amount !== undefined) setThresholdInput(formatAmountInput(amount));
+  };
 
   // Draft editing states
   const [draftAccount, setDraftAccount] = useState<Account>();
@@ -1031,12 +1045,17 @@ export function AccountPage({
                 <span className="input-prefix" aria-hidden="true">$</span>
                 <input
                   aria-label="Minimum threshold"
-                  type="number"
-                  value={threshold || ''}
-                  onChange={(e) => setThreshold(Number(e.target.value) || 0)}
+                  aria-describedby={thresholdError ? 'minimum-threshold-error' : undefined}
+                  aria-invalid={Boolean(thresholdError)}
+                  inputMode="decimal"
+                  pattern="[0-9,]*[.]?[0-9]{0,2}"
+                  value={thresholdInput}
+                  onChange={(e) => updateThreshold(e.target.value)}
+                  onBlur={formatThresholdOnBlur}
                   placeholder="0.00"
                 />
               </div>
+              {thresholdError ? <span id="minimum-threshold-error" role="alert">{thresholdError}</span> : null}
             </label>
           </div>
 
@@ -1130,7 +1149,7 @@ export function AccountPage({
 
           <section className="passive-income-chart-section" aria-labelledby="aggregate-chart-heading" style={{ marginBottom: '32px' }}>
             <div className="passive-income-section-heading">
-              <h3 id="aggregate-chart-heading">Bank Dashboard Balance Projection</h3>
+              <h3 id="aggregate-chart-heading">Bank Monthly Projections</h3>
               <span>
                 Bars are colored <span style={{ color: '#34d399', fontWeight: 'bold' }}>Green</span> when &gt;= threshold, and <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>Amber</span> when below.
               </span>
@@ -1166,11 +1185,13 @@ export function AccountPage({
                     : 'rgba(251, 191, 36, 0.04)';
 
                   const isHovered = hoveredMonth === month.name;
+                  const isCurrentMonth = month.name === currentProjectionMonth.name;
 
                   return (
                     <div
-                      className="passive-income-bar-item"
+                      className={`passive-income-bar-item${isCurrentMonth ? ' bank-projection-current' : ''}`}
                       key={month.name}
+                      aria-current={isCurrentMonth ? 'date' : undefined}
                       onMouseEnter={() => setHoveredMonth(month.name)}
                       onMouseLeave={() => setHoveredMonth(null)}
                       style={{ display: 'grid', gridTemplateRows: 'minmax(150px, 1fr) 20px 20px', gap: '4px', textAlign: 'center', position: 'relative' }}
@@ -1448,27 +1469,18 @@ export function AccountPage({
                 </div>
               </label>
 
-              <label className="field">
-                <span>Start Month</span>
-                <input
-                  type="month"
-                  value={toMonthInputValue(modalDraft.startDate)}
-                  onChange={(e) =>
-                    setModalDraft({ ...modalDraft, startDate: toStoredMonthStart(e.target.value) })
-                  }
-                />
-              </label>
-
-              <label className="field">
-                <span>Yield / APY (%)</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={modalDraft.yieldRate}
-                  onChange={(e) => setModalDraft({ ...modalDraft, yieldRate: e.target.value })}
-                  placeholder="e.g. 4.5"
-                />
-              </label>
+              {modalDraft.type === 'Savings' && (
+                <label className="field">
+                  <span>Yield / APY (%)</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={modalDraft.yieldRate}
+                    onChange={(e) => setModalDraft({ ...modalDraft, yieldRate: e.target.value })}
+                    placeholder="e.g. 4.5"
+                  />
+                </label>
+              )}
 
               {modalDraft.type === 'Checking' && (
                 <label className="field">
@@ -1699,8 +1711,14 @@ export function AccountPage({
                 </div>
               </div>
 
-              {/* Outlined Summary Section containing the remaining four badges */}
-              <div style={{ border: '1.5px solid var(--md-sys-color-outline-variant)', borderRadius: 'var(--md-sys-shape-corner-m)', padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '20px', backgroundColor: 'rgba(255, 255, 255, 0.015)' }}>
+              {/* Account totals keep the savings APY beside the related annual summary. */}
+              <div style={{ border: '1.5px solid var(--md-sys-color-outline-variant)', borderRadius: 'var(--md-sys-shape-corner-m)', padding: '16px', display: 'grid', gridTemplateColumns: `repeat(${draftAccount.type === 'Savings' ? 5 : 4}, minmax(0, 1fr))`, gap: '16px', marginBottom: '8px', backgroundColor: 'rgba(255, 255, 255, 0.015)' }}>
+                {draftAccount.type === 'Savings' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Yield / APY</span>
+                    <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: '#a78bfa' }}>{draftAccount.yieldRate}%</strong>
+                  </div>
+                ) : null}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>
                     {isSavingsLedger ? 'Total Interest (Year)' : 'Total Credits (Year)'}
@@ -1723,22 +1741,6 @@ export function AccountPage({
                 </div>
               </div>
 
-              {/* Read-only account details */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 420px)', gap: '20px', marginBottom: '16px' }}>
-                <div
-                  aria-label="Account details"
-                  style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}
-                >
-                  <div className="status-badge" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', padding: '12px' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Start Month</span>
-                    <strong style={{ fontSize: '0.95rem' }}>{formatMonthYear(draftAccount.startDate)}</strong>
-                  </div>
-                  <div className="status-badge" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px', padding: '12px' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--md-sys-color-on-surface-variant)' }}>Yield / APY</span>
-                    <strong style={{ fontSize: '0.95rem' }}>{draftAccount.yieldRate}%</strong>
-                  </div>
-                </div>
-              </div>
 
               {/* FULL WIDTH LEDGER GRID WITH TIGHT PADDING AND NO FOOTER TOTALS */}
               <div className="excel-table-fullwidth">

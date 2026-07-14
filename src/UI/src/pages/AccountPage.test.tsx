@@ -188,17 +188,17 @@ describe('AccountPage', () => {
     expect(screen.queryByRole('option', { name: 'Investment' })).not.toBeInTheDocument();
   });
 
-  it('shows account metadata as read-only labels in the workspace', async () => {
+  it('keeps checking account details out of the workspace and surfaces savings APY in totals', async () => {
     renderPage();
 
     expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/account details/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Start Month')).not.toBeInTheDocument();
+    expect(screen.queryByText('Yield / APY')).not.toBeInTheDocument();
 
-    expect(screen.getByLabelText(/account details/i)).toBeInTheDocument();
-    expect(screen.getByText('Start Month')).toBeInTheDocument();
+    await userEvent.click(screen.getByText('High-Yield Savings'));
     expect(screen.getByText('Yield / APY')).toBeInTheDocument();
-    expect(screen.queryByText('Account Name')).not.toBeInTheDocument();
-    expect(screen.queryByText('Start Balance')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/edit account name/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/^\d+(?:\.\d+)?%$/)).toBeInTheDocument();
   });
 
   it('keeps selector current balance tied to the account current-month net total', async () => {
@@ -742,12 +742,13 @@ describe('AccountPage', () => {
 
     // 3. Verify emergency fund threshold input
     const thresholdInput = screen.getByLabelText('Minimum threshold');
-    expect(thresholdInput).toHaveValue(20000);
+    expect(thresholdInput).toHaveValue('20,000');
 
     // Update threshold and verify update
     await userEvent.clear(thresholdInput);
     await userEvent.type(thresholdInput, '40000');
-    expect(thresholdInput).toHaveValue(40000);
+    await userEvent.tab();
+    expect(thresholdInput).toHaveValue('40,000');
     expect(localStorage.getItem('finance-companion-emergency-threshold')).toBe('40000');
 
     // 4. Verify Account Breakdown table has the accounts

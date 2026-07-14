@@ -412,6 +412,7 @@ export function FundingSchedulePage({
   const monthlyNetIncome = annualNetIncome / 12;
   const activeGroup = investmentGroups.find((group) => group.id === activeGroupId) ?? investmentGroups[0];
   const activeInvestmentAccounts = investmentAccountsByGroup[activeGroup.id];
+  const showsBudgetColumn = activeGroup.id === 'taxable';
   const showsRemainingColumn = activeGroup.id === 'taxable';
 
   const yearlyMetrics = useMemo(() => {
@@ -661,15 +662,19 @@ export function FundingSchedulePage({
 
   return (
     <section className="funding-schedule-shell" aria-label="Investment funding schedule">
-      <div className="funding-schedule-summary" aria-label="Funding schedule summary">
-        {[
-          { label: 'All Accounts', total: yearlyMetrics.all, showNet: true },
-          { label: 'After-Tax Accounts', total: yearlyMetrics.taxable, showNet: true },
-          { label: 'Before-Tax Accounts', total: yearlyMetrics.retirement, showNet: false },
-          { label: 'HSA', total: yearlyMetrics.hsa, showNet: false },
-        ].map((metric) => (
-          <div key={metric.label}>
-            <span>{metric.label} / Year</span>
+      <section aria-labelledby="yearly-aggregate-statistics-heading">
+        <h2 className="funding-schedule-summary-heading" id="yearly-aggregate-statistics-heading">
+          Yearly Aggregate Statistics
+        </h2>
+        <div className="funding-schedule-summary" aria-label="Funding schedule summary">
+          {[
+            { label: 'All Accounts', total: yearlyMetrics.all, showNet: true, tone: 'all' },
+            { label: 'After-Tax Accounts', total: yearlyMetrics.taxable, showNet: true, tone: 'tax-advantaged' },
+            { label: 'Before-Tax Accounts', total: yearlyMetrics.retirement, showNet: false, tone: 'tax-advantaged' },
+            { label: 'HSA', total: yearlyMetrics.hsa, showNet: false, tone: 'tax-advantaged' },
+          ].map((metric) => (
+            <div className={`funding-schedule-summary-card funding-schedule-summary-card-${metric.tone}`} key={metric.label}>
+              <span>{metric.label}</span>
             <strong>{formatMoney(metric.total)}</strong>
             <p>
               {formatPercent(annualGrossIncome > 0 ? (metric.total / annualGrossIncome) * 100 : undefined)} gross
@@ -677,9 +682,9 @@ export function FundingSchedulePage({
                 ? ` / ${formatPercent(annualNetIncome > 0 ? (metric.total / annualNetIncome) * 100 : undefined)} net`
                 : ''}
             </p>
-          </div>
-        ))}
-      </div>
+          </div>          ))}
+        </div>
+      </section>
 
       {saveError ? (
         <div className="alert error-alert" role="alert">
@@ -832,7 +837,7 @@ export function FundingSchedulePage({
               <thead>
                 <tr>
                   <FinanceTableHeaderCell>Month</FinanceTableHeaderCell>
-                  <FinanceTableHeaderCell>Budget</FinanceTableHeaderCell>
+                  {showsBudgetColumn ? <FinanceTableHeaderCell>Budget</FinanceTableHeaderCell> : null}
                   {activeInvestmentAccounts.flatMap((account, accountIndex) => {
                     const columnActions = {
                       isMoveLeftDisabled: accountIndex === 0,
@@ -900,11 +905,13 @@ export function FundingSchedulePage({
                   return (
                     <tr key={month} className={rowClass}>
                       <td className="excel-bold-col">{month}</td>
-                      <td>
-                        <span className="excel-cell-val excel-bold-col">
-                          {formatMoney(available)}
-                        </span>
-                      </td>
+                      {showsBudgetColumn ? (
+                        <td>
+                          <span className="excel-cell-val excel-bold-col">
+                            {formatMoney(available)}
+                          </span>
+                        </td>
+                      ) : null}
                       {activeInvestmentAccounts.flatMap((account) => {
                         const payrollAccount = isPayrollDeductible(account);
                         const monthlyContribution =
