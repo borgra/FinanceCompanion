@@ -573,3 +573,19 @@ def test_purge_holding_payment_data_clears_source_and_manual_payouts():
     assert response.json()
     assert all(item["security"]["payoutDetails"] == [] for item in response.json())
     assert all(item["security"]["manualPayoutDetails"] == [] for item in response.json())
+
+def test_purge_holding_payment_data_allows_browser_preflight():
+    client = build_test_client()
+
+    response = client.options(
+        "/api/v1/holdings/payouts",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "DELETE",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "DELETE" in response.headers["access-control-allow-methods"]

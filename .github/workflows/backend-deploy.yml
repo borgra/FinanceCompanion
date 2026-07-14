@@ -53,6 +53,12 @@ jobs:
               --output tsv \
               --only-show-errors)"
 
+            STATIC_WEB_APP_NAME="$(az staticwebapp list \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --query "[?tags.app=='${APP_NAME}'].name | [0]" \
+              --output tsv \
+              --only-show-errors)"
+
             COSMOS_ACCOUNT_NAME="$(az cosmosdb list \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --query "[?tags.app=='${APP_NAME}'].name | [0]" \
@@ -75,6 +81,10 @@ jobs:
               echo "No API Container App found." >&2
               exit 1
             fi
+            if [ -z "${STATIC_WEB_APP_NAME}" ]; then
+              echo "No Static Web App found." >&2
+              exit 1
+            fi
             if [ -z "${COSMOS_ACCOUNT_NAME}" ]; then
               echo "No Cosmos DB account found." >&2
               exit 1
@@ -88,6 +98,20 @@ jobs:
             echo "COSMOS_ACCOUNT_NAME=${COSMOS_ACCOUNT_NAME}" >> "${GITHUB_ENV}"
             echo "ACR_NAME=${ACR_NAME}" >> "${GITHUB_ENV}"
             echo "ACR_LOGIN_SERVER=${ACR_LOGIN_SERVER}" >> "${GITHUB_ENV}"
+
+            STATIC_WEB_APP_HOSTNAME="$(az staticwebapp show \
+              --name "${STATIC_WEB_APP_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --query "defaultHostname" \
+              --output tsv \
+              --only-show-errors)"
+
+            if [ -z "${STATIC_WEB_APP_HOSTNAME}" ]; then
+              echo "Could not resolve the Static Web App hostname." >&2
+              exit 1
+            fi
+
+            echo "CORS_ORIGINS=[\"http://localhost:5173\",\"https://${STATIC_WEB_APP_HOSTNAME}\"]" >> "${GITHUB_ENV}"
 
       - name: Set image name
         run: |
@@ -140,4 +164,5 @@ jobs:
                 FINANCE_COMPANION_ENTRA_TENANT_ID="${{ vars.ENV_PROD_ENTRA_TENANT_ID }}" \
                 FINANCE_COMPANION_ALLOWED_EMAIL="${{ vars.ENV_PROD_ALLOWED_EMAIL }}" \
                 FINANCE_COMPANION_ENVIRONMENT="production" \
+                FINANCE_COMPANION_CORS_ORIGINS='${{ env.CORS_ORIGINS }}' \
               --only-show-errors
