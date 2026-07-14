@@ -64,3 +64,8 @@ export type HoldingImportResult = {
   holdings: Holding[];
   unmatchedSymbols: string[];
 };
+
+export type PassiveIncomeImportRow = {
+  symbol: string;
+  payout: SecurityPayoutDetails;
+};

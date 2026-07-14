@@ -40,6 +40,7 @@ from app.presentation.http.schemas import (
     HoldingImportRequest,
     HoldingImportResponse,
     HoldingManualPayoutsRequest,
+    ManualPayoutImportRequest,
     HoldingPayload,
     IncomeSourcePayload,
     IncomeSourceStatusRequest,
@@ -375,6 +376,25 @@ def refresh_holding_security_details(
     except DomainError as exc:
         raise _domain_error_to_http(exc) from exc
 
+
+@router.put("/holdings/manual-payouts/import", response_model=HoldingImportResponse)
+def import_manual_payouts(
+    request: ManualPayoutImportRequest,
+    user=Depends(require_session_user),
+    container=Depends(get_container),
+) -> HoldingImportResponse:
+    payouts_by_symbol = {}
+    for row in request.rows:
+        symbol = row.symbol.strip().upper()
+        payouts_by_symbol.setdefault(symbol, []).append(to_security_payout_details(row.payout))
+    try:
+        updated, unmatched = container.import_manual_payout_details.execute(user.user_id, payouts_by_symbol)
+        return HoldingImportResponse(
+            holdings=[to_holding_payload(item) for item in updated],
+            unmatched_symbols=unmatched,
+        )
+    except DomainError as exc:
+        raise _domain_error_to_http(exc) from exc
 
 @router.put("/holdings/{holding_id}/manual-payouts", response_model=HoldingPayload)
 def update_manual_payouts(

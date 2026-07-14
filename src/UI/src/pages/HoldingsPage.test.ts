@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from '../domain/account';
 import { parseHoldingImport } from './HoldingsPage';
+import { parsePassiveIncomeImport } from './PassiveIncomePage';
 
 const investmentAccounts: Account[] = [
   {
@@ -32,5 +33,22 @@ describe('parseHoldingImport', () => {
         accountPositions: [{ accountId: 'acc-401k', quantity: 43, costBasis: null }],
       },
     ]);
+  });
+});
+
+describe('parsePassiveIncomeImport', () => {
+  it('parses one payment per CSV row and groups multiple payments for a ticker', () => {
+    expect(parsePassiveIncomeImport(
+      'Ticker,Ex Dividend Date,Payment Date,Amount\nVTI,2026-06-28,2026-07-02,0.45\nVTI,2026-09-28,2026-10-02,0.47',
+    )).toEqual([
+      { symbol: 'VTI', payout: { exDividendDate: '2026-06-28', paymentDate: '2026-07-02', amount: 0.45, source: 'user', mode: 'manual' } },
+      { symbol: 'VTI', payout: { exDividendDate: '2026-09-28', paymentDate: '2026-10-02', amount: 0.47, source: 'user', mode: 'manual' } },
+    ]);
+  });
+
+  it('rejects duplicate ticker payments on the same date', () => {
+    expect(() => parsePassiveIncomeImport(
+      'Ticker,Ex Dividend Date,Payment Date,Amount\nVTI,2026-06-28,2026-07-02,0.45\nVTI,2026-06-28,2026-07-02,0.45',
+    )).toThrow('Ticker VTI has more than one payment on 2026-07-02.');
   });
 });

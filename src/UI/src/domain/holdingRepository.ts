@@ -3,6 +3,7 @@ import type {
   HoldingDraft,
   HoldingImportResult,
   HoldingImportRow,
+  PassiveIncomeImportRow,
   SecurityPayoutDetails,
   SecurityDetailsRefreshResult,
   SecurityMetadata,
@@ -14,6 +15,7 @@ export type HoldingRepository = {
   createHolding: (draft: HoldingDraft) => Promise<Holding>;
   updateHolding: (id: string, draft: HoldingDraft) => Promise<Holding>;
   importHoldingDetails?: (rows: HoldingImportRow[]) => Promise<HoldingImportResult>;
+  importManualPayoutDetails?: (rows: PassiveIncomeImportRow[]) => Promise<HoldingImportResult>;
   deleteHolding: (id: string) => Promise<void>;
   refreshHoldingSecurityDetails: (id: string, options?: { replaceManualPayouts?: boolean }) => Promise<Holding>;
   refreshHeldSecurityDetails: (options?: { replaceManualPayouts?: boolean }) => Promise<SecurityDetailsRefreshResult>;
@@ -201,6 +203,25 @@ export function createMockHoldingRepository(): HoldingRepository {
       return {
         holdings: holdings.filter((holding) => updatedIds.has(holding.id)).map((holding) => ({ ...holding, security: { ...holding.security } })),
         unmatchedSymbols: rows.filter((row) => !matchedSymbols.has(row.symbol.toLowerCase())).map((row) => row.symbol),
+      };
+    },
+    importManualPayoutDetails: async (rows) => {
+      const rowsBySymbol = new Map<string, SecurityPayoutDetails[]>();
+      for (const row of rows) {
+        const symbol = row.symbol.toLowerCase();
+        rowsBySymbol.set(symbol, [...(rowsBySymbol.get(symbol) ?? []), { ...row.payout, mode: 'manual' }]);
+      }
+      const updatedIds = new Set<string>();
+      const matchedSymbols = new Set(holdings.map((holding) => holding.security.symbol.toLowerCase()));
+      holdings = holdings.map((holding) => {
+        const payouts = rowsBySymbol.get(holding.security.symbol.toLowerCase());
+        if (!payouts) return holding;
+        updatedIds.add(holding.id);
+        return { ...holding, security: { ...holding.security, payoutDetails: payouts, manualPayoutDetails: payouts }, updatedAt: nowIso() };
+      });
+      return {
+        holdings: holdings.filter((holding) => updatedIds.has(holding.id)).map((holding) => ({ ...holding, security: { ...holding.security } })),
+        unmatchedSymbols: [...rowsBySymbol.keys()].filter((symbol) => !matchedSymbols.has(symbol)).map((symbol) => symbol.toUpperCase()),
       };
     },
     updateHolding: async (id, draft) => {

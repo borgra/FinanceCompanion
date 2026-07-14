@@ -241,6 +241,14 @@ class HoldingImportResponse(CamelModel):
     holdings: list[HoldingPayload]
     unmatched_symbols: list[str] = Field(default_factory=list, serialization_alias="unmatchedSymbols")
 
+class ManualPayoutImportRow(CamelModel):
+    symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9.-]+$")
+    payout: SecurityPayoutDetailsPayload
+
+
+class ManualPayoutImportRequest(CamelModel):
+    rows: list[ManualPayoutImportRow] = Field(min_length=1, max_length=500)
+
 class SecurityDetailsRefreshResultPayload(CamelModel):
     holdings: list[HoldingPayload]
     failed_symbols: list[str] = Field(default_factory=list, serialization_alias="failedSymbols")

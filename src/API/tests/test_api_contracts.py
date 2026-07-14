@@ -520,3 +520,45 @@ def test_holding_import_updates_only_listed_account_positions():
         {"accountId": "acc-taxable-brokerage", "quantity": 12.0, "costBasis": None},
         {"accountId": "acc-401k", "quantity": 43.0, "costBasis": 200.0},
     ]
+
+
+def test_manual_payout_import_replaces_the_schedule_for_each_imported_ticker():
+    client = build_test_client()
+    authenticate(client)
+
+    response = client.put(
+        "/api/v1/holdings/manual-payouts/import",
+        json={
+            "rows": [
+                {
+                    "symbol": "JEPQ",
+                    "payout": {
+                        "exDividendDate": "2026-07-01",
+                        "paymentDate": "2026-07-06",
+                        "amount": 0.63658,
+                    },
+                },
+                {
+                    "symbol": "JEPQ",
+                    "payout": {
+                        "exDividendDate": "2026-08-01",
+                        "paymentDate": "2026-08-06",
+                        "amount": 0.64,
+                    },
+                },
+                {
+                    "symbol": "MISSING",
+                    "payout": {
+                        "exDividendDate": "2026-08-01",
+                        "amount": 0.1,
+                    },
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["unmatchedSymbols"] == ["MISSING"]
+    assert [item["amount"] for item in payload["holdings"][0]["security"]["manualPayoutDetails"]] == [0.63658, 0.64]
+    assert all(item["mode"] == "manual" for item in payload["holdings"][0]["security"]["payoutDetails"])

@@ -150,3 +150,26 @@ class UpdateManualPayoutDetails:
             updated_at=timestamp,
         )
         return self._repository.update_for_user(user_id, holding_id, updated)
+
+class ImportManualPayoutDetails:
+    def __init__(self, repository: HoldingRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, payouts_by_symbol: dict[str, list[SecurityPayoutDetails]]) -> tuple[list[Holding], list[str]]:
+        holdings_by_symbol = {holding.security.symbol.casefold(): holding for holding in self._repository.list_for_user(user_id)}
+        timestamp = now_iso()
+        updated: list[Holding] = []
+        unmatched: list[str] = []
+        for symbol, payouts in payouts_by_symbol.items():
+            holding = holdings_by_symbol.get(symbol.casefold())
+            if holding is None:
+                unmatched.append(symbol.upper())
+                continue
+            manual_payouts = [replace(payout, mode="manual") for payout in payouts]
+            refreshed = replace(
+                holding,
+                security=replace(holding.security, payout_details=manual_payouts, manual_payout_details=manual_payouts),
+                updated_at=timestamp,
+            )
+            updated.append(self._repository.update_for_user(user_id, holding.id, refreshed))
+        return updated, unmatched
