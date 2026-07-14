@@ -511,3 +511,30 @@ def test_holding_reads_security_details_attribute(mock_table_client):
     assert security.pe_ratio == 34.2
     assert security.details_status == "partial"
     assert holdings[0].account_positions[0].quantity == 50.0
+
+
+def test_holding_update_clears_persisted_dividend_details(mock_table_client):
+    repo = CosmosHoldingRepository(mock_table_client)
+    holding = Holding(
+        id="holding-1",
+        security=SecurityMetadata(
+            symbol="VTI",
+            name="Vanguard Total Stock Market ETF",
+            exchange="NYSE Arca",
+            asset_type="ETF",
+            currency="USD",
+        ),
+        account_positions=[HoldingAccountPosition("acc-taxable-brokerage", 12, 3100)],
+        created_at="2026-01-01T00:00:00Z",
+        updated_at="2026-01-02T00:00:00Z",
+    )
+    mock_table_client.get_entity.return_value = {
+        "PartitionKey": "user-123",
+        "RowKey": "holding:holding-1",
+    }
+
+    repo.update_for_user("user-123", "holding-1", holding)
+
+    entity = mock_table_client.upsert_entity.call_args[0][0]
+    assert json.loads(entity["dividendsJson"]) is None
+    assert json.loads(entity["securityDetails"])["price"] is None

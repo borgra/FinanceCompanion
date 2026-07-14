@@ -189,6 +189,11 @@ class PurgeHoldingPaymentData:
                     payout_details=[],
                     source_payout_details=[],
                     manual_payout_details=[],
+                    dividend_previous_year=None,
+                    dividend_current_year=None,
+                    dividend_growth_rate=None,
+                    estimated_future_payout=None,
+                    dividend_status=None,
                 ),
                 updated_at=timestamp,
             )

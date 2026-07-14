@@ -563,16 +563,50 @@ def test_manual_payout_import_replaces_the_schedule_for_each_imported_ticker():
     assert [item["amount"] for item in payload["holdings"][0]["security"]["manualPayoutDetails"]] == [0.63658, 0.64]
     assert all(item["mode"] == "manual" for item in payload["holdings"][0]["security"]["payoutDetails"])
 
-def test_purge_holding_payment_data_clears_source_and_manual_payouts():
+def test_purge_holding_payment_data_clears_dividend_details_for_every_user_holding():
     client = build_test_client()
     authenticate(client)
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    security.update({
+        "dividendPreviousYear": 3.55,
+        "dividendCurrentYear": 3.72,
+        "dividendGrowthRate": 0.0479,
+        "estimatedFuturePayout": 3.72,
+        "dividendStatus": "recent",
+        "payoutDetails": [{"exDividendDate": "2026-06-28", "amount": 0.45}],
+    })
+    created = client.post("/api/v1/holdings", json={
+        "security": security,
+        "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 7, "costBasis": 100}],
+    })
+    assert created.status_code == 201
+    manual_payout = client.put(
+        "/api/v1/holdings/holding-jepq/manual-payouts",
+        json={"manualPayoutDetails": [{"exDividendDate": "2026-07-01", "amount": 0.63658}]},
+    )
+    assert manual_payout.status_code == 200
+    assert manual_payout.json()["security"]["manualPayoutDetails"]
 
     response = client.delete("/api/v1/holdings/payouts")
 
     assert response.status_code == 200
-    assert response.json()
-    assert all(item["security"]["payoutDetails"] == [] for item in response.json())
-    assert all(item["security"]["manualPayoutDetails"] == [] for item in response.json())
+    holdings = response.json()
+    assert {item["id"] for item in holdings} == {
+        "holding-msft",
+        "holding-schd",
+        "holding-jepq",
+        created.json()["id"],
+    }
+    assert all(item["security"]["payoutDetails"] == [] for item in holdings)
+    assert all(item["security"]["manualPayoutDetails"] == [] for item in holdings)
+    assert all(item["security"]["dividendPreviousYear"] is None for item in holdings)
+    assert all(item["security"]["dividendCurrentYear"] is None for item in holdings)
+    assert all(item["security"]["dividendGrowthRate"] is None for item in holdings)
+    assert all(item["security"]["estimatedFuturePayout"] is None for item in holdings)
+    assert all(item["security"]["dividendStatus"] is None for item in holdings)
+    assert next(item for item in holdings if item["id"] == created.json()["id"])["accountPositions"] == [
+        {"accountId": "acc-taxable-brokerage", "quantity": 7.0, "costBasis": 100.0},
+    ]
 
 def test_purge_holding_payment_data_allows_browser_preflight():
     client = build_test_client()
