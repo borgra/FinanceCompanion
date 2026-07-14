@@ -41,6 +41,7 @@ from app.presentation.http.schemas import (
     HoldingImportResponse,
     HoldingManualPayoutsRequest,
     ManualPayoutImportRequest,
+    
     HoldingPayload,
     IncomeSourcePayload,
     IncomeSourceStatusRequest,
@@ -376,6 +377,13 @@ def refresh_holding_security_details(
     except DomainError as exc:
         raise _domain_error_to_http(exc) from exc
 
+
+@router.delete("/holdings/payouts", response_model=list[HoldingPayload])
+def purge_holding_payment_data(user=Depends(require_session_user), container=Depends(get_container)) -> list[HoldingPayload]:
+    return [
+        to_holding_payload(item)
+        for item in container.purge_holding_payment_data.execute(user.user_id)
+    ]
 
 @router.put("/holdings/manual-payouts/import", response_model=HoldingImportResponse)
 def import_manual_payouts(

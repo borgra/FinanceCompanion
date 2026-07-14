@@ -20,6 +20,7 @@ export const createHoldingApiRepository = (client: HttpClient): HoldingRepositor
   importHoldingDetails: (rows: HoldingImportRow[]) => client.put<HoldingImportResult>("/holdings/import", { rows }),
   importManualPayoutDetails: (rows: PassiveIncomeImportRow[]) =>
     client.put<HoldingImportResult>('/holdings/manual-payouts/import', { rows }),
+  purgePaymentData: () => client.delete<Holding[]>('/holdings/payouts'),
   deleteHolding: (id: string) => client.delete(`/holdings/${id}`),
   refreshHoldingSecurityDetails: (id: string, options) =>
     client.post<Holding>(`/holdings/${id}/security-details/refresh`, options ?? {}),

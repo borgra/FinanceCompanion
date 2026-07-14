@@ -351,7 +351,11 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
   };
 
   const downloadImportTemplate = () => {
-    const template = ['Ticker,Ex Dividend Date,Payment Date,Amount', 'VTI,2026-06-28,2026-07-02,0.45', ''].join('\r\n');
+    const template = [
+      'Ticker,Ex Dividend Date,Payment Date,Amount',
+      ...holdings.map((holding) => `${holding.security.symbol},,,`),
+      '',
+    ].join('\r\n');
     const url = URL.createObjectURL(new Blob([template], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;

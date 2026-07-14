@@ -26,8 +26,8 @@ export class HttpClient {
     return this.request<T>(path, { method: 'PUT', body });
   }
 
-  async delete(path: string): Promise<void> {
-    await this.request(path, { method: 'DELETE' });
+  async delete<T = void>(path: string): Promise<T> {
+    return this.request<T>(path, { method: 'DELETE' });
   }
 
   private async request<T>(path: string, options: { method: string; body?: unknown }): Promise<T> {

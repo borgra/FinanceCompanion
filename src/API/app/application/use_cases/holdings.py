@@ -173,3 +173,24 @@ class ImportManualPayoutDetails:
             )
             updated.append(self._repository.update_for_user(user_id, holding.id, refreshed))
         return updated, unmatched
+
+class PurgeHoldingPaymentData:
+    def __init__(self, repository: HoldingRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str) -> list[Holding]:
+        timestamp = now_iso()
+        updated: list[Holding] = []
+        for holding in self._repository.list_for_user(user_id):
+            refreshed = replace(
+                holding,
+                security=replace(
+                    holding.security,
+                    payout_details=[],
+                    source_payout_details=[],
+                    manual_payout_details=[],
+                ),
+                updated_at=timestamp,
+            )
+            updated.append(self._repository.update_for_user(user_id, holding.id, refreshed))
+        return updated

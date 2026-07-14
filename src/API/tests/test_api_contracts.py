@@ -562,3 +562,14 @@ def test_manual_payout_import_replaces_the_schedule_for_each_imported_ticker():
     assert payload["unmatchedSymbols"] == ["MISSING"]
     assert [item["amount"] for item in payload["holdings"][0]["security"]["manualPayoutDetails"]] == [0.63658, 0.64]
     assert all(item["mode"] == "manual" for item in payload["holdings"][0]["security"]["payoutDetails"])
+
+def test_purge_holding_payment_data_clears_source_and_manual_payouts():
+    client = build_test_client()
+    authenticate(client)
+
+    response = client.delete("/api/v1/holdings/payouts")
+
+    assert response.status_code == 200
+    assert response.json()
+    assert all(item["security"]["payoutDetails"] == [] for item in response.json())
+    assert all(item["security"]["manualPayoutDetails"] == [] for item in response.json())

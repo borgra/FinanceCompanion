@@ -76,7 +76,7 @@ export function LandingPage({ repository, budgetRepository, accountRepository, h
               );
             }
 
-            return <SettingsConfigurationPanel repository={repository} />;
+            return <SettingsConfigurationPanel repository={repository} holdingRepository={holdingRepository} />;
           }}
         />
       </div>

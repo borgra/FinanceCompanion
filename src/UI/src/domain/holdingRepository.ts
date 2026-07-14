@@ -16,6 +16,7 @@ export type HoldingRepository = {
   updateHolding: (id: string, draft: HoldingDraft) => Promise<Holding>;
   importHoldingDetails?: (rows: HoldingImportRow[]) => Promise<HoldingImportResult>;
   importManualPayoutDetails?: (rows: PassiveIncomeImportRow[]) => Promise<HoldingImportResult>;
+  purgePaymentData?: () => Promise<Holding[]>;
   deleteHolding: (id: string) => Promise<void>;
   refreshHoldingSecurityDetails: (id: string, options?: { replaceManualPayouts?: boolean }) => Promise<Holding>;
   refreshHeldSecurityDetails: (options?: { replaceManualPayouts?: boolean }) => Promise<SecurityDetailsRefreshResult>;
@@ -224,7 +225,18 @@ export function createMockHoldingRepository(): HoldingRepository {
         unmatchedSymbols: [...rowsBySymbol.keys()].filter((symbol) => !matchedSymbols.has(symbol)).map((symbol) => symbol.toUpperCase()),
       };
     },
-    updateHolding: async (id, draft) => {
+    purgePaymentData: async () => {
+      holdings = holdings.map((holding) => ({
+        ...holding,
+        security: {
+          ...holding.security,
+          payoutDetails: [],
+          manualPayoutDetails: [],
+        },
+        updatedAt: nowIso(),
+      }));
+      return holdings.map((holding) => ({ ...holding, security: { ...holding.security } }));
+    },    updateHolding: async (id, draft) => {
       const existing = holdings.find((holding) => holding.id === id);
       if (!existing) {
         throw new Error('Holding not found.');
