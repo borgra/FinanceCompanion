@@ -7,6 +7,8 @@ export type MortgageSchedule = {
   monthlyPrincipalPayment: number;
   monthlyAdditionalPrincipalPayment: number;
   scheduleStartMonth: string;
+  principalOverrides?: Record<string, number>;
+  extraPrincipalOverrides?: Record<string, number>;
 };
 
 export type NetWorth = {
@@ -16,3 +18,4 @@ export type NetWorth = {
   mortgageSchedule?: MortgageSchedule | null;
   updatedAt: string;
 };
+

@@ -81,14 +81,14 @@ def test_mortgage_configuration_and_schedule_are_preserved_with_snapshots():
     }
     saved = client.put('/api/v1/net-worth/mortgage-schedule', json=schedule)
     assert saved.status_code == 200
-    assert saved.json()['mortgageSchedule'] == schedule
+    assert saved.json()['mortgageSchedule'] == {**schedule, 'principalOverrides': {}, 'extraPrincipalOverrides': {}}
 
     snapshots = client.put('/api/v1/net-worth/investment-snapshots', json={
         'investmentSnapshots': {'taxable': {'Jan-26': 5000}},
     })
     assert snapshots.status_code == 200
     assert snapshots.json()['trackMortgageInNetWorth'] is True
-    assert snapshots.json()['mortgageSchedule'] == schedule
+    assert snapshots.json()['mortgageSchedule'] == {**schedule, 'principalOverrides': {}, 'extraPrincipalOverrides': {}}
 
 
 def test_mortgage_schedule_requires_paydown_when_balance_remains():
@@ -103,3 +103,20 @@ def test_mortgage_schedule_requires_paydown_when_balance_remains():
         'scheduleStartMonth': '2026-01',
     })
     assert response.status_code == 422
+
+
+
+def test_mortgage_schedule_accepts_sparse_table_overrides():
+    client = build_test_client()
+    authenticate(client)
+    response = client.put('/api/v1/net-worth/mortgage-schedule', json={
+        'houseValue': 800000,
+        'startingOutstandingMortgage': 361031,
+        'annualInterestRate': 0.02875,
+        'monthlyPrincipalPayment': 971.97,
+        'monthlyAdditionalPrincipalPayment': 300,
+        'scheduleStartMonth': '2026-01',
+        'principalOverrides': {'2026-01:0': 971.97},
+        'extraPrincipalOverrides': {'2026-01:0': 300},
+    })
+    assert response.status_code == 200, response.text

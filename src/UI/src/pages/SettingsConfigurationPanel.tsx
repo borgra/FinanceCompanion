@@ -7,12 +7,15 @@ import { IncomeSourcesPage } from '../features/incomeSources/IncomeSourcesPage';
 export type SettingsConfigurationPanelProps = {
   repository: IncomeSourceRepository;
   holdingRepository: HoldingRepository;
-  netWorthRepository: Pick<NetWorthRepository, 'get' | 'put' | 'putConfiguration'>;
+  netWorthRepository: Pick<NetWorthRepository, 'get' | 'put' | 'putConfiguration' | 'putMortgageSchedule'>;
+  onMortgageTrackingSaved?: (isEnabled: boolean) => void;
 };
 
-export function SettingsConfigurationPanel({ repository, holdingRepository, netWorthRepository }: SettingsConfigurationPanelProps) {
+export function SettingsConfigurationPanel({ repository, holdingRepository, netWorthRepository, onMortgageTrackingSaved }: SettingsConfigurationPanelProps) {
   const [beginningNetWorth, setBeginningNetWorth] = useState('');
   const [trackMortgage, setTrackMortgage] = useState(false);
+  const [houseValue, setHouseValue] = useState('800000');
+  const [annualInterestRate, setAnnualInterestRate] = useState('0.02875');
   const [isLoadingNetWorth, setIsLoadingNetWorth] = useState(true);
   const [isSavingNetWorth, setIsSavingNetWorth] = useState(false);
   const [isSavingMortgageVisibility, setIsSavingMortgageVisibility] = useState(false);
@@ -30,7 +33,9 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
     try {
       const value = await netWorthRepository.get();
       setBeginningNetWorth(value === undefined ? '' : String(value.beginningNetWorth ?? ''));
-      setTrackMortgage(value?.trackMortgageInNetWorth ?? false);
+      setTrackMortgage(value?.trackMortgageInNetWorth ?? true);
+      setHouseValue(String(value?.mortgageSchedule?.houseValue ?? 800000));
+      setAnnualInterestRate(String(value?.mortgageSchedule?.annualInterestRate ?? 0.02875));
     } catch {
       setNetWorthError('Unable to load beginning net worth.');
     } finally {
@@ -71,6 +76,17 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
     setMortgageVisibilityMessage(null);
     try {
       const saved = await netWorthRepository.putConfiguration(trackMortgage);
+      if (netWorthRepository.putMortgageSchedule) {
+        await netWorthRepository.putMortgageSchedule({
+          houseValue: Number(houseValue), annualInterestRate: Number(annualInterestRate),
+          startingOutstandingMortgage: saved.mortgageSchedule?.startingOutstandingMortgage ?? 0,
+          monthlyPrincipalPayment: saved.mortgageSchedule?.monthlyPrincipalPayment ?? 0,
+          monthlyAdditionalPrincipalPayment: saved.mortgageSchedule?.monthlyAdditionalPrincipalPayment ?? 0,
+          scheduleStartMonth: saved.mortgageSchedule?.scheduleStartMonth ?? '2026-01',
+          principalOverrides: saved.mortgageSchedule?.principalOverrides,
+          extraPrincipalOverrides: saved.mortgageSchedule?.extraPrincipalOverrides,
+        });
+      }
       setTrackMortgage(saved.trackMortgageInNetWorth ?? trackMortgage);
       setMortgageVisibilityMessage('Mortgage tracking configuration saved.');
     } catch {
@@ -103,7 +119,7 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
       </>}
     </section>
     <section aria-labelledby="mortgage-visibility-heading" style={{ border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: '16px', background: 'var(--md-sys-color-surface)', padding: '16px' }}>
-      <h2 id="mortgage-visibility-heading">Net Worth</h2><label><input type="checkbox" checked={trackMortgage} onChange={(event) => { setTrackMortgage(event.target.checked); setMortgageVisibilityError(null); setMortgageVisibilityMessage(null); }} /> Track Mortgage in Net Worth</label><p>This setting only controls whether the Mortgage Schedule tab is visible.</p>{mortgageVisibilityError ? <p className="form-error" role="alert">{mortgageVisibilityError}</p> : null}{mortgageVisibilityMessage ? <p className="form-success" role="status">{mortgageVisibilityMessage}</p> : null}<button className="primary-action" type="button" onClick={() => void saveMortgageVisibility()} disabled={isSavingMortgageVisibility}>{isSavingMortgageVisibility ? 'Saving...' : 'Save net worth configuration'}</button>
+      <h2 id="mortgage-visibility-heading">Net Worth</h2><label><input type="checkbox" checked={trackMortgage} onChange={(event) => { setTrackMortgage(event.target.checked); setMortgageVisibilityError(null); setMortgageVisibilityMessage(null); }} /> Track Mortgage in Net Worth</label><p>Controls Mortgage Schedule visibility and its home-value assumptions.</p><div className="form-grid"><label className="field"><span>House Value</span><div className="input-wrapper"><span className="input-prefix">$</span><input data-has-prefix="true" inputMode="decimal" value={houseValue} onChange={(event) => setHouseValue(event.target.value)} /></div></label><label className="field"><span>Annual Interest Rate</span><input inputMode="decimal" value={annualInterestRate} onChange={(event) => setAnnualInterestRate(event.target.value)} /><small>Use decimal format: 0.02875 = 2.875%.</small></label></div>{mortgageVisibilityError ? <p className="form-error" role="alert">{mortgageVisibilityError}</p> : null}{mortgageVisibilityMessage ? <p className="form-success" role="status">{mortgageVisibilityMessage}</p> : null}<button className="primary-action" type="button" onClick={() => void saveMortgageVisibility()} disabled={isSavingMortgageVisibility}>{isSavingMortgageVisibility ? 'Saving...' : 'Save net worth configuration'}</button>
     </section>    <section aria-labelledby="holding-payment-data-heading" style={{ border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: '16px', background: 'var(--md-sys-color-surface)', padding: '16px' }}>
       <h2 id="holding-payment-data-heading" style={{ marginBottom: 4 }}>Holdings</h2><p style={{ marginBottom: 12 }}>Remove all saved source and manual payment data. Your holdings and share quantities are kept. Refreshing a holding can load source payments again.</p>
       {paymentDataError ? <p className="form-error" role="alert">{paymentDataError}</p> : null}{paymentDataMessage ? <p className="form-success" role="status">{paymentDataMessage}</p> : null}
@@ -112,6 +128,10 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
     <IncomeSourcesPage repository={repository} layout="embedded" headerEyebrow="Configuration" />
   </div>;
 }
+
+
+
+
 
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
@@ -294,7 +296,7 @@ class NetWorthPayload(BaseModel):
     beginning_net_worth: float | None = Field(alias="beginningNetWorth")
     investment_snapshots: dict[str, dict[str, float]] = Field(default_factory=dict, alias="investmentSnapshots")
     track_mortgage_in_net_worth: bool = Field(default=False, alias="trackMortgageInNetWorth")
-    mortgage_schedule: dict[str, float | str] | None = Field(default=None, alias="mortgageSchedule")
+    mortgage_schedule: dict[str, Any] | None = Field(default=None, alias="mortgageSchedule")
     updated_at: str = Field(alias="updatedAt")
 
 
@@ -311,6 +313,8 @@ class MortgageSchedulePutRequest(BaseModel):
     monthly_principal_payment: float = Field(alias="monthlyPrincipalPayment", ge=0, allow_inf_nan=False)
     monthly_additional_principal_payment: float = Field(alias="monthlyAdditionalPrincipalPayment", ge=0, allow_inf_nan=False)
     schedule_start_month: str = Field(alias="scheduleStartMonth", pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    principal_overrides: dict[str, float] = Field(default_factory=dict, alias="principalOverrides")
+    extra_principal_overrides: dict[str, float] = Field(default_factory=dict, alias="extraPrincipalOverrides")
 
 
 class NetWorthPutRequest(BaseModel):
@@ -329,6 +333,9 @@ class InvestmentSnapshotsPutRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     investment_snapshots: dict[str, dict[str, float]] = Field(alias="investmentSnapshots")
+
+
+
 
 
 

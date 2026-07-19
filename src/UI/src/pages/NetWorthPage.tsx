@@ -21,6 +21,7 @@ type NetWorthPageProps = {
   incomeRepository: IncomeSourceRepository;
   holdingRepository: HoldingRepository;
   netWorthRepository: NetWorthRepository;
+  mortgageTrackingOverride?: boolean;
 };
 
 type NetWorthGroup = {
@@ -142,7 +143,7 @@ function AnnualNetWorthChart({ rows }: { rows: MonthlyNetWorthRow[] }) {
   );
 }
 
-export function NetWorthPage({ accountRepository, incomeRepository, holdingRepository, netWorthRepository }: NetWorthPageProps) {
+export function NetWorthPage({ accountRepository, incomeRepository, holdingRepository, netWorthRepository, mortgageTrackingOverride }: NetWorthPageProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -169,7 +170,7 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
       const snapshots = netWorth?.investmentSnapshots ?? {};
 
       setInvestmentSnapshots(snapshots);
-      setTrackMortgage(netWorth?.trackMortgageInNetWorth ?? false);
+      setTrackMortgage(mortgageTrackingOverride ?? netWorth?.trackMortgageInNetWorth ?? true);
       setMortgageSchedule(netWorth?.mortgageSchedule ?? null);
       setLoadError(null);
     }).catch(() => {
@@ -178,7 +179,9 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
       if (isCurrent) setIsLoading(false);
     });
     return () => { isCurrent = false; };
-  }, [accountRepository, holdingRepository, incomeRepository, netWorthRepository]);
+  }, [accountRepository, holdingRepository, incomeRepository, mortgageTrackingOverride, netWorthRepository]);
+
+  useEffect(() => { if (mortgageTrackingOverride !== undefined) setTrackMortgage(mortgageTrackingOverride); }, [mortgageTrackingOverride]);
 
   const months = useMemo(getProjectionMonths, []);
   const groups = useMemo(() => groupAccounts(accounts), [accounts]);
@@ -242,7 +245,12 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
   return (
     <section className="app-shell" style={{ paddingTop: 0 }}>
       <header className="page-header compact-header"><div className="page-header-text"><h1>Net Worth</h1><p>Review monthly net worth across Banking and Investing accounts.</p></div></header>
-      <div role="tablist" aria-label="Net worth views"><button id="net-worth-tab" role="tab" aria-controls="net-worth-panel" aria-selected={activeTab === 'net-worth'} onClick={() => setActiveTab('net-worth')}>Net Worth</button>{trackMortgage ? <button id="mortgage-schedule-tab" role="tab" aria-controls="mortgage-schedule-panel" aria-selected={activeTab === 'mortgage'} onClick={() => setActiveTab('mortgage')}>Mortgage Schedule</button> : null}</div>
+      <section className="toolbar" aria-label="Net worth views">
+        <div className="filter-tabs" role="tablist" aria-label="Net worth views">
+          <button aria-controls="net-worth-panel" aria-selected={activeTab === 'net-worth'} className="filter-tab" id="net-worth-tab" role="tab" type="button" onClick={() => setActiveTab('net-worth')}>Net Worth</button>
+          {trackMortgage ? <button aria-controls="mortgage-schedule-panel" aria-selected={activeTab === 'mortgage'} className="filter-tab" id="mortgage-schedule-tab" role="tab" type="button" onClick={() => setActiveTab('mortgage')}>Mortgage Schedule</button> : null}
+        </div>
+      </section>
       {activeTab === 'mortgage' && trackMortgage ? <div id="mortgage-schedule-panel" role="tabpanel" aria-labelledby="mortgage-schedule-tab"><MortgageSchedulePanel initial={mortgageSchedule} repository={netWorthRepository} onSaved={setMortgageSchedule} /></div> : <div id="net-worth-panel" role="tabpanel" aria-labelledby="net-worth-tab">
       {accounts.length === 0 ? <section className="empty-state"><h2>Net Worth</h2><p>Add Banking and Investing accounts to see your monthly net worth snapshot.</p></section> : <>
       <section aria-label="Net worth summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, margin: '16px 0 24px' }}>
@@ -276,6 +284,10 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
     </section>
   );
 }
+
+
+
+
 
 
 

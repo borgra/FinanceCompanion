@@ -9,8 +9,8 @@ export type NetWorthRepository = {
 };
 
 export const createMockNetWorthRepository = (initialValue?: number): NetWorthRepository => {
-  let value: NetWorth | undefined = initialValue === undefined ? undefined : { beginningNetWorth: initialValue, investmentSnapshots: {}, trackMortgageInNetWorth: false, mortgageSchedule: null, updatedAt: '2026-01-01T00:00:00Z' };
-  const merge = (next: Partial<NetWorth>): NetWorth => value = { beginningNetWorth: value?.beginningNetWorth ?? 100000, investmentSnapshots: value?.investmentSnapshots ?? {}, trackMortgageInNetWorth: value?.trackMortgageInNetWorth ?? false, mortgageSchedule: value?.mortgageSchedule ?? null, updatedAt: '2026-01-01T00:00:00Z', ...next };
+  let value: NetWorth | undefined = { beginningNetWorth: initialValue ?? 100000, investmentSnapshots: {}, trackMortgageInNetWorth: true, mortgageSchedule: { houseValue: 800000, startingOutstandingMortgage: 0, annualInterestRate: 0.02875, monthlyPrincipalPayment: 0, monthlyAdditionalPrincipalPayment: 0, scheduleStartMonth: '2026-01' }, updatedAt: '2026-01-01T00:00:00Z' };
+  const merge = (next: Partial<NetWorth>): NetWorth => value = { beginningNetWorth: value?.beginningNetWorth ?? 100000, investmentSnapshots: value?.investmentSnapshots ?? {}, trackMortgageInNetWorth: value?.trackMortgageInNetWorth ?? true, mortgageSchedule: value?.mortgageSchedule ?? null, updatedAt: '2026-01-01T00:00:00Z', ...next };
   return {
     get: async () => value,
     put: async (beginningNetWorth) => merge({ beginningNetWorth }),
@@ -19,4 +19,6 @@ export const createMockNetWorthRepository = (initialValue?: number): NetWorthRep
     putMortgageSchedule: async (mortgageSchedule) => merge({ mortgageSchedule }),
   };
 };
+
+
 

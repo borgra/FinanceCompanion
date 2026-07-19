@@ -21,6 +21,7 @@ export type LandingPageProps = {
 
 export function LandingPage({ repository, budgetRepository, accountRepository, holdingRepository, netWorthRepository }: LandingPageProps) {
   const [isOpen, setIsOpen] = useState(true);
+  const [mortgageTrackingOverride, setMortgageTrackingOverride] = useState<boolean | undefined>();
   const [activeSectionId, setActiveSectionId] =
     useState<'income' | 'budget' | 'accounts' | 'investing' | 'net-worth'>('budget');
 
@@ -79,13 +80,14 @@ export function LandingPage({ repository, budgetRepository, accountRepository, h
               );
             }
 
-            return <SettingsConfigurationPanel repository={repository} holdingRepository={holdingRepository} netWorthRepository={netWorthRepository} />;
+            return <SettingsConfigurationPanel repository={repository} holdingRepository={holdingRepository} netWorthRepository={netWorthRepository} onMortgageTrackingSaved={setMortgageTrackingOverride} />;
           }}
         />
       </div>
     </div>
   );
 }
+
 
 
 
