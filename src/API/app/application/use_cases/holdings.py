@@ -55,6 +55,21 @@ class UpdateHolding:
         return self._repository.update_for_user(user_id, holding_id, holding)
 
 
+class UpdateHoldingsBatch:
+    def __init__(self, repository: HoldingRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
+        if len(holdings) > 100:
+            raise ValueError("A maximum of 100 holdings can be saved at once.")
+        existing_ids = {item.id for item in self._repository.list_for_user(user_id)}
+        requested_ids = [item.id for item in holdings]
+        if len(requested_ids) != len(set(requested_ids)):
+            raise ValueError("Each holding may appear only once.")
+        if any(item_id not in existing_ids for item_id in requested_ids):
+            raise NotFoundError("Holding not found.")
+        return self._repository.update_batch_for_user(user_id, holdings)
+
 class ImportHoldingDetails:
     def __init__(self, repository: HoldingRepository) -> None:
         self._repository = repository
@@ -199,3 +214,4 @@ class PurgeHoldingPaymentData:
             )
             updated.append(self._repository.update_for_user(user_id, holding.id, refreshed))
         return updated
+

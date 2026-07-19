@@ -89,6 +89,15 @@ class BudgetCategoryUpdateRequest(CamelModel):
     is_essential: bool = Field(default=True, serialization_alias="isEssential")
 
 
+class BudgetSubCategoryDraftRequest(CamelModel):
+    id: str | None = None
+    name: str
+    monthly_amount_usd: int = Field(serialization_alias="monthlyAmountUsd")
+
+
+class BudgetCategoryDraftRequest(BudgetCategoryUpdateRequest):
+    sub_categories: list[BudgetSubCategoryDraftRequest] = Field(serialization_alias="subCategories")
+
 class BudgetSubCategoryCreateRequest(CamelModel):
     category_id: str = Field(serialization_alias="categoryId")
     name: str
@@ -113,6 +122,7 @@ class MonthlyRecordPayload(CamelModel):
     outflows: dict[str, float]
     invest: float
     savings: float
+
 
 
 class AccountPayload(CamelModel):
@@ -162,6 +172,12 @@ class AccountUpsertRequest(CamelModel):
     monthly_records: list[MonthlyRecordPayload] = Field(default_factory=list, serialization_alias="monthlyRecords")
 
 
+class AccountBatchItemRequest(AccountUpsertRequest):
+    id: str
+
+
+class AccountBatchRequest(CamelModel):
+    accounts: list[AccountBatchItemRequest] = Field(max_length=100)
 class SecurityPayoutDetailsPayload(CamelModel):
     ex_dividend_date: str = Field(serialization_alias="exDividendDate")
     amount: float
@@ -224,6 +240,13 @@ class HoldingCreateRequest(CamelModel):
     account_positions: list[HoldingAccountPositionPayload] = Field(serialization_alias="accountPositions")
 
 
+class HoldingBatchItemRequest(HoldingCreateRequest):
+    id: str
+
+
+class HoldingBatchRequest(CamelModel):
+    holdings: list[HoldingBatchItemRequest] = Field(max_length=100)
+
 class HoldingImportRow(CamelModel):
     symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9.-]+$")
     name: str = Field(min_length=1, max_length=200)
@@ -262,4 +285,54 @@ class HoldingManualPayoutsRequest(CamelModel):
 
 class SecurityDetailsRefreshRequest(CamelModel):
     replace_manual_payouts: bool = Field(default=False, serialization_alias="replaceManualPayouts")
+
+
+
+class NetWorthPayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    beginning_net_worth: float | None = Field(alias="beginningNetWorth")
+    investment_snapshots: dict[str, dict[str, float]] = Field(default_factory=dict, alias="investmentSnapshots")
+    track_mortgage_in_net_worth: bool = Field(default=False, alias="trackMortgageInNetWorth")
+    mortgage_schedule: dict[str, float | str] | None = Field(default=None, alias="mortgageSchedule")
+    updated_at: str = Field(alias="updatedAt")
+
+
+class NetWorthConfigurationPutRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    track_mortgage_in_net_worth: bool = Field(alias="trackMortgageInNetWorth")
+
+
+class MortgageSchedulePutRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    house_value: float = Field(alias="houseValue", ge=0, allow_inf_nan=False)
+    starting_outstanding_mortgage: float = Field(alias="startingOutstandingMortgage", ge=0, allow_inf_nan=False)
+    annual_interest_rate: float = Field(alias="annualInterestRate", ge=0, allow_inf_nan=False)
+    monthly_principal_payment: float = Field(alias="monthlyPrincipalPayment", ge=0, allow_inf_nan=False)
+    monthly_additional_principal_payment: float = Field(alias="monthlyAdditionalPrincipalPayment", ge=0, allow_inf_nan=False)
+    schedule_start_month: str = Field(alias="scheduleStartMonth", pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+class NetWorthPutRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    beginning_net_worth: float = Field(alias="beginningNetWorth", allow_inf_nan=False)
+
+
+class InvestmentSnapshotPutRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    value: float = Field(allow_inf_nan=False)
+
+
+class InvestmentSnapshotsPutRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    investment_snapshots: dict[str, dict[str, float]] = Field(alias="investmentSnapshots")
+
+
+
+
+
+
 

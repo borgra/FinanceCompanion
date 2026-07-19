@@ -3,6 +3,7 @@ import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import type { AccountRepository } from '../domain/accountRepository';
 import type { HoldingRepository } from '../domain/holdingRepository';
+import type { NetWorthRepository } from '../domain/netWorthRepository';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { SettingsConfigurationPanel } from './SettingsConfigurationPanel';
 import { SettingsBudgetPanel } from './SettingsBudgetPanel';
@@ -15,9 +16,10 @@ export type LandingPageProps = {
   budgetRepository: BudgetRepository;
   accountRepository: AccountRepository;
   holdingRepository: HoldingRepository;
+  netWorthRepository: NetWorthRepository;
 };
 
-export function LandingPage({ repository, budgetRepository, accountRepository, holdingRepository }: LandingPageProps) {
+export function LandingPage({ repository, budgetRepository, accountRepository, holdingRepository, netWorthRepository }: LandingPageProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [activeSectionId, setActiveSectionId] =
     useState<'income' | 'budget' | 'accounts' | 'investing' | 'net-worth'>('budget');
@@ -72,14 +74,19 @@ export function LandingPage({ repository, budgetRepository, accountRepository, h
                   accountRepository={accountRepository}
                   incomeRepository={repository}
                   holdingRepository={holdingRepository}
+                  netWorthRepository={netWorthRepository}
                 />
               );
             }
 
-            return <SettingsConfigurationPanel repository={repository} holdingRepository={holdingRepository} />;
+            return <SettingsConfigurationPanel repository={repository} holdingRepository={holdingRepository} netWorthRepository={netWorthRepository} />;
           }}
         />
       </div>
     </div>
   );
 }
+
+
+
+

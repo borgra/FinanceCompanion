@@ -14,6 +14,7 @@ export type HoldingRepository = {
   listHoldings: () => Promise<Holding[]>;
   createHolding: (draft: HoldingDraft) => Promise<Holding>;
   updateHolding: (id: string, draft: HoldingDraft) => Promise<Holding>;
+  updateHoldingsBatch: (changes: Array<{ id: string; draft: HoldingDraft }>) => Promise<Holding[]>;
   importHoldingDetails?: (rows: HoldingImportRow[]) => Promise<HoldingImportResult>;
   importManualPayoutDetails?: (rows: PassiveIncomeImportRow[]) => Promise<HoldingImportResult>;
   purgePaymentData?: () => Promise<Holding[]>;
@@ -250,7 +251,20 @@ export function createMockHoldingRepository(): HoldingRepository {
       holdings = holdings.map((holding) => (holding.id === id ? updated : holding));
       return { ...updated };
     },
-    deleteHolding: async (id) => {
+    updateHoldingsBatch: async (changes) => {
+      const ids = changes.map((change) => change.id);
+      if (ids.length > 100 || ids.length !== new Set(ids).size || ids.some((id) => !holdings.some((holding) => holding.id === id))) {
+        throw new Error('Unable to save holdings batch.');
+      }
+      const changesById = new Map(changes.map((change) => [change.id, change.draft]));
+      const timestamp = nowIso();
+      const nextHoldings = holdings.map((holding) => {
+        const draft = changesById.get(holding.id);
+        return draft ? { ...holding, security: { ...draft.security }, accountPositions: draft.accountPositions.map((position) => ({ ...position })), updatedAt: timestamp } : holding;
+      });
+      holdings = nextHoldings;
+      return nextHoldings.filter((holding) => changesById.has(holding.id)).map((holding) => ({ ...holding, security: { ...holding.security }, accountPositions: holding.accountPositions.map((position) => ({ ...position })) }));
+    },    deleteHolding: async (id) => {
       const existing = holdings.find((holding) => holding.id === id);
       if (!existing) {
         throw new Error('Holding not found.');
@@ -354,3 +368,5 @@ export function createMockHoldingRepository(): HoldingRepository {
     },
   };
 }
+
+

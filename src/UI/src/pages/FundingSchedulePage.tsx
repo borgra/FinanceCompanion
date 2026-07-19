@@ -618,14 +618,14 @@ export function FundingSchedulePage({
     setIsSaving(true);
     setSaveError(undefined);
     try {
-      await Promise.all(
-        investmentAccounts.map((account) =>
-          accountRepository.updateAccount(account.id, {
-            ...toAccountDraft(account),
-            monthlyRecords: ensureScheduleRecords(account),
-          }),
-        ),
-      );
+      const changedAccounts = investmentAccounts.filter((account) => {
+        const persisted = accounts.find((candidate) => candidate.id === account.id);
+        return !persisted || JSON.stringify(account) !== JSON.stringify(persisted);
+      });
+      await accountRepository.updateAccountsBatch(changedAccounts.map((account) => ({
+        id: account.id,
+        draft: { ...toAccountDraft(account), monthlyRecords: ensureScheduleRecords(account) },
+      })));
       const refreshed = await accountRepository.listAccounts();
       setAccounts(refreshed);
       setDraftAccounts(refreshed.map((account) => ({ ...account })));
@@ -1269,3 +1269,4 @@ export function FundingSchedulePage({
     </section>
   );
 }
+

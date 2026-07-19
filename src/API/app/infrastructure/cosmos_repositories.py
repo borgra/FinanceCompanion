@@ -19,6 +19,7 @@ from app.domain.models import (
     IncomePeriod,
     IncomeSource,
     MonthlyRecord,
+    NetWorth,
     SecurityMetadata,
     SecurityPayoutDetails,
     User,
@@ -605,6 +606,13 @@ class CosmosBudgetRepository:
         self._client.upsert_entity(updated_entity)
         return category
 
+    def replace_category_for_user(self, user_id: str, category: BudgetCategory) -> BudgetCategory:
+        try:
+            self._client.get_entity(user_id, f"budget_category:{category.id}")
+        except ResourceNotFoundError as exc:
+            raise NotFoundError("Budget category not found.") from exc
+        self._client.upsert_entity(_budget_category_to_entity(user_id, category))
+        return deepcopy(category)
     def delete_category_for_user(self, user_id: str, category_id: str) -> None:
         try:
             self._client.delete_entity(user_id, f"budget_category:{category_id}")
@@ -699,11 +707,53 @@ class CosmosAccountRepository:
         self._client.upsert_entity(entity)
         return deepcopy(account)
 
+    def update_batch_for_user(self, user_id: str, accounts: list[Account]) -> list[Account]:
+        if len(accounts) > 100:
+            raise ValueError("A maximum of 100 accounts can be saved at once.")
+        existing_ids = {item.id for item in self.list_for_user(user_id)}
+        if any(account.id not in existing_ids for account in accounts):
+            raise NotFoundError("Account not found.")
+        if accounts:
+            self._client.submit_transaction([
+                ("upsert", _account_to_entity(user_id, account))
+                for account in accounts
+            ])
+        return deepcopy(accounts)
     def delete_for_user(self, user_id: str, account_id: str) -> None:
         try:
             self._client.delete_entity(user_id, f"account:{account_id}")
         except ResourceNotFoundError as exc:
             raise NotFoundError("Account not found.") from exc
+
+
+class CosmosNetWorthRepository:
+    def __init__(self, client: TableClient) -> None:
+        self._client = client
+
+    def get_for_user(self, user_id: str) -> NetWorth | None:
+        try:
+            entity = self._client.get_entity(user_id, "net_worth")
+        except ResourceNotFoundError:
+            return None
+        return NetWorth(
+            beginning_net_worth=(float(entity["beginningNetWorth"]) if entity.get("beginningNetWorth") is not None else None),
+            investment_snapshots=json.loads(entity.get("investmentSnapshotsJson", "{}")),
+            updated_at=entity["updatedAt"],
+            track_mortgage_in_net_worth=bool(entity.get("trackMortgageInNetWorth", False)),
+            mortgage_schedule=json.loads(entity["mortgageScheduleJson"]) if entity.get("mortgageScheduleJson") else None,
+        )
+
+    def put_for_user(self, user_id: str, net_worth: NetWorth) -> NetWorth:
+        self._client.upsert_entity({
+            "PartitionKey": user_id,
+            "RowKey": "net_worth",
+            "beginningNetWorth": net_worth.beginning_net_worth,
+            "investmentSnapshotsJson": json.dumps(net_worth.investment_snapshots),
+            "trackMortgageInNetWorth": net_worth.track_mortgage_in_net_worth,
+            "mortgageScheduleJson": json.dumps(net_worth.mortgage_schedule) if net_worth.mortgage_schedule is not None else None,
+            "updatedAt": net_worth.updated_at,
+        })
+        return deepcopy(net_worth)
 
 
 class CosmosHoldingRepository:
@@ -733,8 +783,25 @@ class CosmosHoldingRepository:
         self._client.upsert_entity(entity)
         return deepcopy(holding)
 
+    def update_batch_for_user(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
+        if len(holdings) > 100:
+            raise ValueError("A maximum of 100 holdings can be saved at once.")
+        existing_ids = {item.id for item in self.list_for_user(user_id)}
+        if any(holding.id not in existing_ids for holding in holdings):
+            raise NotFoundError("Holding not found.")
+        if holdings:
+            self._client.submit_transaction([
+                ("upsert", _holding_to_entity(user_id, holding))
+                for holding in holdings
+            ])
+        return deepcopy(holdings)
     def delete_for_user(self, user_id: str, holding_id: str) -> None:
         try:
             self._client.delete_entity(user_id, f"holding:{holding_id}")
         except ResourceNotFoundError as exc:
             raise NotFoundError("Holding not found.") from exc
+
+
+
+
+

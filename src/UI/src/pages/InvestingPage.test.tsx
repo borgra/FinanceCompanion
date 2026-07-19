@@ -137,7 +137,7 @@ describe('InvestingPage', () => {
 
   it('allows a positive manual price in the holdings table and saves it', async () => {
     const holdingRepository = createMockHoldingRepository();
-    const updateHolding = vi.spyOn(holdingRepository, 'updateHolding');
+    const updateHoldingsBatch = vi.spyOn(holdingRepository, 'updateHoldingsBatch');
     render(
       <InvestingPage
         accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
@@ -158,12 +158,13 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await screen.findByText('Holdings saved.');
-    expect(updateHolding).toHaveBeenCalledWith(
-      expect.any(String),
+    expect(updateHoldingsBatch).toHaveBeenCalledTimes(1);
+    expect(updateHoldingsBatch).toHaveBeenCalledWith([
       expect.objectContaining({
-        security: expect.objectContaining({ price: 325.25 }),
+        id: expect.any(String),
+        draft: expect.objectContaining({ security: expect.objectContaining({ price: 325.25 }) }),
       }),
-    );
+    ]);
   });
   it('allows a manual ticker when security search is unavailable', async () => {
     const holdingRepository = createMockHoldingRepository();
@@ -288,6 +289,7 @@ describe('InvestingPage', () => {
       listHoldings: vi.fn(async () => holdings),
       createHolding: vi.fn(),
       updateHolding: vi.fn(),
+      updateHoldingsBatch: vi.fn(),
       deleteHolding: vi.fn(),
       refreshHoldingSecurityDetails,
       refreshHeldSecurityDetails: vi.fn(),
@@ -350,7 +352,7 @@ describe('InvestingPage', () => {
     ];
     const holdingRepository: HoldingRepository = {
       searchSecurities: vi.fn(), listHoldings: vi.fn(async () => holdings), createHolding: vi.fn(),
-      updateHolding: vi.fn(), deleteHolding: vi.fn(), refreshHoldingSecurityDetails: vi.fn(),
+      updateHolding: vi.fn(), updateHoldingsBatch: vi.fn(), deleteHolding: vi.fn(), refreshHoldingSecurityDetails: vi.fn(),
       refreshHeldSecurityDetails: vi.fn(), updateManualPayoutDetails: vi.fn(),
     };
 
@@ -545,5 +547,9 @@ describe('InvestingPage', () => {
     /* eslint-enable @typescript-eslint/no-explicit-any */
   });
 });
+
+
+
+
 
 

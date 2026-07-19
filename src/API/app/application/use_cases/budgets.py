@@ -26,6 +26,20 @@ class UpdateBudgetCategory:
         return self._repository.update_category_for_user(user_id, category_id, name, color_hex, icon, is_essential)
 
 
+class SaveBudgetCategoryDraft:
+    def __init__(self, repository: BudgetRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, category: BudgetCategory) -> BudgetCategory:
+        existing = next((item for item in self._repository.list_categories_for_user(user_id) if item.id == category.id), None)
+        if existing is None:
+            from app.domain.exceptions import NotFoundError
+            raise NotFoundError("Budget category not found.")
+        requested_ids = [item.id for item in category.sub_categories]
+        if len(requested_ids) != len(set(requested_ids)):
+            raise ValueError("Each budget sub-category may appear only once.")
+        return self._repository.replace_category_for_user(user_id, category)
+
 class DeleteBudgetCategory:
     def __init__(self, repository: BudgetRepository) -> None:
         self._repository = repository
@@ -58,3 +72,4 @@ class DeleteBudgetSubCategory:
 
     def execute(self, user_id: str, sub_category_id: str) -> None:
         self._repository.delete_sub_category_for_user(user_id, sub_category_id)
+

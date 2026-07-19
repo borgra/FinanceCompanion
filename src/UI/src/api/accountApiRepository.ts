@@ -42,5 +42,8 @@ export const createAccountApiRepository = (client: HttpClient): AccountRepositor
   listAccounts: () => client.get<Account[]>('/accounts'),
   createAccount: (draft) => client.post<Account>('/accounts', draftToPayload(draft)),
   updateAccount: (id, draft) => client.put<Account>(`/accounts/${id}`, draftToPayload(draft)),
-  deleteAccount: (id) => client.delete(`/accounts/${id}`),
+  updateAccountsBatch: (changes) => client.put<Account[]>('/accounts/batch', {
+    accounts: changes.map(({ id, draft }) => ({ id, ...draftToPayload(draft) })),
+  }),  deleteAccount: (id) => client.delete(`/accounts/${id}`),
 });
+

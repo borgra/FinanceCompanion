@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from app.domain.exceptions import AuthenticationError, DomainError, NotFoundError
 from app.infrastructure.alpha_vantage_security_details import SecurityDetailsUnavailableError
 from app.infrastructure.alpha_vantage_security_search import SecuritySearchUnavailableError
-from app.domain.models import Account, BudgetCategory, BudgetSubCategory
+from app.domain.models import Account, BudgetCategory, BudgetSubCategory, NetWorth
 from app.infrastructure.in_memory_repositories import now_iso
 from app.presentation.http.dependencies import get_container, require_session_user
 from app.presentation.http.mappers import (
@@ -27,20 +27,29 @@ from app.presentation.http.mappers import (
 )
 from app.presentation.http.schemas import (
     AccountPayload,
+    AccountBatchRequest,
     AccountUpsertRequest,
     AuthSessionResponse,
     AuthVerifyRequest,
     BudgetCategoryCreateRequest,
     BudgetCategoryPayload,
     BudgetCategoryUpdateRequest,
+    BudgetCategoryDraftRequest,
     BudgetSubCategoryCreateRequest,
     BudgetSubCategoryPayload,
     BudgetSubCategoryUpdateRequest,
     HoldingCreateRequest,
+    HoldingBatchRequest,
     HoldingImportRequest,
     HoldingImportResponse,
     HoldingManualPayoutsRequest,
     ManualPayoutImportRequest,
+    InvestmentSnapshotPutRequest,
+    InvestmentSnapshotsPutRequest,
+    NetWorthPayload,
+    NetWorthConfigurationPutRequest,
+    MortgageSchedulePutRequest,
+    NetWorthPutRequest,
     
     HoldingPayload,
     IncomeSourcePayload,
@@ -134,6 +143,53 @@ def get_session(user=Depends(require_session_user), container=Depends(get_contai
     return to_user_response(current_user)
 
 
+@router.get("/net-worth", response_model=NetWorthPayload)
+def get_net_worth(user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
+    value = container.get_net_worth.execute(user.user_id)
+    if value is None: raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Net worth has not been configured.")
+    return _to_net_worth_payload(value)
+
+
+def _to_net_worth_payload(value: NetWorth) -> NetWorthPayload:
+    return NetWorthPayload(beginningNetWorth=value.beginning_net_worth, investmentSnapshots=value.investment_snapshots, trackMortgageInNetWorth=value.track_mortgage_in_net_worth, mortgageSchedule=value.mortgage_schedule, updatedAt=value.updated_at)
+
+
+@router.put("/net-worth", response_model=NetWorthPayload)
+def put_net_worth(request: NetWorthPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
+    current = container.get_net_worth.execute(user.user_id)
+    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=request.beginning_net_worth, investment_snapshots=current.investment_snapshots if current else {}, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth if current else False, mortgage_schedule=current.mortgage_schedule if current else None))
+    return _to_net_worth_payload(value)
+
+
+@router.put("/net-worth/investment-snapshots", response_model=NetWorthPayload)
+def put_investment_snapshots(request: InvestmentSnapshotsPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
+    current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
+    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=request.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=current.mortgage_schedule))
+    return _to_net_worth_payload(value)
+
+
+@router.put("/net-worth/investment-snapshots/{account_id}/{month}", response_model=NetWorthPayload)
+def put_investment_snapshot(account_id: str, month: str, request: InvestmentSnapshotPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
+    current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
+    snapshots = {key: dict(values) for key, values in current.investment_snapshots.items()}; snapshots.setdefault(account_id, {})[month] = request.value
+    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=current.mortgage_schedule))
+    return _to_net_worth_payload(value)
+
+
+@router.put("/net-worth/configuration", response_model=NetWorthPayload)
+def put_net_worth_configuration(request: NetWorthConfigurationPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
+    current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
+    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=current.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=request.track_mortgage_in_net_worth, mortgage_schedule=current.mortgage_schedule))
+    return _to_net_worth_payload(value)
+
+
+@router.put("/net-worth/mortgage-schedule", response_model=NetWorthPayload)
+def put_mortgage_schedule(request: MortgageSchedulePutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
+    if request.starting_outstanding_mortgage > 0 and request.monthly_principal_payment + request.monthly_additional_principal_payment <= 0: raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A principal payment is required while a balance remains.")
+    current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
+    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=current.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=request.model_dump(by_alias=True)))
+    return _to_net_worth_payload(value)
+
 @router.get("/income-sources", response_model=list[IncomeSourcePayload])
 def list_income_sources(user=Depends(require_session_user), container=Depends(get_container)) -> list[IncomeSourcePayload]:
     return [to_income_source_payload(item) for item in container.list_income_sources.execute(user.user_id)]
@@ -191,6 +247,41 @@ def create_budget_category(request: BudgetCategoryCreateRequest, user=Depends(re
     )
     return to_budget_category_payload(container.create_budget_category.execute(user.user_id, category))
 
+
+@router.put("/budget/categories/{category_id}/draft", response_model=BudgetCategoryPayload)
+def save_budget_category_draft(category_id: str, request: BudgetCategoryDraftRequest, user=Depends(require_session_user), container=Depends(get_container)) -> BudgetCategoryPayload:
+    existing = next((item for item in container.list_budget_categories.execute(user.user_id) if item.id == category_id), None)
+    if existing is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Budget category not found.")
+    existing_subs = {item.id: item for item in existing.sub_categories}
+    requested_existing_ids = [item.id for item in request.sub_categories if item.id is not None]
+    if len(requested_existing_ids) != len(set(requested_existing_ids)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Each budget sub-category may appear only once.")
+    if any(item_id not in existing_subs for item_id in requested_existing_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Budget sub-category not found.")
+    timestamp = now_iso()
+    sub_categories = []
+    for item in request.sub_categories:
+        prior = existing_subs.get(item.id) if item.id else None
+        sub_categories.append(BudgetSubCategory(
+            id=item.id or f"sub-{uuid.uuid4().hex[:8]}",
+            category_id=category_id,
+            name=item.name,
+            monthly_amount_usd=item.monthly_amount_usd,
+            created_at=prior.created_at if prior else timestamp,
+            updated_at=timestamp,
+        ))
+    category = BudgetCategory(
+        id=category_id,
+        name=request.name,
+        color_hex=request.color_hex,
+        icon=request.icon,
+        is_essential=request.is_essential,
+        created_at=existing.created_at,
+        updated_at=timestamp,
+        sub_categories=sub_categories,
+    )
+    return to_budget_category_payload(container.save_budget_category_draft.execute(user.user_id, category))
 
 @router.put("/budget/categories/{category_id}", response_model=BudgetCategoryPayload)
 def update_budget_category(category_id: str, request: BudgetCategoryUpdateRequest, user=Depends(require_session_user), container=Depends(get_container)) -> BudgetCategoryPayload:
@@ -253,6 +344,28 @@ def create_account(request: AccountUpsertRequest, user=Depends(require_session_u
     _ensure_income_sources_are_unassigned(account, container.list_accounts.execute(user.user_id))
     return to_account_payload(container.create_account.execute(user.user_id, account))
 
+
+@router.put("/accounts/batch", response_model=list[AccountPayload])
+def update_accounts_batch(request: AccountBatchRequest, user=Depends(require_session_user), container=Depends(get_container)) -> list[AccountPayload]:
+    existing_accounts = container.list_accounts.execute(user.user_id)
+    existing_by_id = {item.id: item for item in existing_accounts}
+    requested_ids = [item.id for item in request.accounts]
+    if len(requested_ids) != len(set(requested_ids)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Each account may appear only once.")
+    if any(account_id not in existing_by_id for account_id in requested_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found.")
+    timestamp = now_iso()
+    changed = [to_account(item.id, item, existing_by_id[item.id].created_at, timestamp) for item in request.accounts]
+    changed_by_id = {item.id: item for item in changed}
+    proposed = [changed_by_id.get(item.id, item) for item in existing_accounts]
+    owner_by_source_id: dict[str, str] = {}
+    for account in proposed:
+        for source_id in set(account.assigned_income_source_ids):
+            owner = owner_by_source_id.get(source_id)
+            if owner is not None and owner != account.id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Income source is already assigned to another account.")
+            owner_by_source_id[source_id] = account.id
+    return [to_account_payload(item) for item in container.update_accounts_batch.execute(user.user_id, changed)]
 
 @router.put("/accounts/{account_id}", response_model=AccountPayload)
 def update_account(account_id: str, request: AccountUpsertRequest, user=Depends(require_session_user), container=Depends(get_container)) -> AccountPayload:
@@ -423,6 +536,29 @@ def update_manual_payouts(
         raise _domain_error_to_http(exc) from exc
 
 
+@router.put("/holdings/batch", response_model=list[HoldingPayload])
+def update_holdings_batch(request: HoldingBatchRequest, user=Depends(require_session_user), container=Depends(get_container)) -> list[HoldingPayload]:
+    existing_by_id = {item.id: item for item in container.list_holdings.execute(user.user_id)}
+    requested_ids = [item.id for item in request.holdings]
+    if len(requested_ids) != len(set(requested_ids)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Each holding may appear only once.")
+    if any(item_id not in existing_by_id for item_id in requested_ids):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Holding not found.")
+    account_ids = {account.id for account in container.list_accounts.execute(user.user_id)}
+    for item in request.holdings:
+        if not item.account_positions:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one account.")
+        position_ids = [position.account_id for position in item.account_positions]
+        if len(position_ids) != len(set(position_ids)):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Each account may appear only once per holding.")
+        if any(position_id not in account_ids for position_id in position_ids):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selected account was not found.")
+        if any(position.quantity < 0 for position in item.account_positions):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity must be zero or greater.")
+    timestamp = now_iso()
+    holdings = [to_holding(item.id, item, existing_by_id[item.id].created_at, timestamp) for item in request.holdings]
+    return [to_holding_payload(item) for item in container.update_holdings_batch.execute(user.user_id, holdings)]
+
 @router.put("/holdings/{holding_id}", response_model=HoldingPayload)
 def update_holding(holding_id: str, request: HoldingCreateRequest, user=Depends(require_session_user), container=Depends(get_container)) -> HoldingPayload:
     existing = next((item for item in container.list_holdings.execute(user.user_id) if item.id == holding_id), None)
@@ -460,3 +596,11 @@ def delete_holding(holding_id: str, user=Depends(require_session_user), containe
     except DomainError as exc:
         raise _domain_error_to_http(exc) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+
+
+
+
+
+

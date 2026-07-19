@@ -4,6 +4,7 @@ export type AccountRepository = {
   listAccounts: () => Promise<Account[]>;
   createAccount: (draft: AccountDraft) => Promise<Account>;
   updateAccount: (id: string, draft: AccountDraft) => Promise<Account>;
+  updateAccountsBatch: (changes: Array<{ id: string; draft: AccountDraft }>) => Promise<Account[]>;
   deleteAccount: (id: string) => Promise<void>;
 };
 
@@ -246,9 +247,32 @@ export function createMockAccountRepository({
         return { ...updated };
       }),
 
+    updateAccountsBatch: (changes) =>
+      commit(() => {
+        const ids = changes.map((change) => change.id);
+        if (ids.length > 100 || ids.length !== new Set(ids).size || ids.some((id) => !accounts.some((account) => account.id === id))) {
+          throw new Error('Unable to save accounts batch.');
+        }
+        const changedFields = new Map(changes.map((change) => [change.id, draftToAccountFields(change.draft)]));
+        const proposed = accounts.map((account) => {
+          const fields = changedFields.get(account.id);
+          return fields ? { ...account, ...fields, updatedAt: nowIso() } : account;
+        });
+        const sourceOwners = new Map<string, string>();
+        for (const account of proposed) {
+          for (const sourceId of new Set(account.assignedIncomeSourceIds)) {
+            const owner = sourceOwners.get(sourceId);
+            if (owner && owner !== account.id) throw new Error('Income source is already assigned to another account.');
+            sourceOwners.set(sourceId, account.id);
+          }
+        }
+        accounts = proposed;
+        return cloneAccounts(proposed.filter((account) => changedFields.has(account.id)));
+      }),
     deleteAccount: (id) =>
       commit(() => {
         accounts = accounts.filter((a) => a.id !== id);
       }),
   };
 }
+

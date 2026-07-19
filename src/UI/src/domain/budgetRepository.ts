@@ -8,6 +8,7 @@ export type BudgetRepository = {
   listCategoriesWithSubCategories: () => Promise<BudgetCategoryWithSubCategories[]>;
   createCategory: (name: string, colorHex: string, icon: string, isEssential: boolean) => Promise<BudgetCategory>;
   updateCategory: (id: string, name: string, colorHex: string, icon: string, isEssential: boolean) => Promise<BudgetCategory>;
+  saveCategoryDraft: (draft: BudgetCategoryWithSubCategories) => Promise<BudgetCategoryWithSubCategories>;
   deleteCategory: (id: string) => Promise<void>;
 
   createSubCategory: (
@@ -241,6 +242,20 @@ export function createMockBudgetRepository(): BudgetRepository {
     return clone(updated);
   };
 
+  const saveCategoryDraft = async (draft: BudgetCategoryWithSubCategories) => {
+    const existing = categories.find((category) => category.id === draft.id);
+    if (!existing) throw new Error('Category not found.');
+    const existingSubs = new Map(subCategories.filter((sub) => sub.categoryId === draft.id).map((sub) => [sub.id, sub]));
+    const timestamp = nowIso();
+    const savedCategory: BudgetCategory = { ...existing, name: draft.name, colorHex: draft.colorHex, icon: draft.icon, isEssential: draft.isEssential, updatedAt: timestamp };
+    const savedSubs = draft.subCategories.map((sub) => {
+      const prior = existingSubs.get(sub.id);
+      return { ...sub, id: sub.id.startsWith('tmp-') ? `sub-${crypto.randomUUID()}` : sub.id, categoryId: draft.id, createdAt: prior?.createdAt ?? timestamp, updatedAt: timestamp };
+    });
+    categories = categories.map((category) => category.id === draft.id ? savedCategory : category);
+    subCategories = [...subCategories.filter((sub) => sub.categoryId !== draft.id), ...savedSubs];
+    return clone({ ...savedCategory, subCategories: savedSubs });
+  };
   const deleteCategory = async (id: string) => {
     const catExists = categories.some((c) => c.id === id);
     if (!catExists) return;
@@ -289,9 +304,11 @@ export function createMockBudgetRepository(): BudgetRepository {
     listCategoriesWithSubCategories,
     createCategory,
     updateCategory,
+    saveCategoryDraft,
     deleteCategory,
     createSubCategory,
     updateSubCategory,
     deleteSubCategory,
   };
 }
+

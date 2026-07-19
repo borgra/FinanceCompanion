@@ -17,7 +17,9 @@ export const createHoldingApiRepository = (client: HttpClient): HoldingRepositor
   createHolding: (draft: HoldingDraft) => client.post<Holding>('/holdings', draft),
   updateHolding: (id: string, draft: HoldingDraft) =>
     client.put<Holding>(`/holdings/${id}`, draft),
-  importHoldingDetails: (rows: HoldingImportRow[]) => client.put<HoldingImportResult>("/holdings/import", { rows }),
+  updateHoldingsBatch: (changes) => client.put<Holding[]>('/holdings/batch', {
+    holdings: changes.map(({ id, draft }) => ({ id, ...draft })),
+  }),  importHoldingDetails: (rows: HoldingImportRow[]) => client.put<HoldingImportResult>("/holdings/import", { rows }),
   importManualPayoutDetails: (rows: PassiveIncomeImportRow[]) =>
     client.put<HoldingImportResult>('/holdings/manual-payouts/import', { rows }),
   purgePaymentData: () => client.delete<Holding[]>('/holdings/payouts'),
@@ -29,3 +31,5 @@ export const createHoldingApiRepository = (client: HttpClient): HoldingRepositor
   updateManualPayoutDetails: (id, payouts) =>
     client.put<Holding>(`/holdings/${id}/manual-payouts`, { manualPayoutDetails: payouts }),
 });
+
+

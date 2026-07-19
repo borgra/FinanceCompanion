@@ -1,6 +1,6 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { IncomeSource } from '../domain/incomeSource';
 import { createMockBudgetRepository } from '../domain/budgetRepository';
 import { createMockIncomeSourceRepository } from '../domain/incomeSourceRepository';
@@ -137,4 +137,41 @@ describe('BudgetPage', () => {
     expect(classification).toBeChecked();
     expect(screen.getAllByText('Essential Budget: $2,900.00')).toHaveLength(1);
   });
-});
+
+  it('saves parent edits, additions, updates, and removals in one retryable category draft request', async () => {
+    const user = userEvent.setup();
+    const repository = createMockBudgetRepository();
+    const saveDraft = vi.spyOn(repository, 'saveCategoryDraft').mockRejectedValueOnce(new Error('failed'));
+    render(<BudgetPage budgetRepository={repository} incomeRepository={createMockIncomeSourceRepository({ initialSources: [incomeSource()] })} />);
+
+    await user.click(await screen.findByRole('button', { name: /Expand Housing category/i }));
+    const categoryName = screen.getByLabelText('Category name');
+    await user.clear(categoryName);
+    await user.type(categoryName, 'Home');
+
+    const componentNames = screen.getAllByLabelText('Name');
+    await user.clear(componentNames[0]!);
+    await user.type(componentNames[0]!, 'Association');
+    await user.click(screen.getAllByRole('button', { name: 'Delete' })[1]!);
+    await user.type(screen.getByLabelText('New component name'), 'Repairs');
+    await user.type(screen.getByPlaceholderText('0.00'), '125');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to save budget changes');
+    expect(categoryName).toHaveValue('Home');
+    expect(screen.getByDisplayValue('Repairs')).toBeInTheDocument();
+    expect(saveDraft).toHaveBeenCalledTimes(1);
+    const sent = saveDraft.mock.calls[0]![0];
+    expect(sent.name).toBe('Home');
+    expect(sent.subCategories.some((sub) => sub.name === 'Association')).toBe(true);
+    expect(sent.subCategories.some((sub) => sub.name === 'Repairs' && sub.id.startsWith('tmp-'))).toBe(true);
+    expect(sent.subCategories).toHaveLength(2);
+
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });});
+
+
+

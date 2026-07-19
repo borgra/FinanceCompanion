@@ -207,7 +207,7 @@ export function FinanceMoneyCellInput({
     if (event.defaultPrevented || event.key !== 'Enter') return;
 
     event.preventDefault();
-    setIsFocused(false);
+    event.currentTarget.blur();
 
     if (nextFocusId) {
       window.requestAnimationFrame(() => {
@@ -284,3 +284,4 @@ export function FinanceMoneyCellValue({
     </span>
   );
 }
+

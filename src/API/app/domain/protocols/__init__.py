@@ -3,6 +3,7 @@ from .budget_repository import BudgetRepository
 from .identity_token_verifier import IdentityTokenVerifier
 from .holding_repository import HoldingRepository
 from .income_source_repository import IncomeSourceRepository
+from .net_worth_repository import NetWorthRepository
 from .session_token_service import SessionTokenService
 from .user_repository import UserRepository
 
@@ -12,6 +13,7 @@ __all__ = [
     "IdentityTokenVerifier",
     "HoldingRepository",
     "IncomeSourceRepository",
+    "NetWorthRepository",
     "SessionTokenService",
     "UserRepository",
 ]

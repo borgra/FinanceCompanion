@@ -14,6 +14,7 @@ from app.domain.models import (
     IncomePeriod,
     IncomeSource,
     MonthlyRecord,
+    NetWorth,
     SecurityMetadata,
     SecurityPayoutDetails,
     User,
@@ -224,6 +225,7 @@ class InMemoryDataStore:
             user_id: [_holding_from_dict(item) for item in items]
             for user_id, items in data["holdings"].items()
         }
+        self.net_worth: dict[str, NetWorth] = {}
 
 
 class InMemoryUserRepository:
@@ -309,6 +311,13 @@ class InMemoryBudgetRepository:
                 return deepcopy(item)
         raise NotFoundError("Budget category not found.")
 
+    def replace_category_for_user(self, user_id: str, category: BudgetCategory) -> BudgetCategory:
+        items = self._store.budget_categories.setdefault(user_id, [])
+        for index, item in enumerate(items):
+            if item.id == category.id:
+                items[index] = deepcopy(category)
+                return deepcopy(category)
+        raise NotFoundError("Budget category not found.")
     def delete_category_for_user(self, user_id: str, category_id: str) -> None:
         categories = self._store.budget_categories.setdefault(user_id, [])
         self._store.budget_categories[user_id] = [item for item in categories if item.id != category_id]
@@ -357,9 +366,30 @@ class InMemoryAccountRepository:
                 return deepcopy(account)
         raise NotFoundError("Account not found.")
 
+    def update_batch_for_user(self, user_id: str, accounts: list[Account]) -> list[Account]:
+        items = self._store.accounts.setdefault(user_id, [])
+        existing_ids = {item.id for item in items}
+        if any(account.id not in existing_ids for account in accounts):
+            raise NotFoundError("Account not found.")
+        updates = {account.id: deepcopy(account) for account in accounts}
+        self._store.accounts[user_id] = [updates.get(item.id, deepcopy(item)) for item in items]
+        return deepcopy(accounts)
     def delete_for_user(self, user_id: str, account_id: str) -> None:
         items = self._store.accounts.setdefault(user_id, [])
         self._store.accounts[user_id] = [item for item in items if item.id != account_id]
+
+
+class InMemoryNetWorthRepository:
+    def __init__(self, store: InMemoryDataStore) -> None:
+        self._store = store
+
+    def get_for_user(self, user_id: str) -> NetWorth | None:
+        value = self._store.net_worth.get(user_id)
+        return deepcopy(value) if value else None
+
+    def put_for_user(self, user_id: str, net_worth: NetWorth) -> NetWorth:
+        self._store.net_worth[user_id] = deepcopy(net_worth)
+        return deepcopy(net_worth)
 
 
 class InMemoryHoldingRepository:
@@ -382,8 +412,23 @@ class InMemoryHoldingRepository:
                 return deepcopy(holding)
         raise NotFoundError("Holding not found.")
 
+    def update_batch_for_user(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
+        items = self._store.holdings.setdefault(user_id, [])
+        existing_ids = {item.id for item in items}
+        if any(holding.id not in existing_ids for holding in holdings):
+            raise NotFoundError("Holding not found.")
+        updates = {holding.id: deepcopy(holding) for holding in holdings}
+        next_items = [updates.get(item.id, deepcopy(item)) for item in items]
+        self._store.holdings[user_id] = next_items
+        return deepcopy(holdings)
     def delete_for_user(self, user_id: str, holding_id: str) -> None:
         items = self._store.holdings.setdefault(user_id, [])
         if not any(item.id == holding_id for item in items):
             raise NotFoundError("Holding not found.")
         self._store.holdings[user_id] = [item for item in items if item.id != holding_id]
+
+
+
+
+
+

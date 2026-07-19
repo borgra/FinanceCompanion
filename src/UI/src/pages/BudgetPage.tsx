@@ -305,64 +305,16 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
   };
 
   const saveChanges = async () => {
-    if (!draftCategory) return false;
-    if (!selectedCategory) return false;
-
-    // Validate inputs.
-    if (!draftCategory.name.trim()) return false;
-
-    const initial = selectedCategory;
-    const initialSubsById = new Map(initial.subCategories.map((s) => [s.id, s] as const));
-
+    if (!draftCategory || !selectedCategory || !draftCategory.name.trim()) return false;
     setIsSaving(true);
     setSaveError(undefined);
     try {
-      if (
-        draftCategory.name !== initial.name ||
-        draftCategory.colorHex !== initial.colorHex ||
-        draftCategory.icon !== initial.icon ||
-        draftCategory.isEssential !== initial.isEssential
-      ) {
-        await budgetRepository.updateCategory(
-          initial.id,
-          draftCategory.name.trim(),
-          draftCategory.colorHex,
-          draftCategory.icon,
-          draftCategory.isEssential,
-        );
-      }
-
-      // Upserts + creates
-      for (const sub of draftCategory.subCategories) {
-        const initialSub = initialSubsById.get(sub.id);
-        if (!initialSub) {
-          // New sub-category (draft-only)
-          await budgetRepository.createSubCategory(
-            draftCategory.id,
-            sub.name.trim(),
-            sub.monthlyAmountUsd,
-          );
-        } else {
-          if (
-            initialSub.name !== sub.name ||
-            initialSub.monthlyAmountUsd !== sub.monthlyAmountUsd
-          ) {
-            await budgetRepository.updateSubCategory(
-              sub.id,
-              sub.name.trim(),
-              sub.monthlyAmountUsd,
-            );
-          }
-        }
-      }
-
-      // Deletes
-      for (const id of removedSubCategoryIds) {
-        await budgetRepository.deleteSubCategory(id);
-      }
-
+      await budgetRepository.saveCategoryDraft({
+        ...draftCategory,
+        name: draftCategory.name.trim(),
+        subCategories: draftCategory.subCategories.map((sub) => ({ ...sub, name: sub.name.trim() })),
+      });
       await refreshCategories();
-      // Draft reset runs via effect.
       return true;
     } catch {
       setSaveError('Unable to save budget changes. Try again.');
@@ -371,7 +323,6 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
       setIsSaving(false);
     }
   };
-
   const deleteCategory = async (id: string) => {
     // If the current selected category is dirty and we're deleting it, force save first.
     if (id === selectedCategoryId && hasUnsavedChanges()) {
@@ -984,3 +935,4 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
     </main>
   );
 }
+

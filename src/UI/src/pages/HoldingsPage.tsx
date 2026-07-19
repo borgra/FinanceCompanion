@@ -518,19 +518,18 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setError(null);
     setSuccessMessage(null);
     try {
-      const updatedHoldings = await Promise.all(
-        dirtyHoldings.map((holding) =>
-          holdingRepository.updateHolding(holding.id, {
+      const updatedHoldings = await holdingRepository.updateHoldingsBatch(
+        dirtyHoldings.map((holding) => ({
+          id: holding.id,
+          draft: {
             security: holding.security,
             accountPositions: managedAccounts.map((account) => ({
               accountId: account.id,
               quantity: getQuantity(holding, account.id),
-              costBasis:
-                holding.accountPositions.find((position) => position.accountId === account.id)
-                  ?.costBasis ?? null,
+              costBasis: holding.accountPositions.find((position) => position.accountId === account.id)?.costBasis ?? null,
             })),
-          }),
-        ),
+          },
+        })),
       );
       const updatedById = new Map(updatedHoldings.map((holding) => [holding.id, holding]));
       setHoldings((current) =>
@@ -944,3 +943,4 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     </section>
   );
 }
+

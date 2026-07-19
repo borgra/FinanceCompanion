@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.application.use_cases.accounts import CreateAccount, DeleteAccount, ListAccounts, UpdateAccount
+from app.application.use_cases.accounts import CreateAccount, DeleteAccount, ListAccounts, UpdateAccount, UpdateAccountsBatch
 from app.application.use_cases.auth import AuthenticateIdentityUser, GetCurrentUser
 from app.application.use_cases.budgets import (
     CreateBudgetCategory,
@@ -9,8 +9,10 @@ from app.application.use_cases.budgets import (
     DeleteBudgetSubCategory,
     ListBudgetCategories,
     UpdateBudgetCategory,
+    SaveBudgetCategoryDraft,
     UpdateBudgetSubCategory,
 )
+from app.application.use_cases.net_worth import GetNetWorth, PutNetWorth
 from app.application.use_cases.income_sources import (
     CreateIncomeSource,
     ListIncomeSources,
@@ -25,6 +27,7 @@ from app.application.use_cases.holdings import (
     PurgeHoldingPaymentData,
     ListHoldings,
     UpdateHolding,
+    UpdateHoldingsBatch,
     UpdateManualPayoutDetails,
 )
 from app.application.use_cases.security_details import (
@@ -40,6 +43,7 @@ from app.infrastructure.in_memory_repositories import (
     InMemoryDataStore,
     InMemoryHoldingRepository,
     InMemoryIncomeSourceRepository,
+    InMemoryNetWorthRepository,
     InMemoryUserRepository,
 )
 from app.infrastructure.alpha_vantage_security_details import AlphaVantageSecurityDetailsProvider
@@ -60,6 +64,7 @@ class Container:
     list_budget_categories: ListBudgetCategories
     create_budget_category: CreateBudgetCategory
     update_budget_category: UpdateBudgetCategory
+    save_budget_category_draft: SaveBudgetCategoryDraft
     delete_budget_category: DeleteBudgetCategory
     create_budget_sub_category: CreateBudgetSubCategory
     update_budget_sub_category: UpdateBudgetSubCategory
@@ -67,10 +72,14 @@ class Container:
     list_accounts: ListAccounts
     create_account: CreateAccount
     update_account: UpdateAccount
+    update_accounts_batch: UpdateAccountsBatch
     delete_account: DeleteAccount
+    get_net_worth: GetNetWorth
+    put_net_worth: PutNetWorth
     list_holdings: ListHoldings
     create_holding: CreateHolding
     update_holding: UpdateHolding
+    update_holdings_batch: UpdateHoldingsBatch
     import_holding_details: ImportHoldingDetails
     import_manual_payout_details: ImportManualPayoutDetails
     purge_holding_payment_data: PurgeHoldingPaymentData
@@ -95,6 +104,7 @@ def build_container(
             CosmosBudgetRepository,
             CosmosHoldingRepository,
             CosmosIncomeSourceRepository,
+            CosmosNetWorthRepository,
             CosmosUserRepository,
         )
 
@@ -112,6 +122,7 @@ def build_container(
         budgets = CosmosBudgetRepository(client)
         accounts = CosmosAccountRepository(client)
         holdings = CosmosHoldingRepository(client)
+        net_worth = CosmosNetWorthRepository(client)
     else:
         store = InMemoryDataStore(allowed_email=settings.allowed_email)
         users = InMemoryUserRepository(store)
@@ -119,6 +130,7 @@ def build_container(
         budgets = InMemoryBudgetRepository(store)
         accounts = InMemoryAccountRepository(store)
         holdings = InMemoryHoldingRepository(store)
+        net_worth = InMemoryNetWorthRepository(store)
 
     verifier = verifier or EntraIdentityTokenVerifier()
     session_tokens = JwtSessionTokenService(
@@ -145,6 +157,7 @@ def build_container(
         list_budget_categories=ListBudgetCategories(budgets),
         create_budget_category=CreateBudgetCategory(budgets),
         update_budget_category=UpdateBudgetCategory(budgets),
+        save_budget_category_draft=SaveBudgetCategoryDraft(budgets),
         delete_budget_category=DeleteBudgetCategory(budgets),
         create_budget_sub_category=CreateBudgetSubCategory(budgets),
         update_budget_sub_category=UpdateBudgetSubCategory(budgets),
@@ -152,10 +165,14 @@ def build_container(
         list_accounts=ListAccounts(accounts),
         create_account=CreateAccount(accounts),
         update_account=UpdateAccount(accounts),
+        update_accounts_batch=UpdateAccountsBatch(accounts),
         delete_account=DeleteAccount(accounts),
+        get_net_worth=GetNetWorth(net_worth),
+        put_net_worth=PutNetWorth(net_worth),
         list_holdings=ListHoldings(holdings),
         create_holding=CreateHolding(holdings),
         update_holding=UpdateHolding(holdings),
+        update_holdings_batch=UpdateHoldingsBatch(holdings),
         import_holding_details=ImportHoldingDetails(holdings),
         import_manual_payout_details=ImportManualPayoutDetails(holdings),
         purge_holding_payment_data=PurgeHoldingPaymentData(holdings),
@@ -174,3 +191,6 @@ def build_container(
         ),
         session_tokens=session_tokens,
     )
+
+
+

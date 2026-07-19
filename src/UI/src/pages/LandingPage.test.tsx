@@ -5,6 +5,7 @@ import { createMockAccountRepository } from '../domain/accountRepository';
 import { createMockBudgetRepository } from '../domain/budgetRepository';
 import { createMockHoldingRepository } from '../domain/holdingRepository';
 import { createMockIncomeSourceRepository } from '../domain/incomeSourceRepository';
+import { createMockNetWorthRepository } from '../domain/netWorthRepository';
 import { LandingPage } from './LandingPage';
 
 describe('LandingPage', () => {
@@ -15,6 +16,7 @@ describe('LandingPage', () => {
         budgetRepository={createMockBudgetRepository()}
         accountRepository={createMockAccountRepository()}
         holdingRepository={createMockHoldingRepository()}
+        netWorthRepository={createMockNetWorthRepository()}
       />,
     );
 
@@ -25,3 +27,6 @@ describe('LandingPage', () => {
     expect(await screen.findByRole('heading', { name: 'Net Worth' })).toBeInTheDocument();
   });
 });
+
+
+

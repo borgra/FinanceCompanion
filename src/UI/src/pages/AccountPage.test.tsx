@@ -66,6 +66,7 @@ const renderPage = (initialAccounts?: Account[], defaultViewMode: 'aggregate' | 
     ]),
     createCategory: () => Promise.reject(),
     updateCategory: () => Promise.reject(),
+    saveCategoryDraft: () => Promise.reject(),
     deleteCategory: () => Promise.reject(),
     createSubCategory: () => Promise.reject(),
     updateSubCategory: () => Promise.reject(),
@@ -762,3 +763,4 @@ describe('AccountPage', () => {
     expect(screen.getAllByText('Chase Checking').length).toBeGreaterThan(0);
   });
 });
+

@@ -5,6 +5,7 @@ import { createBudgetApiRepository } from './api/budgetApiRepository';
 import { HttpClient } from './api/httpClient';
 import { createHoldingApiRepository } from './api/holdingApiRepository';
 import { createIncomeSourceApiRepository } from './api/incomeSourceApiRepository';
+import { createNetWorthApiRepository } from './api/netWorthApiRepository';
 import { AuthPage } from './auth/AuthPage';
 import type { AuthSession } from './auth/authTypes';
 import { LandingPage } from './pages/LandingPage';
@@ -54,6 +55,7 @@ export function App() {
   const budgetRepository = createBudgetApiRepository(client);
   const accountRepository = createAccountApiRepository(client);
   const holdingRepository = createHoldingApiRepository(client);
+  const netWorthRepository = createNetWorthApiRepository(client);
 
   return (
     <>
@@ -76,6 +78,7 @@ export function App() {
         budgetRepository={budgetRepository}
         accountRepository={accountRepository}
         holdingRepository={holdingRepository}
+        netWorthRepository={netWorthRepository}
       />
     </>
   );
