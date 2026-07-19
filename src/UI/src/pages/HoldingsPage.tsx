@@ -61,6 +61,25 @@ const formatLastUpdated = (value?: string | null) => {
 
 const importAccountHeader = (account: Account) => `Account: ${account.name} (${account.id})`;
 
+export const createHoldingImportTemplate = (accounts: Account[], holdings: Holding[]) => {
+  const managedAccounts = accounts.filter((account) => account.manageHoldings);
+
+  return [
+    ['Ticker', 'Name', 'Price', ...managedAccounts.map(importAccountHeader)].join(','),
+    ...holdings.map((holding) => {
+      const quantitiesByAccountId = new Map(
+        holding.accountPositions.map((position) => [position.accountId, position.quantity]),
+      );
+      return [
+        holding.security.symbol,
+        holding.security.name,
+        holding.security.price ?? '',
+        ...managedAccounts.map((account) => quantitiesByAccountId.get(account.id) ?? 0),
+      ].join(',');
+    }),
+    '',
+  ].join('\r\n');
+};
 export const parseHoldingImport = (csv: string, investmentAccounts: Account[]): HoldingImportRow[] => {
   const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
   if (lines.length < 2 || lines.length > HOLDINGS_IMPORT_MAX_ROWS + 1) throw new Error('The file must contain 1 to 500 data rows.');
@@ -329,11 +348,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const downloadImportTemplate = () => {
-    const template = [
-      ['Ticker', 'Name', 'Price', ...accounts.map(importAccountHeader)].join(','),
-      ['MSFT', 'Microsoft Corporation', '510.25', ...accounts.map(() => '0')].join(','),
-      '',
-    ].join('\r\n');
+    const template = createHoldingImportTemplate(accounts, holdings);
     const url = URL.createObjectURL(new Blob([template], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;

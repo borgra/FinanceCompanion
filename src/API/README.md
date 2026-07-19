@@ -23,6 +23,8 @@ uvicorn app.main:app --reload --port 8000
 
 The API also reads the repo-level `.env.local` file created for local full-stack startup. If you prefer API-only overrides, copy [.env.example](.env.example) to `.env`.
 
+To open the local app without signing in, set `FINANCE_COMPANION_DISABLE_AUTH_FOR_LOCAL_DEVELOPMENT=true` in `.env.local` (or `src/API/.env`). This is opt-in and only accepted when `FINANCE_COMPANION_ENVIRONMENT=development`; the API fails startup if it is enabled elsewhere. It uses the configured local development user ID, which defaults to the seeded `user-steve` account.
+
 Security search and security detail refresh use Alpha Vantage. Set `FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY` in `.env.local` for local startup, or map the GitHub secret `ALPHA_VANTAGE_API_KEY` in deployment workflows.
 
 ## One-shot local startup
@@ -33,7 +35,7 @@ From the repository root:
 .\start-local.ps1
 ```
 
-That launches the API and UI in separate PowerShell windows using the shared repo-level `.env.local` file.
+That launches the API and UI in separate PowerShell windows using the shared repo-level `.env.local` file. After local API changes, run `./start-local.ps1 -RestartApi` to restart only the tracked API process and wait for its health endpoint; the UI is left running.
 
 ## Local tests
 

@@ -122,6 +122,25 @@ def test_budget_and_accounts_are_protected():
     assert response.status_code == 401
 
 
+def test_local_development_auth_bypass_allows_the_seeded_user_without_a_session():
+    settings = Settings(
+        allowed_email="steveborgra@gmail.com",
+        disable_auth_for_local_development=True,
+        session_secret=TEST_SESSION_SECRET,
+        cors_origins=["http://localhost:5173"],
+    )
+    app = create_app(settings)
+    app.state.container = build_container(settings, verifier=FakeVerifier())
+    client = TestClient(app)
+
+    session_response = client.get("/api/v1/auth/session")
+    budget_response = client.get("/api/v1/budget/categories")
+
+    assert session_response.status_code == 200
+    assert session_response.json()["email"] == "steveborgra@gmail.com"
+    assert budget_response.status_code == 200
+
+
 def test_seeded_contracts_are_served_after_authentication():
     client = build_test_client()
     authenticate(client)

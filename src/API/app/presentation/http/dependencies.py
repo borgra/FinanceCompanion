@@ -16,6 +16,12 @@ def require_session_user(
     request: Request = None,
     container: Annotated[Container, Depends(get_container)] = None,
 ) -> SessionUser:
+    if container.settings.disable_auth_for_local_development:
+        return SessionUser(
+            user_id=container.settings.local_development_user_id,
+            email=container.settings.allowed_email,
+        )
+
     session_cookie = request.cookies.get(container.settings.session_cookie_name)
     token = session_cookie
     if not token and authorization and authorization.startswith("Bearer "):

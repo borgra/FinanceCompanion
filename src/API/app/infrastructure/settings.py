@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     app_name: str = "Finance Companion API"
     api_prefix: str = "/api/v1"
     environment: str = "development"
+    disable_auth_for_local_development: bool = False
+    local_development_user_id: str = "user-steve"
     allowed_email: str = "steveborgra@gmail.com"
     cosmos_table_connection_string: str | None = None
     cosmos_table_name: str = "finance"
@@ -58,6 +60,9 @@ class Settings(BaseSettings):
         return self
 
     def validate_security(self) -> None:
+        if self.disable_auth_for_local_development and self.environment != "development":
+            raise ValueError("Authentication can only be disabled in the local development environment.")
+
         if self.environment != "development" and self.session_secret == "local-dev-session-secret-change-me":
             raise ValueError("A real session secret must be configured outside local development.")
 
