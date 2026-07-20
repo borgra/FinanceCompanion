@@ -40,4 +40,21 @@ describe('MortgageSchedulePanel', () => {
       extraPrincipalOverrides: expect.objectContaining({ '2026-01:0': 25, '2026-01:1': 25 }),
     }));
   });
-});
+
+  it('increases the calculated principal payment as interest falls', () => {
+    render(
+      <MortgageSchedulePanel
+        initial={{
+          ...initial,
+          startingOutstandingMortgage: 120000,
+          annualInterestRate: 0.06,
+          monthlyPrincipalPayment: 500,
+        }}
+        repository={{ putMortgageSchedule: vi.fn() }}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('Principal Jan 2026')).toHaveValue('$500.00');
+    expect(screen.getByLabelText('Principal Feb 2026')).toHaveValue('$502.50');
+  });});
