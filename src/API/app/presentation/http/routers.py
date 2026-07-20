@@ -187,7 +187,13 @@ def put_net_worth_configuration(request: NetWorthConfigurationPutRequest, user=D
 
 @router.put("/net-worth/mortgage-schedule", response_model=NetWorthPayload)
 def put_mortgage_schedule(request: MortgageSchedulePutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
-    if request.starting_outstanding_mortgage > 0 and request.monthly_principal_payment + request.monthly_additional_principal_payment <= 0: raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A principal payment is required while a balance remains.")
+    has_principal_payment = (
+        request.monthly_principal_payment + request.monthly_additional_principal_payment > 0
+        or any(value > 0 for value in request.principal_overrides.values())
+        or any(value > 0 for value in request.extra_principal_overrides.values())
+    )
+    if request.starting_outstanding_mortgage > 0 and not has_principal_payment:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='A principal payment is required while a balance remains.')
     current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
     value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=current.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=request.model_dump(by_alias=True)))
     return _to_net_worth_payload(value)

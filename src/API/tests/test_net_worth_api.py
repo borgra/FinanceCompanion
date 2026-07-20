@@ -62,7 +62,6 @@ def test_net_worth_rejects_non_finite_values_and_requires_authentication():
             json={'value': value},
         )
         assert snapshot_response.status_code == 422
-
 def test_mortgage_configuration_and_schedule_are_preserved_with_snapshots():
     client = build_test_client()
     authenticate(client)
@@ -118,5 +117,21 @@ def test_mortgage_schedule_accepts_sparse_table_overrides():
         'scheduleStartMonth': '2026-01',
         'principalOverrides': {'2026-01:0': 971.97},
         'extraPrincipalOverrides': {'2026-01:0': 300},
+    })
+    assert response.status_code == 200, response.text
+
+
+def test_mortgage_schedule_accepts_fill_down_overrides_without_base_payment():
+    client = build_test_client()
+    authenticate(client)
+    response = client.put('/api/v1/net-worth/mortgage-schedule', json={
+        'houseValue': 800000,
+        'startingOutstandingMortgage': 320000,
+        'annualInterestRate': 0.02875,
+        'monthlyPrincipalPayment': 0,
+        'monthlyAdditionalPrincipalPayment': 0,
+        'scheduleStartMonth': '2026-01',
+        'principalOverrides': {'2026-01:0': 1500, '2026-01:1': 1500},
+        'extraPrincipalOverrides': {'2026-01:0': 300, '2026-01:1': 300},
     })
     assert response.status_code == 200, response.text
