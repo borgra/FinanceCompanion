@@ -99,12 +99,12 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
 
   const deleteMortgageSchedule = async () => {
     if (!netWorthRepository.deleteMortgageSchedule) { setMortgageVisibilityError('Mortgage schedule deletion is unavailable.'); return; }
-    if (!window.confirm('Delete the saved mortgage schedule? This removes its payment history and overrides from Net Worth.')) return;
+    if (!window.confirm('Clear all saved Mortgage Schedule values and overrides? Mortgage Configuration values will be kept.')) return;
     setIsDeletingMortgageSchedule(true); setMortgageVisibilityError(null); setMortgageVisibilityMessage(null);
     try {
-      await netWorthRepository.deleteMortgageSchedule();
-      setHouseValue('800000'); setAnnualInterestRate('0.02875');
-      setMortgageVisibilityMessage('Mortgage schedule deleted.');
+      const saved = await netWorthRepository.deleteMortgageSchedule();
+      setHouseValue(String(saved.mortgageSchedule?.houseValue ?? houseValue)); setAnnualInterestRate(String(saved.mortgageSchedule?.annualInterestRate ?? annualInterestRate));
+      setMortgageVisibilityMessage('Mortgage schedule cleared. Mortgage configuration was kept.');
     } catch {
       setMortgageVisibilityError('Unable to delete mortgage schedule.');
     } finally {

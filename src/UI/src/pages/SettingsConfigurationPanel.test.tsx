@@ -42,11 +42,11 @@ describe('SettingsConfigurationPanel', () => {
 describe('mortgage schedule deletion', () => {
   it('confirms and deletes the saved mortgage schedule', async () => {
     const user = userEvent.setup();
-    const deleteMortgageSchedule = vi.fn().mockResolvedValue({ beginningNetWorth: 100000, mortgageSchedule: null, updatedAt: '2026-01-01T00:00:00Z' });
+    const deleteMortgageSchedule = vi.fn().mockResolvedValue({ beginningNetWorth: 100000, mortgageSchedule: { houseValue: 800000, startingOutstandingMortgage: 0, annualInterestRate: 0.0375, monthlyPrincipalPayment: 0, monthlyAdditionalPrincipalPayment: 0, scheduleStartMonth: '2025-03' }, updatedAt: '2026-01-01T00:00:00Z' });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<SettingsConfigurationPanel repository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={{ get: async () => ({ beginningNetWorth: 100000, mortgageSchedule: { houseValue: 800000, startingOutstandingMortgage: 320000, annualInterestRate: 0.0375, monthlyPrincipalPayment: 981.13, monthlyAdditionalPrincipalPayment: 300, scheduleStartMonth: '2025-03' }, updatedAt: '2026-01-01T00:00:00Z' }), put: async (value) => ({ beginningNetWorth: value, updatedAt: '2026-01-01T00:00:00Z' }), deleteMortgageSchedule }} />);
     await user.click(await screen.findByRole('button', { name: /delete mortgage schedule/i }));
     expect(deleteMortgageSchedule).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText('Mortgage schedule deleted.')).toBeInTheDocument();
+    expect(await screen.findByText('Mortgage schedule cleared. Mortgage configuration was kept.')).toBeInTheDocument();
   });
 });

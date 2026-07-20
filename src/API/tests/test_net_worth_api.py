@@ -151,5 +151,15 @@ def test_deleting_mortgage_schedule_preserves_other_net_worth_data():
     })
     response = client.delete('/api/v1/net-worth/mortgage-schedule')
     assert response.status_code == 200
-    assert response.json()['mortgageSchedule'] is None
+    schedule = response.json()['mortgageSchedule']
+    assert schedule == {
+        'houseValue': 800000,
+        'startingOutstandingMortgage': 0,
+        'annualInterestRate': 0.0375,
+        'monthlyPrincipalPayment': 0,
+        'monthlyAdditionalPrincipalPayment': 0,
+        'scheduleStartMonth': '2025-03',
+        'principalOverrides': {},
+        'extraPrincipalOverrides': {},
+    }
     assert response.json()['trackMortgageInNetWorth'] is True

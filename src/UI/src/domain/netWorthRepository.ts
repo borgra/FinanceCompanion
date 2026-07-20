@@ -18,7 +18,7 @@ export const createMockNetWorthRepository = (initialValue?: number): NetWorthRep
     putInvestmentSnapshots: async (investmentSnapshots) => merge({ investmentSnapshots }),
     putConfiguration: async (trackMortgageInNetWorth) => merge({ trackMortgageInNetWorth }),
     putMortgageSchedule: async (mortgageSchedule) => merge({ mortgageSchedule }),
-    deleteMortgageSchedule: async () => merge({ mortgageSchedule: null }),
+    deleteMortgageSchedule: async () => merge({ mortgageSchedule: value?.mortgageSchedule ? { ...value.mortgageSchedule, startingOutstandingMortgage: 0, monthlyPrincipalPayment: 0, monthlyAdditionalPrincipalPayment: 0, principalOverrides: {}, extraPrincipalOverrides: {} } : null }),
   };
 };
 
