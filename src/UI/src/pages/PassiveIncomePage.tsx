@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
-import type { Holding, PassiveIncomeImportRow, SecurityPayoutDetails } from '../domain/holding';
+import { useEffect, useMemo, useState } from 'react';
+import type { CorporateAction, Holding, SecurityPayoutDetails } from '../domain/holding';
 import type { HoldingRepository } from '../domain/holdingRepository';
 
 type PassiveIncomePageProps = {
@@ -13,6 +12,8 @@ type DividendPayment = {
   growthRate: number;
   holdingName: string;
   isEstimate: boolean;
+  isSplitAdjusted: boolean;
+  rawPerShareAmount: number;
   perShareAmount: number;
   quantity: number;
   symbol: string;
@@ -27,8 +28,6 @@ type DividendMonth = {
 };
 
 const maxProjectedGrowthRate = 0.15;
-const PASSIVE_INCOME_IMPORT_MAX_BYTES = 1024 * 1024;
-const PASSIVE_INCOME_IMPORT_MAX_ROWS = 500;
 const minProjectedGrowthRate = -0.2;
 const monthLabels = [
   'Jan',
@@ -64,37 +63,13 @@ const formatMoney = (value: number) => (value === 0 ? '$   -   ' : currencyForma
 const payoutDate = (payout: SecurityPayoutDetails) =>
   payout.paymentDate || payout.exDividendDate;
 
-const isIsoDate = (value: string) => {
-  const date = new Date(`${value}T00:00:00Z`);
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
-};
+export const normalizePayoutAmount = (
+  payout: SecurityPayoutDetails,
+  corporateActions: CorporateAction[] = [],
+) => corporateActions
+  .filter((action) => action.effectiveDate > payout.exDividendDate)
+  .reduce((amount, action) => amount * action.oldShares / action.newShares, payout.amount);
 
-export const parsePassiveIncomeImport = (csv: string): PassiveIncomeImportRow[] => {
-  const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
-  if (lines.length < 2 || lines.length > PASSIVE_INCOME_IMPORT_MAX_ROWS + 1) {
-    throw new Error('The file must contain 1 to 500 payment rows.');
-  }
-  const headers = lines[0].split(',').map((header) => header.trim());
-  const requiredHeaders = ['Ticker', 'Ex Dividend Date', 'Payment Date', 'Amount'];
-  if (headers.length !== requiredHeaders.length || requiredHeaders.some((header, index) => headers[index] !== header)) {
-    throw new Error('Use the downloaded template with Ticker, Ex Dividend Date, Payment Date, and Amount columns.');
-  }
-  const payments = new Set<string>();
-  return lines.slice(1).map((line, index) => {
-    const [rawSymbol, exDividendDate, paymentDate, rawAmount, ...extraValues] = line.split(',').map((value) => value.trim());
-    const amount = Number(rawAmount);
-    const symbol = rawSymbol.toUpperCase();
-    if (extraValues.length || !/^[A-Z0-9.-]{1,20}$/.test(symbol) || !isIsoDate(exDividendDate) || (paymentDate && !isIsoDate(paymentDate)) || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
-      throw new Error(`Row ${index + 2} is invalid.`);
-    }
-    const paymentKey = `${symbol}-${paymentDate || exDividendDate}`;
-    if (payments.has(paymentKey)) {
-      throw new Error(`Ticker ${symbol} has more than one payment on ${paymentDate || exDividendDate}.`);
-    }
-    payments.add(paymentKey);
-    return { symbol, payout: { exDividendDate, paymentDate: paymentDate || null, amount, source: 'user', mode: 'manual' } };
-  });
-};
 const totalQuantity = (holding: Holding) =>
   holding.accountPositions.reduce((sum, position) => sum + position.quantity, 0);
 
@@ -125,11 +100,15 @@ const toDividendPayment = (
   {
     date = payoutDate(payout),
     isEstimate,
-    perShareAmount = payout.amount,
+    perShareAmount = normalizePayoutAmount(payout, holding.security.corporateActions),
+    rawPerShareAmount = payout.amount,
+    isSplitAdjusted = normalizePayoutAmount(payout, holding.security.corporateActions) !== payout.amount,
   }: {
     date?: string;
     isEstimate: boolean;
     perShareAmount?: number;
+    rawPerShareAmount?: number;
+    isSplitAdjusted?: boolean;
   },
 ): DividendPayment => {
   const quantity = totalQuantity(holding);
@@ -139,8 +118,10 @@ const toDividendPayment = (
     growthRate: projectedGrowthRate(holding),
     holdingName: holding.security.name,
     isEstimate,
+    isSplitAdjusted,
     perShareAmount,
     quantity,
+    rawPerShareAmount,
     symbol: holding.security.symbol,
   };
 };
@@ -208,7 +189,7 @@ const buildPaymentsForYear = (
           return !hasDefined;
         })
         .map(({ payout, estimatedDate }) => {
-          const estimatedPerShareAmount = payout.amount * (1 + growthRate);
+          const estimatedPerShareAmount = normalizePayoutAmount(payout, holding.security.corporateActions) * (1 + growthRate);
           return toDividendPayment(holding, payout, {
             date: estimatedDate,
             isEstimate: true,
@@ -298,9 +279,7 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [expandedMonths, setExpandedMonths] = useState<Set<number>>(() => new Set());
-  const importInputRef = useRef<HTMLInputElement>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
 
   useEffect(() => {
     // If the mocked/resolved currentYear changes, align selectedYear
@@ -350,52 +329,6 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
     setExpandedMonths(new Set());
   };
 
-  const downloadImportTemplate = () => {
-    const template = [
-      'Ticker,Ex Dividend Date,Payment Date,Amount',
-      ...holdings.map((holding) => `${holding.security.symbol},,,`),
-      '',
-    ].join('\r\n');
-    const url = URL.createObjectURL(new Blob([template], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'passive-income-import-template.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importPassiveIncome = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    if ((file.type && file.type !== 'text/csv') || !file.name.toLowerCase().endsWith('.csv')) {
-      setError('Upload a CSV file created from the passive income template.');
-      return;
-    }
-    if (file.size === 0 || file.size > PASSIVE_INCOME_IMPORT_MAX_BYTES) {
-      setError('The import file must be between 1 byte and 1 MB.');
-      return;
-    }
-    if (!holdingRepository.importManualPayoutDetails) {
-      setError('Passive income import is unavailable.');
-      return;
-    }
-    setIsImporting(true);
-    setError(null);
-    setSuccessMessage(null);
-    try {
-      const result = await holdingRepository.importManualPayoutDetails(parsePassiveIncomeImport(await file.text()));
-      const updatedById = new Map(result.holdings.map((holding) => [holding.id, holding]));
-      setHoldings((current) => current.map((holding) => updatedById.get(holding.id) ?? holding));
-      setSuccessMessage(result.unmatchedSymbols.length
-        ? `${result.holdings.length} payout schedules updated. No matching holding for ${result.unmatchedSymbols.join(', ')}.`
-        : `${result.holdings.length} payout schedules updated.`);
-    } catch (importError) {
-      setError(importError instanceof Error ? importError.message : 'Unable to import passive income.');
-    } finally {
-      setIsImporting(false);
-    }
-  };
   if (isLoading) {
     return <p className="status-copy">Loading passive income...</p>;
   }
@@ -405,27 +338,7 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
       <div className="holdings-table-header passive-income-header">
         <div>
           <h2 id="passive-income-heading">Passive Income</h2>
-          <p>Monthly dividend income by holding.</p>
-        </div>
-        <div className="funding-section-actions passive-income-import-actions">
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            hidden
-            onChange={(event) => void importPassiveIncome(event)}
-          />
-          <button className="secondary-action compact-add-action" type="button" onClick={downloadImportTemplate}>
-            Download template
-          </button>
-          <button
-            className="secondary-action compact-add-action"
-            type="button"
-            onClick={() => importInputRef.current?.click()}
-            disabled={isImporting}
-          >
-            {isImporting ? 'Importing...' : 'Import payments'}
-          </button>
+          <p>Current-share-basis dividend income and future estimates.</p>
         </div>
         <div className="passive-income-year-control" aria-label="Dividend income year">
           <button
@@ -454,7 +367,10 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
       </div>
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
-      {successMessage ? <p className="form-success" role="status">{successMessage}</p> : null}
+
+      {holdings.some((holding) => holding.security.corporateActions?.length) ? (
+        <p className="status-copy">Estimates use current share quantities and normalize prior payouts for recorded stock splits.</p>
+      ) : null}
 
       <div className="passive-income-summary-grid">
         <div className="passive-income-summary-card">
@@ -570,6 +486,9 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
                               <small>
                                 {percentFormatter.format(payment.growthRate)} growth estimate
                               </small>
+                            ) : null}
+                            {payment.isSplitAdjusted ? (
+                              <small>Split-adjusted from {formatMoney(payment.rawPerShareAmount)} per share</small>
                             ) : null}
                           </span>
                           <span>{formatMoney(payment.perShareAmount)}</span>

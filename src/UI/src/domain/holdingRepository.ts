@@ -1,5 +1,6 @@
 import type {
   Holding,
+  CorporateActionImportRow,
   HoldingDraft,
   HoldingImportResult,
   HoldingImportRow,
@@ -17,6 +18,7 @@ export type HoldingRepository = {
   updateHoldingsBatch: (changes: Array<{ id: string; draft: HoldingDraft }>) => Promise<Holding[]>;
   importHoldingDetails?: (rows: HoldingImportRow[]) => Promise<HoldingImportResult>;
   importManualPayoutDetails?: (rows: PassiveIncomeImportRow[]) => Promise<HoldingImportResult>;
+  importCorporateActions?: (rows: CorporateActionImportRow[]) => Promise<HoldingImportResult>;
   purgePaymentData?: () => Promise<Holding[]>;
   deleteHolding: (id: string) => Promise<void>;
   refreshHoldingSecurityDetails: (id: string, options?: { replaceManualPayouts?: boolean }) => Promise<Holding>;
@@ -226,6 +228,39 @@ export function createMockHoldingRepository(): HoldingRepository {
         unmatchedSymbols: [...rowsBySymbol.keys()].filter((symbol) => !matchedSymbols.has(symbol)).map((symbol) => symbol.toUpperCase()),
       };
     },
+    importCorporateActions: async (rows) => {
+      const actionsBySymbol = new Map<string, CorporateActionImportRow[]>();
+      for (const row of rows) {
+        const symbol = row.symbol.toLowerCase();
+        actionsBySymbol.set(symbol, [...(actionsBySymbol.get(symbol) ?? []), row]);
+      }
+      const updatedIds = new Set<string>();
+      const matchedSymbols = new Set(holdings.map((holding) => holding.security.symbol.toLowerCase()));
+      holdings = holdings.map((holding) => {
+        const rowsForHolding = actionsBySymbol.get(holding.security.symbol.toLowerCase());
+        if (!rowsForHolding) return holding;
+        updatedIds.add(holding.id);
+        const existingActions = holding.security.corporateActions ?? [];
+        return {
+          ...holding,
+          security: {
+            ...holding.security,
+            corporateActions: [
+              ...existingActions,
+              ...rowsForHolding.map((row) => ({
+                id: `${holding.security.symbol}-${row.action.effectiveDate}-${row.action.type}-${row.action.oldShares}-${row.action.newShares}`,
+                ...row.action,
+              })),
+            ],
+          },
+          updatedAt: nowIso(),
+        };
+      });
+      return {
+        holdings: holdings.filter((holding) => updatedIds.has(holding.id)).map((holding) => ({ ...holding, security: { ...holding.security } })),
+        unmatchedSymbols: [...actionsBySymbol.keys()].filter((symbol) => !matchedSymbols.has(symbol)).map((symbol) => symbol.toUpperCase()),
+      };
+    },
     purgePaymentData: async () => {
       holdings = holdings.map((holding) => ({
         ...holding,
@@ -368,5 +403,4 @@ export function createMockHoldingRepository(): HoldingRepository {
     },
   };
 }
-
 

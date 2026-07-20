@@ -1,3 +1,16 @@
+export type CorporateAction = {
+  id: string;
+  effectiveDate: string;
+  type: 'stock_split' | 'reverse_stock_split';
+  oldShares: number;
+  newShares: number;
+};
+
+export type CorporateActionImportRow = {
+  symbol: string;
+  action: Omit<CorporateAction, 'id'>;
+};
+
 export type SecurityPayoutDetails = {
   exDividendDate: string;
   amount: number;
@@ -32,6 +45,7 @@ export type SecurityMetadata = {
   detailsStatus?: string | null;
   payoutDetails?: SecurityPayoutDetails[];
   manualPayoutDetails?: SecurityPayoutDetails[];
+  corporateActions?: CorporateAction[];
 };
 
 export type HoldingAccountPosition = {

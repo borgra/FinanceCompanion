@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from '../domain/account';
-import { createHoldingImportTemplate, parseHoldingImport } from './HoldingsPage';
-import { parsePassiveIncomeImport } from './PassiveIncomePage';
+import { createHoldingImportTemplate, parseCorporateActionImport, parseHoldingImport, parsePassiveIncomeImport } from './HoldingsPage';
+import { normalizePayoutAmount } from './PassiveIncomePage';
 
 const investmentAccounts: Account[] = [
   {
@@ -95,5 +95,28 @@ describe('parsePassiveIncomeImport', () => {
     expect(() => parsePassiveIncomeImport(
       'Ticker,Ex Dividend Date,Payment Date,Amount\nVTI,2026-06-28,2026-07-02,0.45\nVTI,2026-06-28,2026-07-02,0.45',
     )).toThrow('Ticker VTI has more than one payment on 2026-07-02.');
+  });
+});
+describe('corporate action imports and normalization', () => {
+  it('normalizes a payout before a forward split to the current share basis', () => {
+    expect(normalizePayoutAmount(
+      { exDividendDate: '2024-02-15', amount: 0.80 },
+      [{ id: 'split-msft', effectiveDate: '2024-06-15', type: 'stock_split', oldShares: 1, newShares: 4 }],
+    )).toBe(0.2);
+  });
+
+  it('normalizes a payout before a reverse split and excludes same-day actions', () => {
+    const action = { id: 'reverse-abc', effectiveDate: '2024-09-30', type: 'reverse_stock_split' as const, oldShares: 10, newShares: 1 };
+    expect(normalizePayoutAmount({ exDividendDate: '2024-02-15', amount: 0.80 }, [action])).toBe(8);
+    expect(normalizePayoutAmount({ exDividendDate: '2024-09-30', amount: 0.80 }, [action])).toBe(0.80);
+  });
+
+  it('parses standard split and reverse-split action rows', () => {
+    expect(parseCorporateActionImport(
+      'Ticker,Effective Date,Action,Old Shares,New Shares\nMSFT,2024-06-15,Stock Split,1,4\nABC,2024-09-30,Reverse Stock Split,10,1',
+    )).toEqual([
+      { symbol: 'MSFT', action: { effectiveDate: '2024-06-15', type: 'stock_split', oldShares: 1, newShares: 4 } },
+      { symbol: 'ABC', action: { effectiveDate: '2024-09-30', type: 'reverse_stock_split', oldShares: 10, newShares: 1 } },
+    ]);
   });
 });

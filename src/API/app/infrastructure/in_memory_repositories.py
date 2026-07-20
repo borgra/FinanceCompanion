@@ -9,6 +9,7 @@ from app.domain.models import (
     AccountColumn,
     BudgetCategory,
     BudgetSubCategory,
+    CorporateAction,
     Holding,
     HoldingAccountPosition,
     IncomePeriod,
@@ -158,6 +159,10 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         payout_details=manual_payout_details or source_payout_details,
         source_payout_details=source_payout_details,
         manual_payout_details=manual_payout_details,
+        corporate_actions=[
+            CorporateAction(id=item["id"], effective_date=item["effectiveDate"], type=item["type"], old_shares=float(item["oldShares"]), new_shares=float(item["newShares"]))
+            for item in data.get("corporateActions", [])
+        ],
     )
 
 

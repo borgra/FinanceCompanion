@@ -7,7 +7,7 @@ from .income_source import IncomeSource
 from .holding import Holding, HoldingAccountPosition
 from .monthly_record import MonthlyRecord
 from .net_worth import NetWorth
-from .security_metadata import SecurityMetadata, SecurityPayoutDetails
+from .security_metadata import CorporateAction, SecurityMetadata, SecurityPayoutDetails
 from .session_user import SessionUser
 from .user import User
 from .verified_identity import VerifiedIdentity
@@ -23,6 +23,7 @@ __all__ = [
     "HoldingAccountPosition",
     "MonthlyRecord",
     "NetWorth",
+    "CorporateAction",
     "SecurityMetadata",
     "SecurityPayoutDetails",
     "SessionUser",

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import date
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 
 
@@ -190,6 +191,30 @@ class SecurityPayoutDetailsPayload(CamelModel):
     mode: str = "source"
 
 
+class CorporateActionFields(CamelModel):
+    """Validated inputs used to normalize payouts onto a current share basis."""
+
+    effective_date: date = Field(serialization_alias="effectiveDate")
+    type: Literal["stock_split", "reverse_stock_split"]
+    old_shares: FiniteFloat = Field(gt=0, le=1_000_000_000, serialization_alias="oldShares")
+    new_shares: FiniteFloat = Field(gt=0, le=1_000_000_000, serialization_alias="newShares")
+
+    @model_validator(mode="after")
+    def validate_action(self) -> "CorporateActionFields":
+        if self.effective_date > date.today():
+            raise ValueError("Corporate action effective dates cannot be in the future.")
+        if self.old_shares == self.new_shares:
+            raise ValueError("Corporate action share ratios cannot be 1:1.")
+        if self.type == "stock_split" and self.new_shares <= self.old_shares:
+            raise ValueError("A stock split must increase the share count.")
+        if self.type == "reverse_stock_split" and self.new_shares >= self.old_shares:
+            raise ValueError("A reverse stock split must decrease the share count.")
+        return self
+
+
+class CorporateActionPayload(CorporateActionFields):
+    id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._:-]+$")
+
 class SecurityMetadataPayload(CamelModel):
     symbol: str
     name: str
@@ -221,6 +246,25 @@ class SecurityMetadataPayload(CamelModel):
         default_factory=list,
         serialization_alias="manualPayoutDetails",
     )
+    corporate_actions: list[CorporateActionPayload] = Field(
+        default_factory=list,
+        max_length=500,
+        serialization_alias="corporateActions",
+    )
+
+    @field_validator("corporate_actions")
+    @classmethod
+    def corporate_actions_must_be_unique(
+        cls,
+        actions: list[CorporateActionPayload],
+    ) -> list[CorporateActionPayload]:
+        identities = {
+            (action.effective_date, action.type, action.old_shares, action.new_shares)
+            for action in actions
+        }
+        if len(identities) != len(actions):
+            raise ValueError("Corporate actions must be unique per security.")
+        return actions
 
 
 class HoldingAccountPositionPayload(CamelModel):
@@ -273,6 +317,13 @@ class ManualPayoutImportRow(CamelModel):
 
 class ManualPayoutImportRequest(CamelModel):
     rows: list[ManualPayoutImportRow] = Field(min_length=1, max_length=500)
+
+class CorporateActionImportRow(CorporateActionFields):
+    symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9.-]+$")
+
+
+class CorporateActionImportRequest(CamelModel):
+    rows: list[CorporateActionImportRow] = Field(min_length=1, max_length=500)
 
 class SecurityDetailsRefreshResultPayload(CamelModel):
     holdings: list[HoldingPayload]

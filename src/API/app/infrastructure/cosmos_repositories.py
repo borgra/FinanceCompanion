@@ -14,6 +14,7 @@ from app.domain.models import (
     AccountColumn,
     BudgetCategory,
     BudgetSubCategory,
+    CorporateAction,
     Holding,
     HoldingAccountPosition,
     IncomePeriod,
@@ -250,6 +251,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         or data.get("payoutDetails", [])
     )
     manual_payouts_data = dividends.get("manualPayouts") or data.get("manualPayoutDetails", [])
+    corporate_actions_data = dividends.get("corporateActions") or data.get("corporateActions", [])
     source_payout_details = [
         replace(_security_payout_details_from_dict(item), mode="source")
         for item in source_payouts_data
@@ -306,6 +308,10 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         payout_details=manual_payout_details or source_payout_details,
         source_payout_details=source_payout_details,
         manual_payout_details=manual_payout_details,
+        corporate_actions=[
+            CorporateAction(id=item["id"], effective_date=item["effectiveDate"], type=item["type"], old_shares=float(item["oldShares"]), new_shares=float(item["newShares"]))
+            for item in corporate_actions_data
+        ],
     )
 
 
@@ -364,8 +370,18 @@ def _security_dividends_to_dict(security: SecurityMetadata) -> dict | None:
         _security_payout_details_to_dict(payout)
         for payout in security.manual_payout_details
     ]
+    corporate_actions = [
+        {
+            "id": action.id,
+            "effectiveDate": action.effective_date,
+            "type": action.type,
+            "oldShares": action.old_shares,
+            "newShares": action.new_shares,
+        }
+        for action in security.corporate_actions
+    ]
     status = security.dividend_status
-    if not status and not source_payouts and not manual_payouts and all(
+    if not status and not source_payouts and not manual_payouts and not corporate_actions and all(
         value is None
         for value in [
             security.dividend_previous_year,
@@ -380,6 +396,7 @@ def _security_dividends_to_dict(security: SecurityMetadata) -> dict | None:
         "status": status or "recent",
         "sourcePayouts": source_payouts,
         "manualPayouts": manual_payouts,
+        "corporateActions": corporate_actions,
     }
     optional_values = {
         "previousYear": security.dividend_previous_year,

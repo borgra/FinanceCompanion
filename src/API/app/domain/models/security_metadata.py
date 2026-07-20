@@ -15,6 +15,15 @@ class SecurityPayoutDetails:
 
 
 @dataclass(slots=True)
+class CorporateAction:
+    id: str
+    effective_date: str
+    type: str
+    old_shares: float
+    new_shares: float
+
+
+@dataclass(slots=True)
 class SecurityMetadata:
     symbol: str
     name: str
@@ -41,3 +50,4 @@ class SecurityMetadata:
     payout_details: list[SecurityPayoutDetails] = field(default_factory=list)
     source_payout_details: list[SecurityPayoutDetails] = field(default_factory=list)
     manual_payout_details: list[SecurityPayoutDetails] = field(default_factory=list)
+    corporate_actions: list[CorporateAction] = field(default_factory=list)

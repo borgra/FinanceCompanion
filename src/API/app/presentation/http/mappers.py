@@ -5,6 +5,7 @@ from app.domain.models import (
     AccountColumn,
     BudgetCategory,
     BudgetSubCategory,
+    CorporateAction,
     Holding,
     HoldingAccountPosition,
     IncomePeriod,
@@ -16,6 +17,7 @@ from app.domain.models import (
 )
 from app.presentation.http.schemas import (
     AccountColumnPayload,
+    CorporateActionPayload,
     AccountPayload,
     AccountUpsertRequest,
     BudgetCategoryPayload,
@@ -226,6 +228,25 @@ def to_security_payout_details_payload(item: SecurityPayoutDetails) -> SecurityP
     )
 
 
+def to_corporate_action(payload: CorporateActionPayload) -> CorporateAction:
+    return CorporateAction(
+        id=payload.id,
+        effective_date=payload.effective_date.isoformat(),
+        type=payload.type,
+        old_shares=payload.old_shares,
+        new_shares=payload.new_shares,
+    )
+
+
+def to_corporate_action_payload(item: CorporateAction) -> CorporateActionPayload:
+    return CorporateActionPayload(
+        id=item.id,
+        effective_date=item.effective_date,
+        type=item.type,
+        old_shares=item.old_shares,
+        new_shares=item.new_shares,
+    )
+
 def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
     return SecurityMetadata(
         symbol=payload.symbol.strip().upper(),
@@ -257,6 +278,10 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
         manual_payout_details=[
             to_security_payout_details(item)
             for item in payload.manual_payout_details
+        ],
+        corporate_actions=[
+            to_corporate_action(item)
+            for item in payload.corporate_actions
         ],
     )
 
@@ -292,6 +317,10 @@ def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayl
         manual_payout_details=[
             to_security_payout_details_payload(payout)
             for payout in item.manual_payout_details
+        ],
+        corporate_actions=[
+            to_corporate_action_payload(action)
+            for action in item.corporate_actions
         ],
     )
 

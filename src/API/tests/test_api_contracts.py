@@ -642,3 +642,99 @@ def test_purge_holding_payment_data_allows_browser_preflight():
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
     assert "DELETE" in response.headers["access-control-allow-methods"]
+
+def test_holding_corporate_actions_round_trip_through_api():
+    client = build_test_client()
+    authenticate(client)
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    created = client.post(
+        "/api/v1/holdings",
+        json={
+            "security": security,
+            "accountPositions": [{"accountId": "acc-401k", "quantity": 10, "costBasis": None}],
+        },
+    )
+    assert created.status_code == 201
+    holding = created.json()
+    holding["security"]["corporateActions"] = [
+        {
+            "id": "split-vti-2024",
+            "effectiveDate": "2024-06-15",
+            "type": "stock_split",
+            "oldShares": 1,
+            "newShares": 4,
+        }
+    ]
+
+    updated = client.put(f"/api/v1/holdings/{holding['id']}", json={
+        "security": holding["security"],
+        "accountPositions": holding["accountPositions"],
+    })
+
+    assert updated.status_code == 200
+    assert updated.json()["security"]["corporateActions"] == holding["security"]["corporateActions"]
+
+def test_corporate_actions_are_validated_on_every_write_path_and_imported_atomically():
+    client = build_test_client()
+    authenticate(client)
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    created = client.post(
+        "/api/v1/holdings",
+        json={
+            "security": security,
+            "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 10, "costBasis": None}],
+        },
+    )
+    assert created.status_code == 201
+    holding = created.json()
+
+    imported = client.put(
+        "/api/v1/holdings/corporate-actions/import",
+        json={"rows": [{
+            "symbol": "VTI",
+            "effectiveDate": "2024-06-15",
+            "type": "stock_split",
+            "oldShares": 1,
+            "newShares": 4,
+        }]},
+    )
+    assert imported.status_code == 200
+    assert imported.json()["holdings"][0]["security"]["corporateActions"][0]["effectiveDate"] == "2024-06-15"
+
+    duplicate_import = client.put(
+        "/api/v1/holdings/corporate-actions/import",
+        json={"rows": [{
+            "symbol": "VTI",
+            "effectiveDate": "2024-06-15",
+            "type": "stock_split",
+            "oldShares": 1,
+            "newShares": 4,
+        }]},
+    )
+    assert duplicate_import.status_code == 200
+    assert duplicate_import.json()["holdings"] == []
+
+    invalid_date = client.put(
+        "/api/v1/holdings/corporate-actions/import",
+        json={"rows": [{
+            "symbol": "VTI",
+            "effectiveDate": "0000-99-99",
+            "type": "stock_split",
+            "oldShares": 1,
+            "newShares": 4,
+        }]},
+    )
+    assert invalid_date.status_code == 422
+
+    holding["security"]["corporateActions"] = [{
+        "id": "invalid-split",
+        "effectiveDate": "2024-06-15",
+        "type": "stock_split",
+        "oldShares": 4,
+        "newShares": 1,
+    }]
+    bypass_attempt = client.put(
+        f"/api/v1/holdings/{holding['id']}",
+        json={"security": holding["security"], "accountPositions": holding["accountPositions"]},
+    )
+    assert bypass_attempt.status_code == 422

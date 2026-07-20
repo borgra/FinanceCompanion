@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
@@ -27,6 +28,7 @@ from app.presentation.http.mappers import (
 )
 from app.presentation.http.schemas import (
     AccountPayload,
+    CorporateActionImportRequest,
     AccountBatchRequest,
     AccountUpsertRequest,
     AuthSessionResponse,
@@ -498,6 +500,58 @@ def purge_holding_payment_data(user=Depends(require_session_user), container=Dep
         for item in container.purge_holding_payment_data.execute(user.user_id)
     ]
 
+@router.put("/holdings/corporate-actions/import", response_model=HoldingImportResponse)
+def import_corporate_actions(
+    request: CorporateActionImportRequest,
+    user=Depends(require_session_user),
+    container=Depends(get_container),
+) -> HoldingImportResponse:
+    from app.domain.models import CorporateAction
+
+    actions_by_symbol: dict[str, list[CorporateAction]] = {}
+    identities: set[tuple[str, str, str, float, float]] = set()
+    for row in request.rows:
+        symbol = row.symbol.strip().upper()
+
+        identity = (symbol, row.effective_date, row.type, row.old_shares, row.new_shares)
+        if identity in identities:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Corporate action rows must be unique.")
+        identities.add(identity)
+        actions_by_symbol.setdefault(symbol, []).append(CorporateAction(
+            id=f"corporate-action-{uuid.uuid4().hex[:12]}",
+            effective_date=row.effective_date.isoformat(),
+            type=row.type,
+            old_shares=row.old_shares,
+            new_shares=row.new_shares,
+        ))
+
+    updates = []
+    matched_symbols = set()
+    for holding in container.list_holdings.execute(user.user_id):
+        additions = actions_by_symbol.get(holding.security.symbol.upper())
+        if not additions:
+            continue
+        matched_symbols.add(holding.security.symbol.upper())
+        existing = holding.security.corporate_actions
+        new_actions = [
+            action for action in additions
+            if not any((item.effective_date, item.type, item.old_shares, item.new_shares) == (action.effective_date, action.type, action.old_shares, action.new_shares) for item in existing)
+        ]
+        if not new_actions:
+            continue
+        updates.append(replace(
+            holding,
+            security=replace(holding.security, corporate_actions=sorted([*existing, *new_actions], key=lambda item: item.effective_date)),
+            updated_at=now_iso(),
+        ))
+    try:
+        updated = container.update_holdings_batch.execute(user.user_id, updates)
+    except (DomainError, ValueError) as exc:
+        raise _domain_error_to_http(exc) from exc
+    return HoldingImportResponse(
+        holdings=[to_holding_payload(item) for item in updated],
+        unmatched_symbols=sorted(set(actions_by_symbol).difference(matched_symbols)),
+    )
 @router.put("/holdings/manual-payouts/import", response_model=HoldingImportResponse)
 def import_manual_payouts(
     request: ManualPayoutImportRequest,
