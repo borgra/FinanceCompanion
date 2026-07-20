@@ -7,7 +7,7 @@ import { IncomeSourcesPage } from '../features/incomeSources/IncomeSourcesPage';
 export type SettingsConfigurationPanelProps = {
   repository: IncomeSourceRepository;
   holdingRepository: HoldingRepository;
-  netWorthRepository: Pick<NetWorthRepository, 'get' | 'put' | 'putConfiguration' | 'putMortgageSchedule'>;
+  netWorthRepository: Pick<NetWorthRepository, 'get' | 'put' | 'putConfiguration' | 'putMortgageSchedule' | 'deleteMortgageSchedule'>;
   onMortgageTrackingSaved?: (isEnabled: boolean) => void;
 };
 
@@ -19,6 +19,7 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
   const [isLoadingNetWorth, setIsLoadingNetWorth] = useState(true);
   const [isSavingNetWorth, setIsSavingNetWorth] = useState(false);
   const [isSavingMortgageVisibility, setIsSavingMortgageVisibility] = useState(false);
+  const [isDeletingMortgageSchedule, setIsDeletingMortgageSchedule] = useState(false);
   const [mortgageVisibilityMessage, setMortgageVisibilityMessage] = useState<string | null>(null);
   const [mortgageVisibilityError, setMortgageVisibilityError] = useState<string | null>(null);
   const [netWorthError, setNetWorthError] = useState<string | null>(null);
@@ -96,6 +97,20 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
     }
   };
 
+  const deleteMortgageSchedule = async () => {
+    if (!netWorthRepository.deleteMortgageSchedule) { setMortgageVisibilityError('Mortgage schedule deletion is unavailable.'); return; }
+    if (!window.confirm('Delete the saved mortgage schedule? This removes its payment history and overrides from Net Worth.')) return;
+    setIsDeletingMortgageSchedule(true); setMortgageVisibilityError(null); setMortgageVisibilityMessage(null);
+    try {
+      await netWorthRepository.deleteMortgageSchedule();
+      setHouseValue('800000'); setAnnualInterestRate('0.02875');
+      setMortgageVisibilityMessage('Mortgage schedule deleted.');
+    } catch {
+      setMortgageVisibilityError('Unable to delete mortgage schedule.');
+    } finally {
+      setIsDeletingMortgageSchedule(false);
+    }
+  };
   const purgePaymentData = async () => {
     if (!holdingRepository.purgePaymentData) { setPaymentDataError('Payment data purge is unavailable.'); return; }
     if (!window.confirm('Remove all saved source and manual payment data for every holding? Holdings and quantities will not be changed.')) return;
@@ -119,7 +134,7 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
       </>}
     </section>
     <section aria-labelledby="mortgage-visibility-heading" style={{ border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: '16px', background: 'var(--md-sys-color-surface)', padding: '16px' }}>
-      <h2 id="mortgage-visibility-heading">Net Worth</h2><label><input type="checkbox" checked={trackMortgage} onChange={(event) => { setTrackMortgage(event.target.checked); setMortgageVisibilityError(null); setMortgageVisibilityMessage(null); }} /> Track Mortgage in Net Worth</label><p>Controls Mortgage Schedule visibility and its home-value assumptions.</p><div className="form-grid"><label className="field"><span>House Value</span><div className="input-wrapper"><span className="input-prefix">$</span><input data-has-prefix="true" inputMode="decimal" value={houseValue} onChange={(event) => setHouseValue(event.target.value)} /></div></label><label className="field"><span>Annual Interest Rate</span><input inputMode="decimal" value={annualInterestRate} onChange={(event) => setAnnualInterestRate(event.target.value)} /><small>Use decimal format: 0.02875 = 2.875%.</small></label></div>{mortgageVisibilityError ? <p className="form-error" role="alert">{mortgageVisibilityError}</p> : null}{mortgageVisibilityMessage ? <p className="form-success" role="status">{mortgageVisibilityMessage}</p> : null}<button className="primary-action" type="button" onClick={() => void saveMortgageVisibility()} disabled={isSavingMortgageVisibility}>{isSavingMortgageVisibility ? 'Saving...' : 'Save net worth configuration'}</button>
+      <h2 id="mortgage-visibility-heading">Net Worth</h2><label><input type="checkbox" checked={trackMortgage} onChange={(event) => { setTrackMortgage(event.target.checked); setMortgageVisibilityError(null); setMortgageVisibilityMessage(null); }} /> Track Mortgage in Net Worth</label><p>Controls Mortgage Schedule visibility and its home-value assumptions.</p><div className="form-grid"><label className="field"><span>House Value</span><div className="input-wrapper"><span className="input-prefix">$</span><input data-has-prefix="true" inputMode="decimal" value={houseValue} onChange={(event) => setHouseValue(event.target.value)} /></div></label><label className="field"><span>Annual Interest Rate</span><input inputMode="decimal" value={annualInterestRate} onChange={(event) => setAnnualInterestRate(event.target.value)} /><small>Use decimal format: 0.02875 = 2.875%.</small></label></div>{mortgageVisibilityError ? <p className="form-error" role="alert">{mortgageVisibilityError}</p> : null}{mortgageVisibilityMessage ? <p className="form-success" role="status">{mortgageVisibilityMessage}</p> : null}<button className="primary-action" type="button" onClick={() => void saveMortgageVisibility()} disabled={isSavingMortgageVisibility}>{isSavingMortgageVisibility ? 'Saving...' : 'Save net worth configuration'}</button><button className="secondary-action" type="button" onClick={() => void deleteMortgageSchedule()} disabled={isDeletingMortgageSchedule}>{isDeletingMortgageSchedule ? 'Deleting mortgage schedule...' : 'Delete mortgage schedule'}</button>
     </section>    <section aria-labelledby="holding-payment-data-heading" style={{ border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: '16px', background: 'var(--md-sys-color-surface)', padding: '16px' }}>
       <h2 id="holding-payment-data-heading" style={{ marginBottom: 4 }}>Holdings</h2><p style={{ marginBottom: 12 }}>Remove all saved source and manual payment data. Your holdings and share quantities are kept. Refreshing a holding can load source payments again.</p>
       {paymentDataError ? <p className="form-error" role="alert">{paymentDataError}</p> : null}{paymentDataMessage ? <p className="form-success" role="status">{paymentDataMessage}</p> : null}

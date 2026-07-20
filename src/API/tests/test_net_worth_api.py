@@ -135,3 +135,21 @@ def test_mortgage_schedule_accepts_fill_down_overrides_without_base_payment():
         'extraPrincipalOverrides': {'2026-01:0': 300, '2026-01:1': 300},
     })
     assert response.status_code == 200, response.text
+
+
+def test_deleting_mortgage_schedule_preserves_other_net_worth_data():
+    client = build_test_client()
+    authenticate(client)
+    client.put('/api/v1/net-worth/configuration', json={'trackMortgageInNetWorth': True})
+    client.put('/api/v1/net-worth/mortgage-schedule', json={
+        'houseValue': 800000,
+        'startingOutstandingMortgage': 320000,
+        'annualInterestRate': 0.0375,
+        'monthlyPrincipalPayment': 981.13,
+        'monthlyAdditionalPrincipalPayment': 300,
+        'scheduleStartMonth': '2025-03',
+    })
+    response = client.delete('/api/v1/net-worth/mortgage-schedule')
+    assert response.status_code == 200
+    assert response.json()['mortgageSchedule'] is None
+    assert response.json()['trackMortgageInNetWorth'] is True

@@ -24,20 +24,17 @@ describe('MortgageSchedulePanel', () => {
     await user.click(principal);
     await user.clear(principal);
     await user.type(principal, '125');
-    await user.click(screen.getByRole('button', { name: /auto-populate principal from jan 2026 down/i }));
-
     const extraPrincipal = screen.getByLabelText('Extra principal Jan 2026');
     await user.click(extraPrincipal);
     await user.clear(extraPrincipal);
     await user.type(extraPrincipal, '25');
-    await user.click(screen.getByRole('button', { name: /auto-populate extra principal from jan 2026 down/i }));
-
+    expect(screen.getByLabelText('Extra principal Feb 2026')).toHaveValue('$25.00');
     await user.click(screen.getByRole('button', { name: /save mortgage schedule/i }));
 
     await waitFor(() => expect(putMortgageSchedule).toHaveBeenCalledTimes(1));
     expect(putMortgageSchedule).toHaveBeenCalledWith(expect.objectContaining({
-      principalOverrides: expect.objectContaining({ '2026-01:0': 125, '2026-01:1': 125 }),
-      extraPrincipalOverrides: expect.objectContaining({ '2026-01:0': 25, '2026-01:1': 25 }),
+      principalOverrides: { '2026-01:0': 125 },
+      extraPrincipalOverrides: { '2026-01:0': 25 },
     }));
   });
 

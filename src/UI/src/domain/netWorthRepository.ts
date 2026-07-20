@@ -6,6 +6,7 @@ export type NetWorthRepository = {
   putInvestmentSnapshots: (investmentSnapshots: InvestmentSnapshots) => Promise<NetWorth>;
   putConfiguration?: (trackMortgageInNetWorth: boolean) => Promise<NetWorth>;
   putMortgageSchedule?: (mortgageSchedule: MortgageSchedule) => Promise<NetWorth>;
+  deleteMortgageSchedule?: () => Promise<NetWorth>;
 };
 
 export const createMockNetWorthRepository = (initialValue?: number): NetWorthRepository => {
@@ -17,6 +18,7 @@ export const createMockNetWorthRepository = (initialValue?: number): NetWorthRep
     putInvestmentSnapshots: async (investmentSnapshots) => merge({ investmentSnapshots }),
     putConfiguration: async (trackMortgageInNetWorth) => merge({ trackMortgageInNetWorth }),
     putMortgageSchedule: async (mortgageSchedule) => merge({ mortgageSchedule }),
+    deleteMortgageSchedule: async () => merge({ mortgageSchedule: null }),
   };
 };
 

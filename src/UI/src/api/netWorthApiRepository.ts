@@ -22,6 +22,7 @@ export const createNetWorthApiRepository = (client: HttpClient): NetWorthReposit
   ),
   putConfiguration: (trackMortgageInNetWorth) => client.put<NetWorth>('/net-worth/configuration', { trackMortgageInNetWorth }),
   putMortgageSchedule: (mortgageSchedule) => client.put<NetWorth>('/net-worth/mortgage-schedule', mortgageSchedule),
+  deleteMortgageSchedule: () => client.delete<NetWorth>('/net-worth/mortgage-schedule'),
 });
 
 

@@ -198,6 +198,11 @@ def put_mortgage_schedule(request: MortgageSchedulePutRequest, user=Depends(requ
     value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=current.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=request.model_dump(by_alias=True)))
     return _to_net_worth_payload(value)
 
+@router.delete("/net-worth/mortgage-schedule", response_model=NetWorthPayload)
+def delete_mortgage_schedule(user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
+    current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
+    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=current.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=None))
+    return _to_net_worth_payload(value)
 @router.get("/income-sources", response_model=list[IncomeSourcePayload])
 def list_income_sources(user=Depends(require_session_user), container=Depends(get_container)) -> list[IncomeSourcePayload]:
     return [to_income_source_payload(item) for item in container.list_income_sources.execute(user.user_id)]
