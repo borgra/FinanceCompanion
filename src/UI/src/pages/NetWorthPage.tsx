@@ -34,6 +34,7 @@ type MonthlyNetWorthRow = {
   month: string;
   valuesByAccountId: Map<string, number>;
   total: number;
+  homeValue: number;
 };
 
 const DEBUG_BEGINNING_NET_WORTH = 100000;
@@ -53,9 +54,17 @@ const getProjectionMonths = () => projectionMonthsList.map((month, index) => ({
 }));
 
 const mortgageEquityForMonth = (schedule: MortgageSchedule | null, monthCode: string) => {
-  if (!schedule || monthCode < schedule.scheduleStartMonth) return 0;
+  if (!schedule || schedule.startingOutstandingMortgage <= 0 || monthCode < schedule.scheduleStartMonth) return 0;
   const elapsed = Math.max(0, (Number(monthCode.slice(0, 4)) - Number(schedule.scheduleStartMonth.slice(0, 4))) * 12 + Number(monthCode.slice(5, 7)) - Number(schedule.scheduleStartMonth.slice(5, 7)));
-  const balance = Math.max(0, schedule.startingOutstandingMortgage - (schedule.monthlyPrincipalPayment + schedule.monthlyAdditionalPrincipalPayment) * (elapsed + 1));
+  const principalOverrides = schedule.principalOverrides ?? {}, extraOverrides = schedule.extraPrincipalOverrides ?? {};
+  const payment = schedule.monthlyPrincipalPayment + schedule.startingOutstandingMortgage * schedule.annualInterestRate / 12;
+  let balance = schedule.startingOutstandingMortgage, effectiveExtra = schedule.monthlyAdditionalPrincipalPayment;
+  for (let index = 0; index <= elapsed && balance > 0; index += 1) {
+    const key = `${schedule.scheduleStartMonth}:${index}`;
+    const principal = Math.min(balance, principalOverrides[key] ?? Math.max(0, payment - balance * schedule.annualInterestRate / 12));
+    if (extraOverrides[key] !== undefined) effectiveExtra = extraOverrides[key];
+    balance = Math.max(0, balance - principal - Math.min(balance - principal, effectiveExtra));
+  }
   return schedule.houseValue - balance;
 };
 
@@ -112,10 +121,15 @@ function AnnualNetWorthChart({ rows }: { rows: MonthlyNetWorthRow[] }) {
   const width = 960;
   const height = 260;
   const padding = { top: 24, right: 24, bottom: 44, left: 72 };
-  const allValues = [...rows.map((row) => row.total), REFERENCE_NET_WORTH, 0];
-  const min = Math.min(...allValues);
-  const max = Math.max(...allValues);
-  const range = Math.max(max - min, 1);
+  const min = 0;
+  const max = 3000000;
+  const range = max - min;
+  const yTicks = Array.from({ length: 13 }, (_, index) => index * 250000);
+  const formatAxisTick = (value: number) => {
+    if (value === 0) return '$0';
+    if (value < 1000000) return '$' + String(value / 1000) + 'K';
+    return '$' + String(value / 1000000) + 'M';
+  };
   const x = (index: number) => padding.left + index * ((width - padding.left - padding.right) / Math.max(rows.length - 1, 1));
   const y = (value: number) => padding.top + (max - value) / range * (height - padding.top - padding.bottom);
   const points = rows.map((row, index) => `${x(index)},${y(row.total)}`).join(' ');
@@ -126,8 +140,9 @@ function AnnualNetWorthChart({ rows }: { rows: MonthlyNetWorthRow[] }) {
       <h2 id="annual-net-worth-title" style={{ fontSize: '1.05rem', marginBottom: 8 }}>Annual net worth</h2>
       <div style={{ overflowX: 'auto', border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: 16, background: 'var(--md-sys-color-surface)', padding: 12 }}>
         <svg role="img" aria-label="Annual net worth graph with a one hundred thousand dollar reference line" viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', minWidth: 680, width: '100%' }}>
-          <line x1={padding.left} x2={width - padding.right} y1={referenceY} y2={referenceY} stroke="var(--md-sys-color-outline)" strokeDasharray="6 5" />
-          <text x={padding.left + 4} y={referenceY - 7} fill="var(--md-sys-color-on-surface-variant)" fontSize="12">$100k reference</text>
+          {yTicks.map((value) => { const isMajor = value % 500000 === 0; return <g key={value}><line x1={padding.left} x2={width - padding.right} y1={y(value)} y2={y(value)} stroke="var(--md-sys-color-outline-variant)" strokeWidth={isMajor ? 1.25 : 0.75} opacity={isMajor ? 1 : 0.55} />{isMajor ? <text x={padding.left - 10} y={y(value) + 4} textAnchor="end" fill="var(--md-sys-color-on-surface-variant)" fontSize="11">{formatAxisTick(value)}</text> : null}</g>; })}
+          <line x1={padding.left} x2={width - padding.right} y1={referenceY} y2={referenceY} stroke="var(--md-sys-color-secondary)" strokeDasharray="6 5" />
+          <text x={width - padding.right} y={referenceY - 8} textAnchor="end" fill="var(--md-sys-color-secondary)" fontSize="11">$100K reference</text>
           <polyline fill="none" stroke="var(--md-sys-color-primary)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" points={points} />
           {rows.map((row, index) => (
             <g key={row.month}>
@@ -135,8 +150,7 @@ function AnnualNetWorthChart({ rows }: { rows: MonthlyNetWorthRow[] }) {
               <text x={x(index)} y={height - 18} textAnchor="middle" fill="var(--md-sys-color-on-surface-variant)" fontSize="11">{row.month.slice(0, 3)}</text>
             </g>
           ))}
-          <text x={padding.left - 8} y={padding.top + 4} textAnchor="end" fill="var(--md-sys-color-on-surface-variant)" fontSize="11">{compactCurrencyFormatter.format(max)}</text>
-          <text x={padding.left - 8} y={height - padding.bottom} textAnchor="end" fill="var(--md-sys-color-on-surface-variant)" fontSize="11">{compactCurrencyFormatter.format(min)}</text>
+
         </svg>
       </div>
     </section>
@@ -198,7 +212,8 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
       valuesByAccountId.set(account.id, value);
     }
     const accountsTotal = [...valuesByAccountId.values()].reduce((sum, value) => sum + value, 0);
-    return { month: month.name, valuesByAccountId, total: accountsTotal + mortgageEquityForMonth(mortgageSchedule, month.dateCode) };
+    const homeValue = mortgageEquityForMonth(mortgageSchedule, month.dateCode);
+    return { month: month.name, valuesByAccountId, homeValue, total: accountsTotal + homeValue };
   }), [accounts, bankingValues, holdings, investmentSnapshots, months, mortgageSchedule]);
 
   const now = new Date();
@@ -251,7 +266,7 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
           {trackMortgage ? <button aria-controls="mortgage-schedule-panel" aria-selected={activeTab === 'mortgage'} className="filter-tab" id="mortgage-schedule-tab" role="tab" type="button" onClick={() => setActiveTab('mortgage')}>Mortgage Schedule</button> : null}
         </div>
       </section>
-      {activeTab === 'mortgage' && trackMortgage ? <div id="mortgage-schedule-panel" role="tabpanel" aria-labelledby="mortgage-schedule-tab"><MortgageSchedulePanel initial={mortgageSchedule} repository={netWorthRepository} onSaved={setMortgageSchedule} /></div> : <div id="net-worth-panel" role="tabpanel" aria-labelledby="net-worth-tab">
+      {trackMortgage ? <div id="mortgage-schedule-panel" role="tabpanel" aria-labelledby="mortgage-schedule-tab" hidden={activeTab !== 'mortgage'}><MortgageSchedulePanel initial={mortgageSchedule} repository={netWorthRepository} onSaved={setMortgageSchedule} /></div> : null}<div id="net-worth-panel" role="tabpanel" aria-labelledby="net-worth-tab" hidden={activeTab !== 'net-worth'}>
       {accounts.length === 0 ? <section className="empty-state"><h2>Net Worth</h2><p>Add Banking and Investing accounts to see your monthly net worth snapshot.</p></section> : <>
       <section aria-label="Net worth summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, margin: '16px 0 24px' }}>
         {[
@@ -268,19 +283,19 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
           {isSavingSnapshots ? 'Saving...' : 'Save changes'}
         </button>
       </div>      <FinanceTable aria-label="Net worth table" className="net-worth-table" wrapperClassName="excel-table-fullwidth" style={{ width: '100%' }}>
-        <thead><tr><FinanceTableHeaderCell rowSpan={2}>Month</FinanceTableHeaderCell>{groups.map((group) => <FinanceTableHeaderCell key={group.id} colSpan={group.accounts.length}>{group.label}</FinanceTableHeaderCell>)}<FinanceTableHeaderCell rowSpan={2}>Total</FinanceTableHeaderCell></tr>
+        <thead><tr><FinanceTableHeaderCell rowSpan={2}>Month</FinanceTableHeaderCell>{groups.map((group) => <FinanceTableHeaderCell key={group.id} colSpan={group.accounts.length}>{group.label}</FinanceTableHeaderCell>)}{trackMortgage ? <FinanceTableHeaderCell rowSpan={2}>Home Value</FinanceTableHeaderCell> : null}<FinanceTableHeaderCell rowSpan={2}>Total</FinanceTableHeaderCell></tr>
           <tr>{groups.flatMap((group) => group.accounts.map((account) => <FinanceTableHeaderCell key={account.id} isEditable={account.type === 'Investment'}>{account.name}</FinanceTableHeaderCell>))}</tr></thead>
         <tbody>{rows.map((row) => <tr key={row.month} className={row.month === currentMonth ? 'excel-row-current' : undefined}>
           <td className="excel-bold-col">{row.month}</td>
           {groups.flatMap((group) => group.accounts.map((account) => <td key={`${row.month}-${account.id}`}>{account.type === 'Investment'
             ? <FinanceMoneyCellInput aria-label={`${account.name} ${row.month} snapshot`} value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} onValueChange={(value) => updateSnapshotLocally(account.id, row.month, value)} />
             : <FinanceMoneyCellValue value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} />}</td>))}
-          <td className="excel-bold-col"><FinanceMoneyCellValue value={row.total} formatValue={formatMoney} /></td>
+          {trackMortgage ? <td className="excel-bold-col"><FinanceMoneyCellValue value={row.homeValue} formatValue={formatMoney} /></td> : null}<td className="excel-bold-col"><FinanceMoneyCellValue value={row.total} formatValue={formatMoney} /></td>
         </tr>)}</tbody>
       </FinanceTable>
 
       <AnnualNetWorthChart rows={rows} />
-      </>}</div>}
+      </>}</div>
     </section>
   );
 }

@@ -89,7 +89,7 @@ describe('NetWorthPage', () => {
 
     const chart = screen.getByRole('img', { name: /annual net worth graph/i });
     expect(chart).toBeInTheDocument();
-    expect(within(chart).getByText('$100k reference')).toBeInTheDocument();
+    expect(within(chart).getByText('$100K reference')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /Primary Checking.*snapshot/i })).not.toBeInTheDocument();
 
     const saveChanges = screen.getByRole('button', { name: 'Save changes' });
