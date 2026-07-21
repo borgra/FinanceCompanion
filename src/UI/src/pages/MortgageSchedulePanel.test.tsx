@@ -24,6 +24,11 @@ describe('MortgageSchedulePanel', () => {
     await user.click(principal);
     await user.clear(principal);
     await user.type(principal, '125');
+    expect(screen.getByLabelText('Principal Feb 2026')).toHaveValue('$125.00');
+    const februaryPrincipal = screen.getByLabelText('Principal Feb 2026');
+    await user.click(februaryPrincipal);
+    await user.clear(februaryPrincipal);
+    await user.type(februaryPrincipal, '140');
     const extraPrincipal = screen.getByLabelText('Extra principal Jan 2026');
     await user.click(extraPrincipal);
     await user.clear(extraPrincipal);
@@ -33,7 +38,7 @@ describe('MortgageSchedulePanel', () => {
 
     await waitFor(() => expect(putMortgageSchedule).toHaveBeenCalledTimes(1));
     expect(putMortgageSchedule).toHaveBeenCalledWith(expect.objectContaining({
-      principalOverrides: { '2026-01:0': 125 },
+      principalOverrides: { '2026-01:1': 140 },
       extraPrincipalOverrides: { '2026-01:0': 25 },
     }));
   });
