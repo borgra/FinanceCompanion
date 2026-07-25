@@ -5,7 +5,9 @@ def test_net_worth_is_user_scoped_singleton_with_idempotent_put():
     client = build_test_client()
     authenticate(client)
 
-    assert client.get('/api/v1/net-worth').status_code == 404
+    initial = client.get('/api/v1/net-worth')
+    assert initial.status_code == 200
+    assert initial.json()['beginningNetWorth'] == 250000
 
     first = client.put('/api/v1/net-worth', json={'beginningNetWorth': -1250.5})
     second = client.put('/api/v1/net-worth', json={'beginningNetWorth': -1250.5})
@@ -30,7 +32,7 @@ def test_investment_snapshots_are_persisted_without_overwriting_the_baseline():
     )
 
     assert snapshot.status_code == 200
-    assert snapshot.json()['beginningNetWorth'] is None
+    assert snapshot.json()['beginningNetWorth'] == 250000
     assert snapshot.json()['investmentSnapshots'] == {
         'taxable-account': {'Jan-26': 12345.67},
     }

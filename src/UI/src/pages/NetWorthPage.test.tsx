@@ -24,7 +24,7 @@ const account = (overrides: Partial<Account>): Account => ({
 });
 
 describe('NetWorthPage', () => {
-  it('groups accounts, edits investment snapshots, and charts variance from the debug baseline', async () => {
+  it('groups accounts, edits investment snapshots, and charts variance from the configured baseline', async () => {
     const user = userEvent.setup();
     const netWorthRepository = createMockNetWorthRepository(15000);
     const saveSnapshot = vi.spyOn(netWorthRepository, 'putInvestmentSnapshots');
@@ -83,13 +83,16 @@ describe('NetWorthPage', () => {
 
     const summary = screen.getByLabelText('Net worth summary');
     expect(within(summary).getByText('$15,400.00')).toBeInTheDocument();
-    expect(within(summary).getByText('$100,000.00')).toBeInTheDocument();
-    expect(within(summary).getByText('($84,600.00)')).toBeInTheDocument();
-    expect(within(summary).getByText('-84.6%')).toBeInTheDocument();
+    expect(within(summary).getByText('$15,000.00')).toBeInTheDocument();
+    expect(within(summary).getByText('$400.00')).toBeInTheDocument();
+    expect(within(summary).getByText('+2.7%')).toBeInTheDocument();
 
     const chart = screen.getByRole('img', { name: /annual net worth graph/i });
     expect(chart).toBeInTheDocument();
-    expect(within(chart).getByText('$100K reference')).toBeInTheDocument();
+    expect(within(chart).getByText('$15,000.00 reference')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Current month by account type' })).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /current month account-type net worth distribution/i })).toBeInTheDocument();
+    expect(screen.getByLabelText('Account type totals')).toHaveTextContent('Checking: $1,000.00');
     expect(screen.queryByRole('textbox', { name: /Primary Checking.*snapshot/i })).not.toBeInTheDocument();
 
     const saveChanges = screen.getByRole('button', { name: 'Save changes' });
@@ -122,8 +125,8 @@ describe('NetWorthPage', () => {
       hsa: expect.objectContaining({ 'Jul-26': 1000 }),
     }));
 
-    expect(within(summary).getByText('($83,400.00)')).toBeInTheDocument();
-    expect(within(summary).getByText('-83.4%')).toBeInTheDocument();
+    expect(within(summary).getByText('$1,600.00')).toBeInTheDocument();
+    expect(within(summary).getByText('+10.7%')).toBeInTheDocument();
   });
 
   it('retains dirty snapshot drafts when the batch save fails so it can be retried', async () => {

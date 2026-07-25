@@ -230,7 +230,16 @@ class InMemoryDataStore:
             user_id: [_holding_from_dict(item) for item in items]
             for user_id, items in data["holdings"].items()
         }
-        self.net_worth: dict[str, NetWorth] = {}
+        self.net_worth = {
+            user_id: NetWorth(
+                beginning_net_worth=_optional_float(item.get("beginningNetWorth")),
+                investment_snapshots=deepcopy(item.get("investmentSnapshots", {})),
+                updated_at=item["updatedAt"],
+                track_mortgage_in_net_worth=bool(item.get("trackMortgageInNetWorth", False)),
+                mortgage_schedule=deepcopy(item.get("mortgageSchedule")),
+            )
+            for user_id, item in data["net_worth"].items()
+        }
 
 
 class InMemoryUserRepository:

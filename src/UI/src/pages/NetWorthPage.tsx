@@ -37,8 +37,6 @@ type MonthlyNetWorthRow = {
   homeValue: number;
 };
 
-const DEBUG_BEGINNING_NET_WORTH = 100000;
-const REFERENCE_NET_WORTH = 100000;
 const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const compactCurrencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 0,
@@ -117,7 +115,7 @@ const groupAccounts = (accounts: Account[]): NetWorthGroup[] => {
   ].filter((group) => group.accounts.length > 0) as NetWorthGroup[];
 };
 
-function AnnualNetWorthChart({ rows }: { rows: MonthlyNetWorthRow[] }) {
+function AnnualNetWorthChart({ rows, beginningNetWorth }: { rows: MonthlyNetWorthRow[]; beginningNetWorth: number }) {
   const width = 960;
   const height = 260;
   const padding = { top: 24, right: 24, bottom: 44, left: 72 };
@@ -133,16 +131,16 @@ function AnnualNetWorthChart({ rows }: { rows: MonthlyNetWorthRow[] }) {
   const x = (index: number) => padding.left + index * ((width - padding.left - padding.right) / Math.max(rows.length - 1, 1));
   const y = (value: number) => padding.top + (max - value) / range * (height - padding.top - padding.bottom);
   const points = rows.map((row, index) => `${x(index)},${y(row.total)}`).join(' ');
-  const referenceY = y(REFERENCE_NET_WORTH);
+  const referenceY = y(beginningNetWorth);
 
   return (
-    <section aria-labelledby="annual-net-worth-title" style={{ marginTop: 24 }}>
+    <section aria-labelledby="annual-net-worth-title" style={{ width: '50%', marginTop: 24 }}>
       <h2 id="annual-net-worth-title" style={{ fontSize: '1.05rem', marginBottom: 8 }}>Annual net worth</h2>
-      <div style={{ overflowX: 'auto', border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: 16, background: 'var(--md-sys-color-surface)', padding: 12 }}>
-        <svg role="img" aria-label="Annual net worth graph with a one hundred thousand dollar reference line" viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', minWidth: 680, width: '100%' }}>
+      <div style={{ width: '100%', height: 320, overflowX: 'auto', border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: 16, background: 'var(--md-sys-color-surface)', padding: 12 }}>
+        <svg role="img" aria-label="Annual net worth graph with a configured reference line" viewBox={`0 0 ${width} ${height}`} style={{ display: 'block', minWidth: 680, width: '100%', height: '100%' }}>
           {yTicks.map((value) => { const isMajor = value % 500000 === 0; return <g key={value}><line x1={padding.left} x2={width - padding.right} y1={y(value)} y2={y(value)} stroke="var(--md-sys-color-outline-variant)" strokeWidth={isMajor ? 1.25 : 0.75} opacity={isMajor ? 1 : 0.55} />{isMajor ? <text x={padding.left - 10} y={y(value) + 4} textAnchor="end" fill="var(--md-sys-color-on-surface-variant)" fontSize="11">{formatAxisTick(value)}</text> : null}</g>; })}
           <line x1={padding.left} x2={width - padding.right} y1={referenceY} y2={referenceY} stroke="var(--md-sys-color-secondary)" strokeDasharray="6 5" />
-          <text x={width - padding.right} y={referenceY - 8} textAnchor="end" fill="var(--md-sys-color-secondary)" fontSize="11">$100K reference</text>
+          <text x={width - padding.right} y={referenceY - 8} textAnchor="end" fill="var(--md-sys-color-secondary)" fontSize="11">{formatMoney(beginningNetWorth)} reference</text>
           <polyline fill="none" stroke="var(--md-sys-color-primary)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" points={points} />
           {rows.map((row, index) => (
             <g key={row.month}>
@@ -157,11 +155,45 @@ function AnnualNetWorthChart({ rows }: { rows: MonthlyNetWorthRow[] }) {
   );
 }
 
+function AccountTypePieChart({ row, accounts }: { row: MonthlyNetWorthRow; accounts: Account[] }) {
+  const colors: Record<string, string> = { Checking: '#4f8cff', Savings: '#00a896', Investment: '#8b5cf6' };
+  const totals = new Map<string, number>();
+  for (const account of accounts) {
+    totals.set(account.type, (totals.get(account.type) ?? 0) + (row.valuesByAccountId.get(account.id) ?? 0));
+  }
+  const values = [...totals].map(([label, value]) => ({ id: label, label, value }));
+  const total = values.reduce((sum, item) => sum + item.value, 0);
+  const circumference = 2 * Math.PI * 70;
+  let offset = 0;
+
+  return (
+    <section aria-labelledby="account-type-chart-title" style={{ width: '50%', marginTop: 24 }}>
+      <h2 id="account-type-chart-title" style={{ fontSize: '1.05rem', marginBottom: 8 }}>Current month by account type</h2>
+      <div style={{ width: '100%', height: 320, display: 'flex', alignItems: 'center', gap: 16, border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: 16, background: 'var(--md-sys-color-surface)', padding: 12 }}>
+        <svg role="img" aria-label={`Current month account-type net worth distribution for ${row.month}`} viewBox="0 0 340 220" style={{ display: 'block', width: '55%', flexShrink: 0 }}>
+          <circle cx="110" cy="110" r="70" fill="none" stroke="var(--md-sys-color-surface-container)" strokeWidth="30" />
+          {total > 0 ? values.map((item) => {
+            const length = item.value / total * circumference;
+            const circle = <circle key={item.id} cx="110" cy="110" r="70" fill="none" stroke={colors[item.id] ?? '#f59e0b'} strokeWidth="30" strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} transform="rotate(-90 110 110)"><title>{`${item.label}: ${formatMoney(item.value)}`}</title></circle>;
+            offset += length;
+            return circle;
+          }) : null}
+          <text x="110" y="105" textAnchor="middle" fill="var(--md-sys-color-on-surface-variant)" fontSize="11">{row.month}</text>
+          <text x="110" y="123" textAnchor="middle" fill="var(--md-sys-color-on-surface)" fontSize="14" fontWeight="700">{formatMoney(total)}</text>
+        </svg>
+        <ul aria-label="Account type totals" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+          {values.map((item) => <li key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '.8rem' }}><span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: colors[item.id] ?? '#f59e0b', flexShrink: 0 }} />{item.label}: {formatMoney(item.value)}</li>)}
+        </ul>
+      </div>
+    </section>
+  );
+}
 export function NetWorthPage({ accountRepository, incomeRepository, holdingRepository, netWorthRepository, mortgageTrackingOverride }: NetWorthPageProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [investmentSnapshots, setInvestmentSnapshots] = useState<InvestmentSnapshots>({});
+  const [beginningNetWorth, setBeginningNetWorth] = useState(0);
   const [trackMortgage, setTrackMortgage] = useState(false);
   const [mortgageSchedule, setMortgageSchedule] = useState<MortgageSchedule | null>(null);
   const [activeTab, setActiveTab] = useState<'net-worth' | 'mortgage'>('net-worth');
@@ -184,6 +216,7 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
       const snapshots = netWorth?.investmentSnapshots ?? {};
 
       setInvestmentSnapshots(snapshots);
+      setBeginningNetWorth(netWorth?.beginningNetWorth ?? 0);
       setTrackMortgage(mortgageTrackingOverride ?? netWorth?.trackMortgageInNetWorth ?? true);
       setMortgageSchedule(netWorth?.mortgageSchedule ?? null);
       setLoadError(null);
@@ -220,8 +253,8 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
   const currentMonth = months.find((month) => month.dateCode === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)?.name ?? months[0]?.name ?? '';
   const currentRow = rows.find((row) => row.month === currentMonth) ?? rows[rows.length - 1];
   const currentNetWorth = currentRow?.total ?? 0;
-  const varianceAmount = currentNetWorth - DEBUG_BEGINNING_NET_WORTH;
-  const variancePercent = varianceAmount / DEBUG_BEGINNING_NET_WORTH * 100;
+  const varianceAmount = currentNetWorth - beginningNetWorth;
+  const variancePercent = beginningNetWorth === 0 ? 0 : varianceAmount / beginningNetWorth * 100;
 
   const parseSnapshot = (rawValue: string) => {
     const parsed = rawValue.trim() === '' ? 0 : Number(rawValue.replace(/[$,()]/g, ''));
@@ -270,7 +303,7 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
       {accounts.length === 0 ? <section className="empty-state"><h2>Net Worth</h2><p>Add Banking and Investing accounts to see your monthly net worth snapshot.</p></section> : <>
       <section aria-label="Net worth summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, margin: '16px 0 24px' }}>
         {[
-          { label: 'Beginning Net Worth', value: formatMoney(DEBUG_BEGINNING_NET_WORTH) },
+          { label: 'Beginning Net Worth', value: formatMoney(beginningNetWorth) },
           { label: `Current Net Worth (${currentMonth})`, value: formatMoney(currentNetWorth) },
           { label: 'Variance Amt', value: formatMoney(varianceAmount) },
           { label: 'Variance %', value: formatPercent(variancePercent) },
@@ -294,7 +327,10 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
         </tr>)}</tbody>
       </FinanceTable>
 
-      <AnnualNetWorthChart rows={rows} />
+      <section style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <AnnualNetWorthChart rows={rows} beginningNetWorth={beginningNetWorth} />
+        {currentRow ? <AccountTypePieChart row={currentRow} accounts={accounts} /> : null}
+      </section>
       </>}</div>
     </section>
   );

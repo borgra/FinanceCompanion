@@ -692,6 +692,16 @@ SEED_HOLDINGS = {
     ]
 }
 
+SEED_NET_WORTH = {
+    "user-steve": {
+        "beginningNetWorth": 250000,
+        "investmentSnapshots": {},
+        "trackMortgageInNetWorth": False,
+        "mortgageSchedule": None,
+        "updatedAt": SEED_TIMESTAMP,
+    }
+}
+
 
 def clone_seed_data(allowed_email: str | None = None):
     users = deepcopy(SEED_USERS)
@@ -704,4 +714,5 @@ def clone_seed_data(allowed_email: str | None = None):
         "budget_categories": deepcopy(SEED_BUDGET_CATEGORIES),
         "accounts": deepcopy(SEED_ACCOUNTS),
         "holdings": deepcopy(SEED_HOLDINGS),
+        "net_worth": deepcopy(SEED_NET_WORTH),
     }
