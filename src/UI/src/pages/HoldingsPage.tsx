@@ -180,6 +180,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [dirtyHoldingIds, setDirtyHoldingIds] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState('');
+  const [selectedAccountFilterId, setSelectedAccountFilterId] = useState('');
   const [results, setResults] = useState<SecurityMetadata[]>([]);
   const [selectedSecurity, setSelectedSecurity] = useState<SecurityMetadata | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -272,8 +273,8 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   );
 
   const orderedHoldings = useMemo(
-    () => [...holdings].sort((a, b) => a.security.assetType.localeCompare(b.security.assetType) || a.security.name.localeCompare(b.security.name)),
-    [holdings],
+    () => [...holdings].filter((holding) => !selectedAccountFilterId || holding.accountPositions.some((position) => position.accountId === selectedAccountFilterId && position.quantity > 0)).sort((a, b) => a.security.assetType.localeCompare(b.security.assetType) || a.security.name.localeCompare(b.security.name)),
+    [holdings, selectedAccountFilterId],
   );
 
   const investmentValues = useMemo(() => {
@@ -769,6 +770,14 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
             </button>
           </div>
           <p>Manage share quantities by investment account.</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <label htmlFor="holdings-account-filter">Account</label>
+            <select id="holdings-account-filter" aria-label="Filter holdings by account" value={selectedAccountFilterId} onChange={(event) => setSelectedAccountFilterId(event.target.value)}>
+              <option value="">All accounts</option>
+              {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+            </select>
+            {selectedAccountFilterId ? <button className="link-button" type="button" onClick={() => setSelectedAccountFilterId('')}>Show all accounts</button> : null}
+          </div>
         </div>
         <div className="funding-section-actions">
           <input ref={importInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => void importHoldingDetails(event)} />
@@ -838,10 +847,10 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
             </tr>
           </thead>
           <tbody>
-            {holdings.length === 0 ? (
+            {orderedHoldings.length === 0 ? (
               <tr>
                 <td colSpan={6 + managedAccounts.length}>
-                  <span className="excel-cell-val">No holdings have been added yet.</span>
+                  <span className="excel-cell-val">{holdings.length === 0 ? 'No holdings have been added yet.' : 'No holdings are in the selected account.'}</span>
                 </td>
               </tr>
             ) : (

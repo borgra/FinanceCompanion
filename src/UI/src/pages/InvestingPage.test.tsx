@@ -381,6 +381,39 @@ describe('InvestingPage', () => {
     await waitFor(() => expect(zebraRetirement).toHaveFocus());
   });
 
+  it('filters holdings to a selected account and restores all holdings', async () => {
+    const user = userEvent.setup();
+    const retirementAccount = { ...investmentAccounts[0], id: 'acc-401k', name: 'Fidelity 401k', investmentAccountType: '401k' as const };
+    const holdings: Holding[] = [
+      {
+        id: 'holding-taxable',
+        security: { symbol: 'TAX', name: 'Taxable Security', exchange: 'NYSE', assetType: 'ETF', currency: 'USD', price: 100 },
+        accountPositions: [{ accountId: 'acc-taxable-brokerage', quantity: 2, costBasis: null }],
+        createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'holding-retirement',
+        security: { symbol: 'RET', name: 'Retirement Security', exchange: 'NYSE', assetType: 'Equity', currency: 'USD', price: 100 },
+        accountPositions: [{ accountId: 'acc-401k', quantity: 3, costBasis: null }],
+        createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    const holdingRepository = { ...createMockHoldingRepository(), listHoldings: async () => holdings };
+
+    render(<InvestingPage accountRepository={createMockAccountRepository({ initialAccounts: [investmentAccounts[0], retirementAccount] })} holdingRepository={holdingRepository} incomeRepository={createMockIncomeSourceRepository()} />);
+    await user.click(screen.getByRole('tab', { name: 'Holdings' }));
+
+    expect(await screen.findByText('Taxable Security')).toBeInTheDocument();
+    expect(screen.getByText('Retirement Security')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Filter holdings by account'), 'acc-401k');
+    expect(await screen.findByText('Retirement Security')).toBeInTheDocument();
+    expect(screen.queryByText('Taxable Security')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Show all accounts' }));
+    expect(await screen.findByText('Taxable Security')).toBeInTheDocument();
+    expect(screen.getByText('Retirement Security')).toBeInTheDocument();
+  });
   it('shows passive income by month with prior actuals and current and next-year estimates', async () => {
     const holdingRepository = createMockHoldingRepository();
     const currentYear = new Date().getFullYear();
