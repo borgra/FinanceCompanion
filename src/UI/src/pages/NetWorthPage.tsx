@@ -38,9 +38,6 @@ type MonthlyNetWorthRow = {
 };
 
 const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-const compactCurrencyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 0,
-});
 const formatMoney = (value: number) => value < 0
   ? `(${currencyFormatter.format(Math.abs(value))})`
   : currencyFormatter.format(value);

@@ -88,7 +88,9 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
           extraPrincipalOverrides: saved.mortgageSchedule?.extraPrincipalOverrides,
         });
       }
-      setTrackMortgage(saved.trackMortgageInNetWorth ?? trackMortgage);
+      const savedTrackingState = saved.trackMortgageInNetWorth ?? trackMortgage;
+      setTrackMortgage(savedTrackingState);
+      onMortgageTrackingSaved?.(savedTrackingState);
       setMortgageVisibilityMessage('Mortgage tracking configuration saved.');
     } catch {
       setMortgageVisibilityError('Unable to save mortgage tracking configuration.');

@@ -24,7 +24,7 @@ jobs:
     environment: deployment
     concurrency:
       group: frontend-deployment
-      cancel-in-progress: true
+      cancel-in-progress: false
 
     steps:
       - name: Checkout
@@ -40,6 +40,14 @@ jobs:
       - name: Install
         working-directory: src/UI
         run: npm ci
+
+      - name: Lint
+        working-directory: src/UI
+        run: npm run lint
+
+      - name: Test
+        working-directory: src/UI
+        run: npm test
 
       - name: Azure login
         uses: azure/login@v2
@@ -80,6 +88,7 @@ jobs:
               --query "defaultHostname" \
               --output tsv \
               --only-show-errors)"
+            echo "SWA_HOSTNAME=${SWA_HOSTNAME}" >> "${GITHUB_ENV}"
             echo "VITE_ENTRA_REDIRECT_URI=https://${SWA_HOSTNAME}" >> "${GITHUB_ENV}"
 
             API_CONTAINER_APP_NAME="$(az containerapp list \
@@ -107,6 +116,10 @@ jobs:
           VITE_ENTRA_REDIRECT_URI: ${{ env.VITE_ENTRA_REDIRECT_URI }}
         run: npm run build
 
+      - name: Verify build artifact
+        working-directory: src/UI
+        run: npm run verify:dist-assets
+
       - name: Deploy
         uses: Azure/static-web-apps-deploy@v1
         with:
@@ -115,3 +128,14 @@ jobs:
           action: upload
           app_location: src/UI/dist
           skip_app_build: true
+
+      - name: Verify deployed security controls
+        run: node src/UI/scripts/verify-deployment.mjs "https://${{ env.SWA_HOSTNAME }}"
+
+      - name: Install Chromium for browser security smoke test
+        working-directory: src/UI
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify browser security smoke test
+        working-directory: src/UI
+        run: npm run verify:browser-security -- "https://${{ env.SWA_HOSTNAME }}"

@@ -76,6 +76,7 @@ export function LandingPage({ repository, budgetRepository, accountRepository, h
                   incomeRepository={repository}
                   holdingRepository={holdingRepository}
                   netWorthRepository={netWorthRepository}
+                  mortgageTrackingOverride={mortgageTrackingOverride}
                 />
               );
             }

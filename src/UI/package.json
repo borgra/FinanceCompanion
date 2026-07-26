@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite --configLoader runner",
     "build": "tsc --noEmit -p tsconfig.app.json && vite build --configLoader runner",
+    "verify:dist-assets": "node scripts/verify-dist-assets.mjs",
+    "verify:browser-security": "node scripts/verify-browser-security.mjs",
     "lint": "eslint .",
     "test": "vitest run --configLoader runner",
     "preview": "vite preview --configLoader runner"
@@ -17,6 +19,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
+    "@playwright/test": "^1.62.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
