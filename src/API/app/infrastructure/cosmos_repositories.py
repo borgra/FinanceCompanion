@@ -161,7 +161,8 @@ def _account_from_entity(entity: dict) -> Account:
     monthly_records = [
         MonthlyRecord(
             month=r["month"],
-            credit=float(r["credit"]),
+            credit=float(r['credit']),
+            additional_income=float(r.get('additional_income', r.get('additionalIncome', 0))),
             outflows={k: float(v) for k, v in r["outflows"].items()},
             invest=float(r["invest"]),
             savings=float(r["savings"]),
@@ -817,8 +818,3 @@ class CosmosHoldingRepository:
             self._client.delete_entity(user_id, f"holding:{holding_id}")
         except ResourceNotFoundError as exc:
             raise NotFoundError("Holding not found.") from exc
-
-
-
-
-

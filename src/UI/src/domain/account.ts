@@ -13,6 +13,7 @@ export type AccountColumn = {
 export type MonthlyRecord = {
   month: string; // e.g. "Jan-26"
   credit: number;
+  additionalIncome?: number;
   outflows: Record<string, number>; // key is column id or name
   invest: number;
   savings: number;
@@ -84,6 +85,7 @@ export const defaultMonthlyRecords = (): MonthlyRecord[] =>
   projectionMonthsList.map((month) => ({
     month,
     credit: 0,
+    additionalIncome: 0,
     outflows: {},
     invest: 0,
     savings: 0,

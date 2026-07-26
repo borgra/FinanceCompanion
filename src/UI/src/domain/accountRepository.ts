@@ -58,6 +58,7 @@ const draftToAccountFields = (draft: AccountDraft) => ({
   monthlyRecords: draft.monthlyRecords.map((r) => ({
     month: r.month,
     credit: Number(r.credit) || 0,
+    additionalIncome: Number(r.additionalIncome) || 0,
     outflows: Object.keys(r.outflows).reduce((acc, key) => {
       acc[key] = Number(r.outflows[key]) || 0;
       return acc;
@@ -275,4 +276,3 @@ export function createMockAccountRepository({
       }),
   };
 }
-

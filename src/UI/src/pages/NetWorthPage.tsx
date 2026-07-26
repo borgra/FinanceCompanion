@@ -96,7 +96,7 @@ const computeBankingValues = (
     if (!record) return { month: month.name, value: currentStart };
     const credit = account.type === 'Savings'
       ? Number(record.credit) || 0
-      : getMonthlyNetIncomeForMonth(incomeSources, month.dateCode, account.assignedIncomeSourceIds ?? []);
+      : getMonthlyNetIncomeForMonth(incomeSources, month.dateCode, account.assignedIncomeSourceIds ?? []) + (account.type === 'Checking' ? Number(record.additionalIncome) || 0 : 0);
     const expenses = Object.values(record.outflows ?? {}).reduce((total, amount) => total + (Number(amount) || 0), 0);
     currentStart = account.type === 'Savings'
       ? currentStart + credit - expenses - (Number(record.invest) || 0) + (Number(record.savings) || 0)
@@ -335,20 +335,4 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
     </section>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

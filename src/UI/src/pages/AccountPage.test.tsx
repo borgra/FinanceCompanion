@@ -762,5 +762,23 @@ describe('AccountPage', () => {
     expect(screen.getByText('Select Account')).toBeInTheDocument();
     expect(screen.getAllByText('Chase Checking').length).toBeGreaterThan(0);
   });
-});
+  it('adds, persists, and includes monthly Additional Income in checking totals', async () => {
+    const repository = renderPage();
 
+    expect(await screen.findByText('Liberty Federal Credit Union')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /additional income/i })).toBeInTheDocument();
+
+    const januaryAdditionalIncome = document.querySelector<HTMLInputElement>(
+      '[data-ledger-cell="additional-income-0"]',
+    );
+    expect(januaryAdditionalIncome).not.toBeNull();
+
+    await userEvent.clear(januaryAdditionalIncome!);
+    await userEvent.type(januaryAdditionalIncome!, '250');
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    const updated = (await repository.listAccounts()).find((account) => account.id === 'acc-lfcu');
+    expect(updated?.monthlyRecords[0].additionalIncome).toBe(250);
+    expect(screen.getAllByText('$26,877.00').length).toBeGreaterThan(0);
+  });
+});

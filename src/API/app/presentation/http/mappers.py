@@ -127,6 +127,7 @@ def to_monthly_record(item: MonthlyRecordPayload) -> MonthlyRecord:
     return MonthlyRecord(
         month=item.month,
         credit=item.credit,
+        additional_income=item.additional_income,
         outflows=item.outflows,
         invest=item.invest,
         savings=item.savings,
@@ -193,6 +194,7 @@ def to_account_payload(item: Account) -> AccountPayload:
             MonthlyRecordPayload(
                 month=record.month,
                 credit=record.credit,
+                additional_income=record.additional_income,
                 outflows=record.outflows,
                 invest=record.invest,
                 savings=record.savings,

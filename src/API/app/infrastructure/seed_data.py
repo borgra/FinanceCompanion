@@ -22,7 +22,7 @@ PROJECTION_MONTHS = [
 
 def _empty_monthly_records():
     return [
-        {"month": month, "credit": 0, "outflows": {}, "invest": 0, "savings": 0}
+        {"month": month, "credit": 0, "additionalIncome": 0, "outflows": {}, "invest": 0, "savings": 0}
         for month in PROJECTION_MONTHS
     ]
 

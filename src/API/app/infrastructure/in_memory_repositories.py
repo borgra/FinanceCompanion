@@ -90,7 +90,8 @@ def _account_column_from_dict(data: dict) -> AccountColumn:
 def _monthly_record_from_dict(data: dict) -> MonthlyRecord:
     return MonthlyRecord(
         month=data["month"],
-        credit=float(data["credit"]),
+        credit=float(data['credit']),
+        additional_income=float(data.get('additionalIncome', 0)),
         outflows={key: float(value) for key, value in data["outflows"].items()},
         invest=float(data["invest"]),
         savings=float(data["savings"]),
@@ -440,9 +441,3 @@ class InMemoryHoldingRepository:
         if not any(item.id == holding_id for item in items):
             raise NotFoundError("Holding not found.")
         self._store.holdings[user_id] = [item for item in items if item.id != holding_id]
-
-
-
-
-
-

@@ -114,6 +114,7 @@ type ComputedRecord = {
   month: string;
   start: number;
   credit: number;
+  additionalIncome: number;
   outflows: Record<string, number>;
   expenses: number;
   subtotal: number;
@@ -150,6 +151,7 @@ const computeAccountRecords = (
 
     let start = 0;
     let credit = 0;
+    let additionalIncome = 0;
     const outflows: Record<string, number> = {};
     let expenses = 0;
     let invest = 0;
@@ -161,6 +163,7 @@ const computeAccountRecords = (
         month: record.month,
         start,
         credit,
+        additionalIncome,
         outflows,
         expenses,
         subtotal: 0,
@@ -181,6 +184,7 @@ const computeAccountRecords = (
       account.type === 'Savings'
         ? Number(record.credit) || 0
         : getMonthlyNetIncomeForMonth(incomeSources, monthCode, assignedIncomeSourceIds);
+    additionalIncome = account.type === 'Checking' ? Number(record.additionalIncome) || 0 : 0;
 
     account.columns.forEach((col) => {
       const val = Number(record.outflows[col.id]) || 0;
@@ -191,9 +195,9 @@ const computeAccountRecords = (
     invest = Number(record.invest) || 0;
     savings = Number(record.savings) || 0;
     if (account.type === 'Savings') {
-      net = start + credit - expenses - invest + savings;
+      net = start + credit + additionalIncome - expenses - invest + savings;
     } else {
-      net = start + credit - expenses - invest - savings;
+      net = start + credit + additionalIncome - expenses - invest - savings;
     }
     currentStart = net;
 
@@ -201,9 +205,10 @@ const computeAccountRecords = (
       month: record.month,
       start,
       credit,
+      additionalIncome,
       outflows,
       expenses,
-      subtotal: start + credit - expenses,
+      subtotal: start + credit + additionalIncome - expenses,
       invest,
       savings,
       net,
@@ -690,7 +695,7 @@ export function AccountPage({
     await refreshAccounts();
   };
 
-  const updateCell = (index: number, field: 'credit' | 'invest' | 'savings', value: string) => {
+  const updateCell = (index: number, field: 'credit' | 'additionalIncome' | 'invest' | 'savings', value: string) => {
     if (!draftAccount) return;
     const val = parseMoneyInput(value);
     const nextRecords = draftAccount.monthlyRecords.map((r, idx) =>
@@ -720,7 +725,7 @@ export function AccountPage({
 
   const fillDownCell = (
     index: number,
-    field: 'credit' | 'invest' | 'savings',
+    field: 'credit' | 'additionalIncome' | 'invest' | 'savings',
     value: string,
   ) => {
     if (!draftAccount) return;
@@ -901,7 +906,7 @@ export function AccountPage({
     let savingsSum = 0;
     
     computedRecords.forEach((r) => {
-      creditSum += r.credit;
+      creditSum += r.credit + r.additionalIncome;
       expenseSum += r.expenses;
       investSum += r.invest;
       savingsSum += r.savings;
@@ -1775,6 +1780,17 @@ export function AccountPage({
                           {isSavingsLedger ? 'Interest' : 'Credit'}
                         </FinanceTableHeaderCell>
 
+                        {!isSavingsLedger ? (
+                          <FinanceTableHeaderCell
+                            contentClassName="excel-col-credit"
+                            icon="add_circle"
+                            isEditable
+                            title="Miscellaneous income received this month"
+                            style={{ borderBottom: '2.5px solid #34d399' }}
+                          >
+                            Additional Income
+                          </FinanceTableHeaderCell>
+                        ) : null}
                         {/* Active category columns */}
                         {activeColumns.map((col, index) => (
                           <FinanceTableHeaderCell
@@ -1859,6 +1875,24 @@ export function AccountPage({
                                 </span>
                               )}
                             </td>
+                            {!isSavingsLedger ? (
+                              <td className="excel-col-credit">
+                                <FinanceMoneyCellInput
+                                  aria-label={`Additional Income ${row.month}`}
+                                  value={row.additionalIncome}
+                                  formatValue={formatMoney}
+                                  onValueChange={(val) => updateCell(m, 'additionalIncome', val)}
+                                  focusId={`additional-income-${m}`}
+                                  nextFocusId={
+                                    m < computedRecords.length - 1
+                                      ? `additional-income-${m + 1}`
+                                      : undefined
+                                  }
+                                  fillDownLabel={`Auto-populate Additional Income from ${row.month} down`}
+                                  onFillDown={(val) => fillDownCell(m, 'additionalIncome', val)}
+                                />
+                              </td>
+                            ) : null}
                             {activeColumns.map((col) => (
                               <td key={col.id}>
                                 <FinanceMoneyCellInput

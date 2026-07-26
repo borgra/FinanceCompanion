@@ -122,6 +122,7 @@ class AccountColumnPayload(CamelModel):
 class MonthlyRecordPayload(CamelModel):
     month: str
     credit: float
+    additional_income: float = Field(default=0, serialization_alias="additionalIncome")
     outflows: dict[str, float]
     invest: float
     savings: float
@@ -384,13 +385,3 @@ class InvestmentSnapshotsPutRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     investment_snapshots: dict[str, dict[str, float]] = Field(alias="investmentSnapshots")
-
-
-
-
-
-
-
-
-
-
