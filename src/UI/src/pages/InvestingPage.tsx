@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import type { AccountRepository } from '../domain/accountRepository';
 import type { HoldingRepository } from '../domain/holdingRepository';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
+import type { RetirementPlanRepository } from '../domain/retirementPlanRepository';
 import { FundingSchedulePage } from './FundingSchedulePage';
 import { HoldingsPage } from './HoldingsPage';
 import { PassiveIncomePage } from './PassiveIncomePage';
+import { RetirementPlanningPage } from '../features/retirementPlanning/RetirementPlanningPage';
 
 type InvestingSectionId =
   | 'funding-schedule'
@@ -45,14 +47,21 @@ const investingSections: InvestingSection[] = [
     description: 'Model long-term targets, timelines, and retirement readiness.',
   },
 ];
+const fallbackRetirementPlanRepository: RetirementPlanRepository = {
+  get: async () => undefined,
+  put: async (plan) => plan,
+};
+
 
 type InvestingPageProps = {
   accountRepository: AccountRepository;
   holdingRepository: HoldingRepository;
   incomeRepository: IncomeSourceRepository;
+  retirementPlanRepository?: RetirementPlanRepository;
 };
 
-export function InvestingPage({ accountRepository, holdingRepository, incomeRepository }: InvestingPageProps) {
+export function InvestingPage({ accountRepository, holdingRepository, incomeRepository, retirementPlanRepository }: InvestingPageProps) {
+  const resolvedRetirementPlanRepository = retirementPlanRepository ?? fallbackRetirementPlanRepository;
   const [activeSectionId, setActiveSectionId] =
     useState<InvestingSectionId>('funding-schedule');
 
@@ -124,15 +133,11 @@ export function InvestingPage({ accountRepository, holdingRepository, incomeRepo
       ) : (
         <section
           aria-labelledby={`investing-tab-${activeSection.id}`}
-          className="empty-state"
           id={`investing-panel-${activeSection.id}`}
           role="tabpanel"
         >
-          <span className="material-symbols-outlined" aria-hidden="true">
-            show_chart
-          </span>
-          <h2>{activeSection.title}</h2>
-          <p>{activeSection.description}</p>
+          <RetirementPlanningPage accountRepository={accountRepository} holdingRepository={holdingRepository} retirementPlanRepository={resolvedRetirementPlanRepository} onAddHoldings={() => setActiveSectionId('holdings')} />
+          <p className="sr-only">{activeSection.description}</p>
         </section>
       )}
     </section>

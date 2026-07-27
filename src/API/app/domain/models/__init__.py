@@ -7,6 +7,7 @@ from .income_source import IncomeSource
 from .holding import Holding, HoldingAccountPosition
 from .monthly_record import MonthlyRecord
 from .net_worth import NetWorth
+from .retirement_plan import ContributionPlan, ExpenseChange, RetirementPlan, SocialSecurityPlan
 from .security_metadata import CorporateAction, SecurityMetadata, SecurityPayoutDetails
 from .session_user import SessionUser
 from .user import User
@@ -20,6 +21,10 @@ __all__ = [
     "IncomePeriod",
     "IncomeSource",
     "Holding",
+    "ContributionPlan",
+    "ExpenseChange",
+    "RetirementPlan",
+    "SocialSecurityPlan",
     "HoldingAccountPosition",
     "MonthlyRecord",
     "NetWorth",

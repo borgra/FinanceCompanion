@@ -6,6 +6,7 @@ import { HttpClient } from './api/httpClient';
 import { createHoldingApiRepository } from './api/holdingApiRepository';
 import { createIncomeSourceApiRepository } from './api/incomeSourceApiRepository';
 import { createNetWorthApiRepository } from './api/netWorthApiRepository';
+import { createRetirementPlanApiRepository } from './api/retirementPlanApiRepository';
 import { AuthPage } from './auth/AuthPage';
 import type { AuthSession } from './auth/authTypes';
 import { LandingPage } from './pages/LandingPage';
@@ -56,6 +57,7 @@ export function App() {
   const accountRepository = createAccountApiRepository(client);
   const holdingRepository = createHoldingApiRepository(client);
   const netWorthRepository = createNetWorthApiRepository(client);
+  const retirementPlanRepository = createRetirementPlanApiRepository(client);
 
   return (
     <>
@@ -79,6 +81,7 @@ export function App() {
         accountRepository={accountRepository}
         holdingRepository={holdingRepository}
         netWorthRepository={netWorthRepository}
+        retirementPlanRepository={retirementPlanRepository}
       />
     </>
   );

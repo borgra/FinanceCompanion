@@ -16,6 +16,7 @@ from app.domain.models import (
     IncomeSource,
     MonthlyRecord,
     NetWorth,
+    RetirementPlan,
     SecurityMetadata,
     SecurityPayoutDetails,
     User,
@@ -241,6 +242,7 @@ class InMemoryDataStore:
             )
             for user_id, item in data["net_worth"].items()
         }
+        self.retirement_plans: dict[str, RetirementPlan] = {}
 
 
 class InMemoryUserRepository:
@@ -405,6 +407,19 @@ class InMemoryNetWorthRepository:
     def put_for_user(self, user_id: str, net_worth: NetWorth) -> NetWorth:
         self._store.net_worth[user_id] = deepcopy(net_worth)
         return deepcopy(net_worth)
+
+class InMemoryRetirementPlanRepository:
+    def __init__(self, store: InMemoryDataStore) -> None:
+        self._store = store
+
+    def get_for_user(self, user_id: str) -> RetirementPlan | None:
+        value = self._store.retirement_plans.get(user_id)
+        return deepcopy(value) if value else None
+
+    def put_for_user(self, user_id: str, plan: RetirementPlan) -> RetirementPlan:
+        self._store.retirement_plans[user_id] = deepcopy(plan)
+        return deepcopy(plan)
+
 
 
 class InMemoryHoldingRepository:

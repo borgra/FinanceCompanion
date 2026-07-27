@@ -21,6 +21,10 @@ from app.domain.models import (
     IncomeSource,
     MonthlyRecord,
     NetWorth,
+    ContributionPlan,
+    ExpenseChange,
+    RetirementPlan,
+    SocialSecurityPlan,
     SecurityMetadata,
     SecurityPayoutDetails,
     User,
@@ -772,6 +776,44 @@ class CosmosNetWorthRepository:
             "updatedAt": net_worth.updated_at,
         })
         return deepcopy(net_worth)
+
+
+class CosmosRetirementPlanRepository:
+    def __init__(self, client: TableClient) -> None:
+        self._client = client
+
+    def get_for_user(self, user_id: str) -> RetirementPlan | None:
+        try:
+            entity = self._client.get_entity(user_id, "retirement_plan")
+        except ResourceNotFoundError:
+            return None
+        data = json.loads(entity["planJson"])
+        return RetirementPlan(
+            id=data["id"],
+            name=data["name"],
+            current_age=data["current_age"],
+            retirement_age=data["retirement_age"],
+            longevity_age=data["longevity_age"],
+            annual_roi_percent=data["annual_roi_percent"],
+            withdrawal_rate_percent=data["withdrawal_rate_percent"],
+            annual_retirement_expense=data["annual_retirement_expense"],
+            withdrawal_mode=data["withdrawal_mode"],
+            taxable_contribution=ContributionPlan(**data["taxable_contribution"]),
+            retirement_contribution=ContributionPlan(**data["retirement_contribution"]),
+            expense_changes=[ExpenseChange(**item) for item in data["expense_changes"]],
+            social_security=SocialSecurityPlan(**data["social_security"]),
+            include_hsa_in_retirement=data["include_hsa_in_retirement"],
+            updated_at=data["updated_at"],
+        )
+
+    def put_for_user(self, user_id: str, plan: RetirementPlan) -> RetirementPlan:
+        self._client.upsert_entity({
+            "PartitionKey": user_id,
+            "RowKey": "retirement_plan",
+            "planJson": json.dumps(asdict(plan)),
+            "updatedAt": plan.updated_at,
+        })
+        return deepcopy(plan)
 
 
 class CosmosHoldingRepository:

@@ -13,6 +13,7 @@ from app.application.use_cases.budgets import (
     UpdateBudgetSubCategory,
 )
 from app.application.use_cases.net_worth import GetNetWorth, PutNetWorth
+from app.application.use_cases.retirement_plan import GetRetirementPlan, PutRetirementPlan
 from app.application.use_cases.income_sources import (
     CreateIncomeSource,
     ListIncomeSources,
@@ -44,6 +45,7 @@ from app.infrastructure.in_memory_repositories import (
     InMemoryHoldingRepository,
     InMemoryIncomeSourceRepository,
     InMemoryNetWorthRepository,
+    InMemoryRetirementPlanRepository,
     InMemoryUserRepository,
 )
 from app.infrastructure.alpha_vantage_security_details import AlphaVantageSecurityDetailsProvider
@@ -76,6 +78,8 @@ class Container:
     delete_account: DeleteAccount
     get_net_worth: GetNetWorth
     put_net_worth: PutNetWorth
+    get_retirement_plan: GetRetirementPlan
+    put_retirement_plan: PutRetirementPlan
     list_holdings: ListHoldings
     create_holding: CreateHolding
     update_holding: UpdateHolding
@@ -106,6 +110,7 @@ def build_container(
             CosmosIncomeSourceRepository,
             CosmosNetWorthRepository,
             CosmosUserRepository,
+            CosmosRetirementPlanRepository,
         )
 
         client = TableClient.from_connection_string(
@@ -123,6 +128,7 @@ def build_container(
         accounts = CosmosAccountRepository(client)
         holdings = CosmosHoldingRepository(client)
         net_worth = CosmosNetWorthRepository(client)
+        retirement_plans = CosmosRetirementPlanRepository(client)
     else:
         store = InMemoryDataStore(allowed_email=settings.allowed_email)
         users = InMemoryUserRepository(store)
@@ -132,6 +138,7 @@ def build_container(
         holdings = InMemoryHoldingRepository(store)
         net_worth = InMemoryNetWorthRepository(store)
 
+        retirement_plans = InMemoryRetirementPlanRepository(store)
     verifier = verifier or EntraIdentityTokenVerifier()
     session_tokens = JwtSessionTokenService(
         secret=settings.session_secret,
@@ -170,6 +177,8 @@ def build_container(
         get_net_worth=GetNetWorth(net_worth),
         put_net_worth=PutNetWorth(net_worth),
         list_holdings=ListHoldings(holdings),
+        get_retirement_plan=GetRetirementPlan(retirement_plans),
+        put_retirement_plan=PutRetirementPlan(retirement_plans),
         create_holding=CreateHolding(holdings),
         update_holding=UpdateHolding(holdings),
         update_holdings_batch=UpdateHoldingsBatch(holdings),

@@ -3854,3 +3854,1075 @@ button.security-result:hover {
 .csv-action-menu-items button:focus-visible {
   background: var(--md-sys-color-secondary-container);
 }
+
+/* Retirement Planning */
+.retirement-planner {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+  color: var(--md-sys-color-on-surface);
+}
+
+.retirement-assumptions,
+.retirement-results {
+  min-width: 0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-l);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--md-sys-color-surface-container-high) 34%, transparent), transparent 42%),
+    var(--md-sys-color-surface-container);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.retirement-results {
+  padding: clamp(18px, 2.2vw, 28px);
+}
+
+.retirement-assumptions-header,
+.retirement-results-header {
+  display: grid;
+  gap: 4px;
+}
+
+.retirement-assumptions h2,
+.retirement-results h2 {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-font-display);
+}
+
+.retirement-assumptions-header > p:last-child,
+.retirement-results > p,
+.retirement-source {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.retirement-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.retirement-summary div {
+  min-width: 0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-m);
+  background: var(--md-sys-color-surface-container-high);
+  padding: 12px 14px;
+}
+
+.retirement-summary dt {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
+
+.retirement-summary dd {
+  margin: 5px 0 0;
+  color: var(--md-sys-color-on-surface);
+  font-family: Consolas, Monaco, "Lucida Console", monospace;
+  font-size: clamp(0.92rem, 1.3vw, 1.08rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.retirement-source {
+  margin-top: 14px;
+  font-size: 0.78rem;
+}
+
+
+.retirement-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 420px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.retirement-assumptions {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+  align-self: start;
+  padding: 18px;
+}
+
+.retirement-assumptions-header {
+  padding: 2px 2px 10px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.retirement-assumptions-header > p:last-child {
+  font-size: 0.78rem;
+}
+
+.retirement-valuation-status {
+  display: grid;
+  gap: 8px;
+  padding: 0 2px 4px;
+}
+
+.retirement-valuation-status .retirement-source,
+.retirement-valuation-status .notice {
+  margin: 0;
+}
+
+.retirement-assumption-section {
+  min-inline-size: 0;
+  margin: 0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-m);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high) 52%, transparent);
+  overflow: clip;
+}
+
+.retirement-assumption-section[open] {
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 45%, var(--md-sys-color-outline-variant));
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high) 72%, transparent);
+}
+
+.retirement-assumption-heading {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  color: var(--md-sys-color-primary);
+  font-family: var(--md-sys-font-display);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+
+.retirement-assumption-heading::-webkit-details-marker {
+  display: none;
+}
+
+.retirement-assumption-heading::after {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 1rem;
+  line-height: 1;
+  content: "+";
+}
+
+.retirement-assumption-section[open] > .retirement-assumption-heading {
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.retirement-assumption-section[open] > .retirement-assumption-heading::after {
+  content: "−";
+}
+
+.retirement-assumption-heading:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary-container) 38%, transparent);
+}
+
+.retirement-assumption-heading:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: -3px;
+}
+
+.retirement-assumption-grid {
+  display: grid;
+  gap: 0;
+  padding: 6px 10px;
+}
+
+.retirement-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(108px, 132px);
+  gap: 8px 12px;
+  align-items: center;
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 70%, transparent);
+}
+
+.retirement-field:last-child {
+  border-bottom: 0;
+}
+
+.retirement-field > span {
+  min-width: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.retirement-field input,
+.retirement-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-s);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard), box-shadow var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard), background-color var(--md-sys-motion-duration-short) var(--md-sys-motion-easing-standard);
+}
+
+.retirement-field input:hover,
+.retirement-field select:hover {
+  border-color: var(--md-sys-color-on-surface-variant);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-highest) 88%, var(--md-sys-color-on-surface));
+}
+
+.retirement-field input:focus-visible,
+.retirement-field select:focus-visible {
+  border-color: var(--md-sys-color-primary);
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px var(--md-sys-color-primary-container);
+}
+
+.retirement-field input[aria-invalid="true"],
+.retirement-field select[aria-invalid="true"] {
+  border-color: var(--md-sys-color-error);
+  box-shadow: inset 3px 0 0 var(--md-sys-color-error);
+}
+
+.retirement-field .field-error {
+  grid-column: 1 / -1;
+  color: var(--md-sys-color-error);
+  font-size: 0.72rem;
+}
+
+.retirement-assumption-grid > .field-hint {
+  margin: 8px 2px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.retirement-contribution-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.retirement-contribution-set {
+  display: grid;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 70%, transparent);
+  border-radius: var(--md-sys-shape-corner-s);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container) 70%, transparent);
+  padding: 6px 9px 2px;
+}
+
+.retirement-contribution-set h3 {
+  margin: 2px 0 3px;
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.retirement-full-row,
+.retirement-form-actions > .checkbox-row {
+  width: 100%;
+  margin: 5px 0;
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.retirement-full-row {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.retirement-assumptions input[type="checkbox"] {
+  accent-color: var(--md-sys-color-primary);
+}
+
+.expense-change-row {
+  display: grid;
+  gap: 0;
+  margin-bottom: 10px;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 72%, transparent);
+  border-radius: var(--md-sys-shape-corner-s);
+  background: color-mix(in srgb, var(--md-sys-color-surface-container) 70%, transparent);
+  padding: 5px 9px 9px;
+}
+
+.expense-change-row .warning-text {
+  margin: 6px 2px;
+  color: var(--md-sys-color-error);
+  font-size: 0.72rem;
+}
+
+.expense-change-row .secondary-action,
+.retirement-expense-section .retirement-assumption-grid > .secondary-action {
+  justify-self: start;
+  min-height: 34px;
+  margin-top: 7px;
+  padding: 0 12px;
+  font-size: 0.76rem;
+}
+
+.retirement-form-actions {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.retirement-form-actions .primary-action {
+  width: 100%;
+  min-height: 44px;
+}
+
+.retirement-form-actions .notice {
+  margin: 0;
+}
+
+.retirement-error-summary:focus,
+.retirement-results h2:focus {
+  outline: 3px solid var(--md-sys-color-primary);
+  outline-offset: 3px;
+}
+
+.retirement-results {
+  display: grid;
+  gap: 16px;
+}
+
+.retirement-results-header {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.retirement-summary {
+  margin: 0;
+}
+
+.retirement-outcome {
+  display: grid;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 45%, var(--md-sys-color-outline-variant));
+  border-left: 4px solid var(--md-sys-color-primary);
+  border-radius: var(--md-sys-shape-corner-m);
+  background: var(--md-sys-color-primary-container);
+  padding: 12px 14px;
+}
+
+.retirement-outcome.has-gap {
+  border-color: var(--md-sys-color-error);
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+}
+
+.retirement-outcome p {
+  margin: 0;
+}
+
+.retirement-chart {
+  margin: 0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-m);
+  background: var(--md-sys-color-surface-container-high);
+  padding: 16px;
+}
+
+.retirement-chart figcaption {
+  margin-bottom: 14px;
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.retirement-chart-plot {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  min-width: 0;
+}
+
+.retirement-chart-axis {
+  display: flex;
+  height: 190px;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: Consolas, Monaco, "Lucida Console", monospace;
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.retirement-chart-bars {
+  display: flex;
+  align-items: end;
+  gap: 2px;
+  height: 190px;
+  min-width: 0;
+  border-bottom: 2px solid var(--md-sys-color-outline);
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent 62px, var(--md-sys-color-outline-variant) 63px, transparent 64px);
+}
+
+.retirement-chart-bars span {
+  flex: 1 1 0;
+  min-width: 2px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, var(--md-sys-color-secondary), color-mix(in srgb, var(--md-sys-color-secondary) 58%, var(--md-sys-color-primary)));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-sys-color-secondary) 58%, transparent);
+}
+
+.retirement-chart-bars span.has-gap {
+  background: repeating-linear-gradient(45deg, var(--md-sys-color-error), var(--md-sys-color-error) 4px, var(--md-sys-color-error-container) 4px, var(--md-sys-color-error-container) 7px);
+  outline: 1px solid var(--md-sys-color-error);
+}
+
+.retirement-chart-markers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 18px;
+  margin: 14px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.72rem;
+  list-style: none;
+}
+
+.retirement-chart-markers li::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border: 1px solid var(--md-sys-color-primary);
+  border-radius: 50%;
+  background: var(--md-sys-color-primary-container);
+  content: "";
+}
+
+.retirement-phase {
+  display: grid;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.retirement-phase > h3,
+.retirement-mobile-phase > h3 {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-font-display);
+  font-size: 0.95rem;
+}
+
+.retirement-phase > p {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.8rem;
+}
+
+.retirement-table--contribution {
+  min-width: 66rem;
+}
+
+.retirement-table--bridge {
+  min-width: 61rem;
+}
+.retirement-table-wrap {
+  position: relative;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-m);
+  background: var(--md-sys-color-surface-container);
+  scrollbar-color: var(--md-sys-color-outline) var(--md-sys-color-surface-container-high);
+}
+
+.retirement-table-wrap::after {
+  position: sticky;
+  right: 10px;
+  bottom: 4px;
+  float: right;
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface-variant);
+  padding: 3px 8px;
+  font-size: 0.66rem;
+  content: "Scroll for more →";
+  pointer-events: none;
+}
+
+.retirement-table {
+  width: 100%;
+  min-width: 90rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--md-sys-color-on-surface);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.retirement-table caption {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  text-align: left;
+}
+
+.retirement-table th,
+.retirement-table td {
+  height: 40px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.retirement-table thead th,
+.retirement-table thead td {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 40px;
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-font-display);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.retirement-table--contribution thead tr:first-child th {
+  text-align: center;
+}
+
+.retirement-table--contribution .contribution-taxable-group,
+.retirement-table--contribution .contribution-taxable-column {
+  background: #9fc5e8;
+  color: #10263d;
+}
+
+.retirement-table--contribution .contribution-retirement-group,
+.retirement-table--contribution .contribution-retirement-column {
+  background: #f1b07a;
+  color: #3d240e;
+}
+
+.retirement-table--contribution .contribution-taxable-group {
+  border: 3px solid #4e7faa;
+  border-bottom: 0;
+}
+
+.retirement-table--contribution .contribution-retirement-group {
+  border: 3px solid #bd6e33;
+  border-bottom: 0;
+}
+
+.retirement-table--contribution thead tr:nth-child(2) th:nth-child(3),
+.retirement-table--contribution tbody td:nth-child(3) {
+  border-left: 3px solid #4e7faa;
+}
+
+.retirement-table--contribution thead tr:nth-child(2) th:nth-child(6),
+.retirement-table--contribution tbody td:nth-child(6) {
+  border-right: 3px solid #4e7faa;
+}
+
+.retirement-table--contribution thead tr:nth-child(2) th:nth-child(7),
+.retirement-table--contribution tbody td:nth-child(7) {
+  border-left: 3px solid #bd6e33;
+}
+
+.retirement-table--contribution thead tr:nth-child(2) th:nth-child(10),
+.retirement-table--contribution tbody td:nth-child(10) {
+  border-right: 3px solid #bd6e33;
+}
+
+.retirement-table--contribution tbody tr:last-child td:nth-child(n + 3):nth-child(-n + 6) {
+  border-bottom: 3px solid #4e7faa;
+}
+
+.retirement-table--contribution tbody tr:last-child td:nth-child(n + 7):nth-child(-n + 10) {
+  border-bottom: 3px solid #bd6e33;
+}
+
+.retirement-table--contribution thead tr:first-child .contribution-taxable-group {
+  left: auto;
+  z-index: 2;
+}
+
+.retirement-table--contribution thead tr:nth-child(2) th {
+  top: 40px;
+}
+
+.retirement-table--contribution thead tr:nth-child(2) th:first-child {
+  left: 0;
+  z-index: 4;
+}
+
+.retirement-table--standard {
+  min-width: 102rem;
+}
+
+.retirement-table--standard thead tr:first-child .standard-taxable-group,
+.retirement-table--standard thead tr:first-child .standard-retirement-group {
+  left: auto;
+  z-index: 2;
+  text-align: center;
+}
+
+.retirement-table--standard .standard-taxable-group,
+.retirement-table--standard .standard-taxable-column {
+  background: #9fc5e8;
+  color: #10263d;
+}
+
+.retirement-table--standard .standard-retirement-group,
+.retirement-table--standard .standard-retirement-column {
+  background: #f1b07a;
+  color: #3d240e;
+}
+
+.retirement-table--standard .standard-taxable-group {
+  border: 3px solid #4e7faa;
+  border-bottom: 0;
+}
+
+.retirement-table--standard .standard-retirement-group {
+  border: 3px solid #bd6e33;
+  border-bottom: 0;
+}
+
+.retirement-table--standard thead tr:nth-child(2) th {
+  top: 40px;
+}
+
+.retirement-table--standard thead tr:nth-child(2) th:first-child {
+  left: 0;
+  z-index: 4;
+}
+
+.retirement-table--standard thead tr:nth-child(2) th:nth-child(3),
+.retirement-table--standard tbody td:nth-child(3) {
+  border-left: 3px solid #4e7faa;
+}
+
+.retirement-table--standard thead tr:nth-child(2) th:nth-child(6),
+.retirement-table--standard tbody td:nth-child(6) {
+  border-right: 3px solid #4e7faa;
+}
+
+.retirement-table--standard thead tr:nth-child(2) th:nth-child(7),
+.retirement-table--standard tbody td:nth-child(7) {
+  border-left: 3px solid #bd6e33;
+}
+
+.retirement-table--standard thead tr:nth-child(2) th:nth-child(10),
+.retirement-table--standard tbody td:nth-child(10) {
+  border-right: 3px solid #bd6e33;
+}
+
+.retirement-table--standard tbody tr:last-child td:nth-child(n + 3):nth-child(-n + 6) {
+  border-bottom: 3px solid #4e7faa;
+}
+
+.retirement-table--standard tbody tr:last-child td:nth-child(n + 7):nth-child(-n + 10) {
+  border-bottom: 3px solid #bd6e33;
+}
+.retirement-table--bridge thead tr:first-child .bridge-taxable-group {
+  left: auto;
+  z-index: 2;
+  border: 3px solid #4e7faa;
+  border-bottom: 0;
+  background: #9fc5e8;
+  color: #10263d;
+  text-align: center;
+}
+
+.retirement-table--bridge .bridge-taxable-column {
+  background: #9fc5e8;
+  color: #10263d;
+}
+
+.retirement-table--bridge thead tr:first-child .bridge-retirement-group {
+  left: auto;
+  z-index: 2;
+  border: 3px solid #bd6e33;
+  border-bottom: 0;
+  background: #f1b07a;
+  color: #3d240e;
+  text-align: center;
+}
+
+.retirement-table--bridge .bridge-retirement-column {
+  background: #f1b07a;
+  color: #3d240e;
+}
+
+.retirement-table--bridge thead tr:nth-child(2) th {
+  top: 40px;
+}
+
+.retirement-table--bridge thead tr:nth-child(2) th:first-child {
+  left: 0;
+  z-index: 4;
+}
+
+.retirement-table--bridge thead tr:nth-child(2) th:nth-child(3),
+.retirement-table--bridge tbody td:nth-child(3) {
+  border-left: 3px solid #4e7faa;
+}
+
+.retirement-table--bridge thead tr:nth-child(2) th:nth-child(5),
+.retirement-table--bridge tbody td:nth-child(5) {
+  border-right: 3px solid #4e7faa;
+}
+
+.retirement-table--bridge thead tr:nth-child(2) th:nth-child(6),
+.retirement-table--bridge tbody td:nth-child(6) {
+  border-left: 3px solid #bd6e33;
+  border-right: 3px solid #bd6e33;
+}
+
+.retirement-table--bridge tbody tr:last-child td:nth-child(n + 3):nth-child(-n + 5) {
+  border-bottom: 3px solid #4e7faa;
+}
+
+.retirement-table--bridge tbody tr:last-child td:nth-child(6) {
+  border-bottom: 3px solid #bd6e33;
+}
+.retirement-table tbody tr:nth-child(even) td,
+.retirement-table tbody tr:nth-child(even) th {
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high) 45%, transparent);
+}
+
+.retirement-table tbody tr:hover td,
+.retirement-table tbody tr:hover th {
+  background: var(--md-sys-color-secondary-container);
+}
+
+.retirement-table--contribution tbody td:nth-child(n + 3):nth-child(-n + 6) {
+  background: #d9eafa;
+  color: #10263d;
+}
+
+.retirement-table--contribution tbody td:nth-child(n + 7):nth-child(-n + 10) {
+  background: #ffe2c7;
+  color: #3d240e;
+}
+
+.retirement-table--contribution tbody tr:hover td:nth-child(n + 3):nth-child(-n + 6) {
+  background: #c8def3;
+}
+
+.retirement-table--contribution tbody tr:hover td:nth-child(n + 7):nth-child(-n + 10) {
+  background: #fbd1ad;
+}
+.retirement-table--standard tbody td:nth-child(n + 3):nth-child(-n + 6) {
+  background: #d9eafa;
+  color: #10263d;
+}
+
+.retirement-table--standard tbody td:nth-child(n + 7):nth-child(-n + 10) {
+  background: #ffe2c7;
+  color: #3d240e;
+}
+
+.retirement-table--standard tbody tr:hover td:nth-child(n + 3):nth-child(-n + 6) {
+  background: #c8def3;
+}
+
+.retirement-table--standard tbody tr:hover td:nth-child(n + 7):nth-child(-n + 10) {
+  background: #fbd1ad;
+}
+.retirement-table--bridge tbody td:nth-child(n + 3):nth-child(-n + 5) {
+  background: #d9eafa;
+  color: #10263d;
+}
+
+.retirement-table--bridge tbody td:nth-child(6) {
+  background: #ffe2c7;
+  color: #3d240e;
+}
+
+.retirement-table--bridge tbody tr:hover td:nth-child(n + 3):nth-child(-n + 5) {
+  background: #c8def3;
+}
+
+.retirement-table--bridge tbody tr:hover td:nth-child(6) {
+  background: #fbd1ad;
+}
+
+.retirement-table th:nth-child(-n+2),
+.retirement-table td:nth-child(-n+2),
+.retirement-table th:nth-last-child(-n+2),
+.retirement-table td:nth-last-child(-n+2) {
+  text-align: left;
+}
+
+.retirement-table thead th:first-child {
+  left: 0;
+  z-index: 4;
+}
+
+.retirement-table tbody th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--md-sys-color-surface-container);
+  box-shadow: 1px 0 0 var(--md-sys-color-outline-variant);
+}
+
+.retirement-table .projection-gap td,
+.retirement-table .projection-gap th {
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+}
+
+.retirement-table .projection-gap th:first-child {
+  box-shadow: inset 4px 0 0 var(--md-sys-color-error), 1px 0 0 var(--md-sys-color-outline-variant);
+}.retirement-table--bridge .projection-gap td:nth-child(n + 3):nth-child(-n + 5) {
+  background: #d9eafa;
+  color: #10263d;
+}
+
+.retirement-table--bridge .projection-gap td:nth-child(6) {
+  background: #ffe2c7;
+  color: #3d240e;
+}.retirement-table--standard .projection-gap td:nth-child(n + 3):nth-child(-n + 6) {
+  background: #d9eafa;
+  color: #10263d;
+}
+
+.retirement-table--standard .projection-gap td:nth-child(n + 7):nth-child(-n + 10) {
+  background: #ffe2c7;
+  color: #3d240e;
+}
+
+
+
+.retirement-table .text-action {
+  min-height: 32px;
+  padding: 0 7px;
+}
+
+.retirement-mobile-cards {
+  display: none;
+}
+
+.retirement-detail {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 78%, transparent);
+  backdrop-filter: blur(5px);
+}
+
+.retirement-detail > div {
+  width: min(46rem, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-xl);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  padding: clamp(18px, 3vw, 28px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.38);
+}
+
+.retirement-detail > div > p {
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.retirement-detail > div > p:last-child {
+  border-bottom: 0;
+}
+
+.retirement-detail h2 {
+  margin: 0 0 14px;
+  color: var(--md-sys-color-on-surface);
+}
+
+.close-detail {
+  float: right;
+  margin: 0 0 12px 16px;
+}
+
+.retirement-results .methodology {
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+  padding-top: 12px;
+}
+
+.retirement-results .methodology summary {
+  min-height: 42px;
+  color: var(--md-sys-color-on-surface);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.retirement-results .methodology p {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 1100px) {
+  .retirement-layout {
+    grid-template-columns: minmax(340px, 380px) minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .retirement-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-height: 720px) and (min-width: 769px) {
+  .retirement-assumptions {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .retirement-planner {
+    gap: 16px;
+  }
+
+  .retirement-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .retirement-assumptions {
+    position: static;
+    padding: 14px;
+  }
+
+  .retirement-field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+    padding: 9px 2px;
+  }
+
+  .retirement-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .retirement-phase {
+  display: grid;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.retirement-phase > h3,
+.retirement-mobile-phase > h3 {
+  margin: 0;
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-font-display);
+  font-size: 0.95rem;
+}
+
+.retirement-phase > p {
+  margin: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.8rem;
+}
+
+.retirement-table--contribution {
+  min-width: 66rem;
+}
+
+.retirement-table--bridge {
+  min-width: 61rem;
+}
+.retirement-table-wrap {
+    display: none;
+  }
+
+  .retirement-mobile-cards {
+    display: grid;
+    gap: 10px;
+  }
+
+  .retirement-mobile-phase {
+    display: grid;
+    gap: 8px;
+  }
+
+  .retirement-mobile-phase + .retirement-mobile-phase {
+    margin-top: 10px;
+  }
+  .retirement-mobile-cards details {
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: var(--md-sys-shape-corner-m);
+    background: var(--md-sys-color-surface-container-high);
+    padding: 0 12px 12px;
+  }
+
+  .retirement-mobile-cards details[open] {
+    border-color: var(--md-sys-color-outline);
+  }
+
+  .retirement-mobile-cards summary {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    color: var(--md-sys-color-on-surface);
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .retirement-mobile-cards p {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    margin: 0;
+    border-top: 1px solid var(--md-sys-color-outline-variant);
+    padding: 8px 0;
+    color: var(--md-sys-color-on-surface-variant);
+    font-size: 0.76rem;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (max-width: 480px) {
+  .retirement-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .retirement-chart-axis {
+    display: none;
+  }
+
+  .retirement-chart-plot {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .retirement-chart-bars {
+    height: 150px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .retirement-detail,
+  .retirement-field input,
+  .retirement-field select,
+  .retirement-chart-bars span {
+    animation: none;
+    transition: none;
+  }
+}

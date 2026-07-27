@@ -4,6 +4,7 @@ import type { BudgetRepository } from '../domain/budgetRepository';
 import type { AccountRepository } from '../domain/accountRepository';
 import type { HoldingRepository } from '../domain/holdingRepository';
 import type { NetWorthRepository } from '../domain/netWorthRepository';
+import type { RetirementPlanRepository } from '../domain/retirementPlanRepository';
 import { SettingsMenu } from '../settings/SettingsMenu';
 import { SettingsConfigurationPanel } from './SettingsConfigurationPanel';
 import { SettingsBudgetPanel } from './SettingsBudgetPanel';
@@ -17,9 +18,10 @@ export type LandingPageProps = {
   accountRepository: AccountRepository;
   holdingRepository: HoldingRepository;
   netWorthRepository: NetWorthRepository;
+  retirementPlanRepository?: RetirementPlanRepository;
 };
 
-export function LandingPage({ repository, budgetRepository, accountRepository, holdingRepository, netWorthRepository }: LandingPageProps) {
+export function LandingPage({ repository, budgetRepository, accountRepository, holdingRepository, netWorthRepository, retirementPlanRepository }: LandingPageProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [mortgageTrackingOverride, setMortgageTrackingOverride] = useState<boolean | undefined>();
   const [activeSectionId, setActiveSectionId] =
@@ -66,6 +68,7 @@ export function LandingPage({ repository, budgetRepository, accountRepository, h
                   accountRepository={accountRepository}
                   holdingRepository={holdingRepository}
                   incomeRepository={repository}
+                  retirementPlanRepository={retirementPlanRepository}
                 />
               );
             }

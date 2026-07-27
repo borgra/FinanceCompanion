@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.infrastructure.settings import Settings
 from app.presentation.http.container import build_container
+from app.presentation.http.retirement_router import router as retirement_router
 from app.presentation.http.routers import router
 
 print("DIAGNOSTIC: STARTING CONTAINER APP", flush=True)
@@ -29,6 +30,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     app.include_router(router, prefix=settings.api_prefix)
+    app.include_router(retirement_router, prefix=settings.api_prefix)
     return app
 
 
