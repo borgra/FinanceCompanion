@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from math import isfinite
 from typing import Protocol
 
 from app.domain.exceptions import NotFoundError
@@ -24,20 +25,24 @@ def _coalesce[T](next_value: T | None, current_value: T | None) -> T | None:
     return next_value if next_value is not None else current_value
 
 
-def _updated_date(value: str | None):
+def _updated_at(value: str | None):
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
 
 
 def should_refresh_security_details(security: SecurityMetadata) -> bool:
-    updated_date = _updated_date(security.details_updated_at)
-    if updated_date is None:
+    updated_at = _updated_at(security.details_updated_at)
+    if updated_at is None:
         return True
-    return updated_date < datetime.now(tz=UTC).date()
+    return updated_at < datetime.now(tz=UTC) - timedelta(hours=48)
+
+
+def _has_valid_price(price: float | None) -> bool:
+    return price is not None and isfinite(price) and price > 0
 
 
 def _effective_payout_details(
@@ -55,6 +60,8 @@ def merge_security_details(
     updated_at: str,
     replace_manual_payouts: bool = False,
 ) -> SecurityMetadata:
+    if not _has_valid_price(details.price):
+        return current
     source_payout_details = details.source_payout_details or details.payout_details
     manual_payout_details = [] if replace_manual_payouts else current.manual_payout_details
     return SecurityMetadata(
@@ -144,6 +151,8 @@ class RefreshHeldSecurityDetails:
 
         for holding in holdings:
             symbol = holding.security.symbol
+            if not should_refresh_security_details(holding.security):
+                continue
             if symbol in details_by_symbol or symbol in failed_symbols:
                 continue
 
@@ -155,6 +164,9 @@ class RefreshHeldSecurityDetails:
         refreshed_holdings: list[Holding] = []
         timestamp = now_iso()
         for holding in holdings:
+            if not should_refresh_security_details(holding.security):
+                refreshed_holdings.append(holding)
+                continue
             details = details_by_symbol.get(holding.security.symbol)
             if details is None:
                 refreshed_holdings.append(holding)

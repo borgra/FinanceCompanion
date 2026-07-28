@@ -122,7 +122,7 @@ def test_bulk_refresh_deduplicates_symbols_and_updates_matching_holdings():
     assert [item.security.price for item in result.holdings] == [321.45, 321.45]
 
 
-def test_bulk_refresh_refreshes_all_requested_details():
+def test_bulk_refresh_skips_details_updated_within_48_hours():
     repository = FakeHoldingRepository([
         holding("holding-1", "VTI", details_updated_at=now_iso()),
         holding("holding-2", "MSFT", details_updated_at="2026-01-01T00:00:00Z"),
@@ -131,9 +131,9 @@ def test_bulk_refresh_refreshes_all_requested_details():
 
     result = RefreshHeldSecurityDetails(repository, provider).execute("user-123")
 
-    assert provider.requested_symbols == ["VTI", "MSFT"]
+    assert provider.requested_symbols == ["MSFT"]
     assert result.failed_symbols == []
-    assert [item.security.price for item in result.holdings] == [321.45, 321.45]
+    assert [item.security.price for item in result.holdings] == [315.12, 321.45]
 
 
 def test_refresh_preserves_a_manually_saved_price_when_the_provider_returns_null():
@@ -158,3 +158,4 @@ def test_refresh_preserves_a_manually_saved_price_when_the_provider_returns_null
     )
 
     assert refreshed.security.price == 325.25
+    assert refreshed.security.details_updated_at is None

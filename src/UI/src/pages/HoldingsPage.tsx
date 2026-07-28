@@ -39,6 +39,7 @@ const securitySymbolFromInput = (value: string) => value.trim().toUpperCase();
 const isValidSecuritySymbol = (value: string) => /^[A-Z0-9.-]+$/.test(value);
 
 const refreshThrottleMs = 3000;
+const refreshAllMaximumAgeMs = 48 * 60 * 60 * 1000;
 const HOLDINGS_IMPORT_MAX_BYTES = 1024 * 1024;
 const HOLDINGS_IMPORT_MAX_ROWS = 500;
 const CORPORATE_ACTION_IMPORT_MAX_BYTES = 1024 * 1024;
@@ -62,6 +63,15 @@ const formatLastUpdated = (value?: string | null) => {
   }
 
   return `Last updated ${updatedAt.toLocaleDateString()}`;
+};
+
+const hasFreshPrice = (price?: number | null) =>
+  typeof price === 'number' && Number.isFinite(price) && price > 0;
+
+const needsRefresh = (detailsUpdatedAt?: string | null, now = Date.now()) => {
+  if (!detailsUpdatedAt) return true;
+  const updatedAt = Date.parse(detailsUpdatedAt);
+  return !Number.isFinite(updatedAt) || now - updatedAt > refreshAllMaximumAgeMs;
 };
 
 const importAccountHeader = (account: Account) => `Account: ${account.name} (${account.id})`;
@@ -167,6 +177,10 @@ const mergeRefreshedSecurityDetails = (
       return holding;
     }
 
+    if (!hasFreshPrice(next.security.price)) {
+      return holding;
+    }
+
     return {
       ...holding,
       security: next.security,
@@ -181,6 +195,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [dirtyHoldingIds, setDirtyHoldingIds] = useState<Set<string>>(() => new Set());
   const [query, setQuery] = useState('');
   const [selectedAccountFilterId, setSelectedAccountFilterId] = useState('');
+  const [sort, setSort] = useState<{ key: 'name' | 'symbol'; direction: 'asc' | 'desc' } | null>(null);
   const [results, setResults] = useState<SecurityMetadata[]>([]);
   const [selectedSecurity, setSelectedSecurity] = useState<SecurityMetadata | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -273,8 +288,15 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   );
 
   const orderedHoldings = useMemo(
-    () => [...holdings].filter((holding) => !selectedAccountFilterId || holding.accountPositions.some((position) => position.accountId === selectedAccountFilterId && position.quantity > 0)).sort((a, b) => a.security.assetType.localeCompare(b.security.assetType) || a.security.name.localeCompare(b.security.name)),
-    [holdings, selectedAccountFilterId],
+    () => [...holdings]
+      .filter((holding) => !selectedAccountFilterId || holding.accountPositions.some((position) => position.accountId === selectedAccountFilterId && position.quantity > 0))
+      .sort((a, b) => {
+        const comparison = sort
+          ? a.security[sort.key].localeCompare(b.security[sort.key])
+          : a.security.assetType.localeCompare(b.security.assetType) || a.security.name.localeCompare(b.security.name);
+        return sort?.direction === 'desc' ? -comparison : comparison;
+      }),
+    [holdings, selectedAccountFilterId, sort],
   );
 
   const investmentValues = useMemo(() => {
@@ -326,7 +348,14 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     if (!orderedHoldings[nextHoldingIndex] || !managedAccounts[nextAccountIndex]) return;
 
     event.preventDefault();
+    setSelectedHoldingId(orderedHoldings[nextHoldingIndex].id);
     focusHoldingCell(nextHoldingIndex, nextAccountIndex);
+  };
+
+  const toggleSort = (key: 'name' | 'symbol') => {
+    setSort((current) => current?.key === key
+      ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+      : { key, direction: 'asc' });
   };
 
   const closeAddDialog = () => {
@@ -531,7 +560,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const refreshAllHoldingDetails = async () => {
-    const holdingsToRefresh = [...holdings];
+    const holdingsToRefresh = holdings.filter((holding) => needsRefresh(holding.security.detailsUpdatedAt));
     if (holdingsToRefresh.length === 0) {
       return;
     }
@@ -833,13 +862,13 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         <FinanceTable wrapperClassName="holdings-finance-table" wrapperStyle={{ marginTop: 0 }}>
           <thead>
             <tr>
-              <FinanceTableHeaderCell icon="show_chart">Security</FinanceTableHeaderCell>
-              <FinanceTableHeaderCell>Ticker</FinanceTableHeaderCell>
+              <FinanceTableHeaderCell icon="show_chart" aria-sort={sort?.key === 'name' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}><button className="link-button" type="button" onClick={() => toggleSort('name')} aria-label="Sort by Security Name">Security {sort?.key === 'name' ? (sort.direction === 'asc' ? '↑' : '↓') : ''}</button></FinanceTableHeaderCell>
+              <FinanceTableHeaderCell aria-sort={sort?.key === 'symbol' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}><button className="link-button" type="button" onClick={() => toggleSort('symbol')} aria-label="Sort by Ticker">Ticker {sort?.key === 'symbol' ? (sort.direction === 'asc' ? '↑' : '↓') : ''}</button></FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Total Qty</FinanceTableHeaderCell>
               <FinanceTableHeaderCell isEditable>Price</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Value</FinanceTableHeaderCell>
               {managedAccounts.map((account) => (
-                <FinanceTableHeaderCell key={account.id} icon="account_balance" isEditable>
+                <FinanceTableHeaderCell key={account.id} icon="account_balance" isEditable className={selectedAccountFilterId === account.id ? 'holdings-account-column-highlight' : undefined}>
                   {account.name.length > 18 ? `${account.name.slice(0, 15)}...` : account.name}
                 </FinanceTableHeaderCell>
               ))}
@@ -882,6 +911,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                           formatValue={formatMoney}
                           onValueChange={(value) => updatePrice(holding.id, value)}
                           focusId={`holding-${holding.id}-price`}
+                          onFocus={() => setSelectedHoldingId(holding.id)}
                           aria-label={`${holding.security.symbol} price`}
                         />
                     </td>
@@ -892,13 +922,14 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                       />
                     </td>
                     {managedAccounts.map((account, accountIndex) => (
-                      <td key={account.id} title={accountNameById.get(account.id)}>
+                      <td key={account.id} title={accountNameById.get(account.id)} className={selectedAccountFilterId === account.id ? 'holdings-account-column-highlight' : undefined}>
                         <FinanceMoneyCellInput
                           value={getQuantity(holding, account.id)}
                           formatValue={formatQuantity}
                           onValueChange={(value) => updateQuantity(holding.id, account.id, value)}
                           focusId={`holding-${holding.id}-${account.id}`}
                           onKeyDown={(event) => handleHoldingCellKeyDown(event, holdingIndex, accountIndex)}
+                          onFocus={() => setSelectedHoldingId(holding.id)}
                           aria-label={`${holding.security.symbol} quantity for ${account.name}`}
                         />
                       </td>

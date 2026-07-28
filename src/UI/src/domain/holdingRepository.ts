@@ -28,7 +28,7 @@ export type HoldingRepository = {
 
 const nowIso = () => new Date().toISOString();
 
-const isUpdatedToday = (updatedAt?: string | null) => {
+const needsSecurityRefresh = (updatedAt?: string | null) => {
   if (!updatedAt) {
     return false;
   }
@@ -36,7 +36,7 @@ const isUpdatedToday = (updatedAt?: string | null) => {
   if (Number.isNaN(updatedDate.getTime())) {
     return false;
   }
-  return updatedDate.toISOString().slice(0, 10) === nowIso().slice(0, 10);
+  return Date.now() - updatedDate.getTime() > 48 * 60 * 60 * 1000;
 };
 
 const securityCatalog: SecurityMetadata[] = [
@@ -311,16 +311,12 @@ export function createMockHoldingRepository(): HoldingRepository {
       if (!existing) {
         throw new Error('Holding not found.');
       }
-      if (isUpdatedToday(existing.security.detailsUpdatedAt)) {
-        return {
-          ...existing,
-          security: { ...existing.security },
-          accountPositions: existing.accountPositions.map((position) => ({ ...position })),
-        };
-      }
       const catalogSecurity = securityCatalog.find(
         (item) => item.symbol === existing.security.symbol,
       );
+      if (!catalogSecurity || !Number.isFinite(catalogSecurity.price) || !catalogSecurity.price || catalogSecurity.price <= 0) {
+        return { ...existing, security: { ...existing.security }, accountPositions: existing.accountPositions.map((position) => ({ ...position })) };
+      }
       const updated: Holding = {
         ...existing,
         security: {
@@ -348,12 +344,15 @@ export function createMockHoldingRepository(): HoldingRepository {
     refreshHeldSecurityDetails: async (options) => {
       const refreshed = await Promise.all(
         holdings.map((holding) => {
-          if (isUpdatedToday(holding.security.detailsUpdatedAt)) {
+          if (!needsSecurityRefresh(holding.security.detailsUpdatedAt)) {
             return holding;
           }
           const catalogSecurity = securityCatalog.find(
             (item) => item.symbol === holding.security.symbol,
           );
+          if (!catalogSecurity || !Number.isFinite(catalogSecurity.price) || !catalogSecurity.price || catalogSecurity.price <= 0) {
+            return holding;
+          }
           const updated: Holding = {
             ...holding,
             security: {

@@ -3640,6 +3640,11 @@ button.security-result:hover {
 .holdings-finance-table tbody tr.holdings-row-selected > td:first-child {
   box-shadow: inset 3px 0 0 var(--md-sys-color-primary);
 }
+.holdings-finance-table .holdings-account-column-highlight {
+  background-color: color-mix(in srgb, var(--md-sys-color-tertiary) 18%, var(--md-sys-color-surface));
+}
+
+
 .mortgage-start-row > td {
   position: sticky;
   top: 0;
