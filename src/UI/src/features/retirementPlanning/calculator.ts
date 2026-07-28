@@ -140,9 +140,15 @@ export function validateRetirementPlan(plan: RetirementPlan): Record<string, str
   return errors;
 }
 
-function annualContribution(plan: ContributionPlan, age: number, currentAge: number): number {
+function annualContribution(
+  plan: ContributionPlan,
+  age: number,
+  currentAge: number,
+  firstYearRemainingMonths: number,
+): number {
   if (age < currentAge || age > plan.endAge) return 0;
-  return plan.monthlyAmount * 12 * (1 + plan.annualIncreasePercent / 100) ** (age - currentAge);
+  const months = age === currentAge ? firstYearRemainingMonths : 12;
+  return plan.monthlyAmount * months * (1 + plan.annualIncreasePercent / 100) ** (age - currentAge);
 }
 
 export function calculateRetirementProjection(plan: RetirementPlan, valuation: ValuationSnapshot, calculationDate = new Date()): ProjectionResult {
@@ -151,13 +157,14 @@ export function calculateRetirementProjection(plan: RetirementPlan, valuation: V
   let retirement = valuation.retirement + (plan.includeHsaInRetirement ? valuation.hsa : 0);
   const rows: ProjectionRow[] = [];
   const roi = (plan.annualRoiPercent as number) / 100;
+  const firstYearRemainingMonths = 12 - (calculationDate.getMonth() + 1);
 
   for (let age = plan.currentAge; age <= plan.longevityAge; age += 1) {
     const year = calculationDate.getFullYear() + age - plan.currentAge;
     const startTaxable = taxable;
     const startRetirement = retirement;
-    const taxableContribution = annualContribution(plan.taxableContribution, age, plan.currentAge);
-    const retirementContribution = annualContribution(plan.retirementContribution, age, plan.currentAge);
+    const taxableContribution = annualContribution(plan.taxableContribution, age, plan.currentAge, firstYearRemainingMonths);
+    const retirementContribution = annualContribution(plan.retirementContribution, age, plan.currentAge, firstYearRemainingMonths);
     const applicableChanges = plan.expenseChanges.filter((change) => change.age <= age).sort((a, b) => a.age - b.age);
     const expenseMultiplier = applicableChanges.reduce((value, change) => value * (1 + change.percentChange / 100), 1);
     const expense = age >= plan.retirementAge ? plan.annualRetirementExpense * expenseMultiplier : 0;

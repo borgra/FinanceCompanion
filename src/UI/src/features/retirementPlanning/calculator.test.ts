@@ -113,13 +113,13 @@ describe('retirement plan validation', () => {
 });
 
 describe('retirement projection', () => {
-  it('escalates contributions independently and stops after each end age', () => {
+  it('prorates first-year contributions, then escalates them independently until each end age', () => {
     const result = calculateRetirementProjection(planFor({
       longevityAge: 62,
       taxableContribution: { monthlyAmount: 500, annualIncreasePercent: 10, endAge: 41 },
       retirementContribution: { monthlyAmount: 750, annualIncreasePercent: 20, endAge: 41 },
-    }), { taxable: 0, retirement: 0, hsa: 0, valuedAt: null, source: '', warnings: [] }, new Date('2026-01-01T00:00:00Z'));
-    expect(result.rows[0]).toMatchObject({ taxableContribution: 6000, retirementContribution: 9000 });
+    }), { taxable: 0, retirement: 0, hsa: 0, valuedAt: null, source: '', warnings: [] }, new Date(2026, 6, 27));
+    expect(result.rows[0]).toMatchObject({ taxableContribution: 2500, retirementContribution: 3750 });
     expect(result.rows[1].taxableContribution).toBeCloseTo(6600);
     expect(result.rows[1].retirementContribution).toBeCloseTo(10800);
     expect(result.rows[2]).toMatchObject({ taxableContribution: 0, retirementContribution: 0 });
@@ -130,12 +130,12 @@ describe('retirement projection', () => {
       currentAge: 41, retirementAge: 43, longevityAge: 62, annualRoiPercent: 10,
       taxableContribution: { monthlyAmount: 100 / 12, annualIncreasePercent: 0, endAge: 41 },
       retirementContribution: { monthlyAmount: 200 / 12, annualIncreasePercent: 0, endAge: 41 },
-    }), { taxable: 1000, retirement: 2000, hsa: 0, valuedAt: null, source: '', warnings: [] });
+    }), { taxable: 1000, retirement: 2000, hsa: 0, valuedAt: null, source: '', warnings: [] }, new Date(2026, 0, 1));
 
     expect(result.rows[0]).toMatchObject({
-      age: 41, taxableContribution: 100, retirementContribution: 200,
+      age: 41, taxableContribution: 100 * 11 / 12, retirementContribution: 200 * 11 / 12,
       taxableWithdrawal: 0, retirementWithdrawal: 0, totalWithdrawal: 0,
-      endTaxable: 1200, endRetirement: 2400,
+      endTaxable: 1000 * 1.1 + 100 * 11 / 12, endRetirement: 2000 * 1.1 + 200 * 11 / 12,
     });
     expect(result.rows[0].taxableGrowth).toBeCloseTo(100);
     expect(result.rows[0].retirementGrowth).toBeCloseTo(200);
