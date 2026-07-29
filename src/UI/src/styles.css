@@ -4657,6 +4657,11 @@ button.security-result:hover {
   color: #3d240e;
 }
 
+.retirement-table--bridge tbody tr:nth-child(even) td:nth-child(6) {
+  background: #ffe2c7;
+  color: #3d240e;
+}
+
 .retirement-table--bridge tbody tr:hover td:nth-child(n + 3):nth-child(-n + 5) {
   background: #c8def3;
 }
