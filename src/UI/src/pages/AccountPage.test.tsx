@@ -558,6 +558,7 @@ describe('AccountPage', () => {
     expect(screen.queryByRole('columnheader', { name: /expenses/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: /^savings$/i })).not.toBeInTheDocument();
     expect(screen.getAllByText('$500.00').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$10,500.00').length).toBeGreaterThan(0);
     expect(document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]')).toBeNull();
 
     const januaryInterestCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="interest-0"]');
@@ -565,6 +566,7 @@ describe('AccountPage', () => {
 
     await userEvent.clear(januaryInterestCell!);
     await userEvent.type(januaryInterestCell!, '25');
+    expect(screen.getAllByText('$10,525.00').length).toBeGreaterThan(0);
     await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
 
     const accounts = await repository.listAccounts();

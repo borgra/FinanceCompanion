@@ -208,7 +208,8 @@ const computeAccountRecords = (
       additionalIncome,
       outflows,
       expenses,
-      subtotal: start + credit + additionalIncome - expenses,
+      subtotal:
+        start + credit + additionalIncome - expenses + (account.type === 'Savings' ? savings : 0),
       invest,
       savings,
       net,
