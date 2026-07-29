@@ -529,7 +529,7 @@ describe('AccountPage', () => {
     expect(screen.getAllByText('$10,500.00').length).toBeGreaterThan(0);
   });
 
-  it('uses an editable Interest column and hides Expenses and Savings columns for Savings accounts', async () => {
+  it('shows transferred savings as a read-only credit column before Interest for Savings accounts', async () => {
     const mockAccounts: Account[] = [
       {
         id: 'acc-savings-interest',
@@ -547,14 +547,18 @@ describe('AccountPage', () => {
       },
     ];
 
+    mockAccounts[0].monthlyRecords[0].savings = 500;
     const repository = renderPage(mockAccounts);
 
     expect(await screen.findByText('Interest Savings')).toBeInTheDocument();
 
     expect(screen.getByRole('columnheader', { name: /interest/i })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /savings added/i })).toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: /^credit$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: /expenses/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: /^savings$/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText('$500.00').length).toBeGreaterThan(0);
+    expect(document.querySelector<HTMLInputElement>('[data-ledger-cell="savings-0"]')).toBeNull();
 
     const januaryInterestCell = document.querySelector<HTMLInputElement>('[data-ledger-cell="interest-0"]');
     expect(januaryInterestCell).not.toBeNull();

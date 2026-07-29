@@ -1764,6 +1764,16 @@ export function AccountPage({
                       <tr>
                         <FinanceTableHeaderCell>Month</FinanceTableHeaderCell>
                         <FinanceTableHeaderCell>Start</FinanceTableHeaderCell>
+                        {isSavingsLedger ? (
+                          <FinanceTableHeaderCell
+                            contentClassName="excel-col-credit"
+                            icon="add_circle"
+                            title="Savings added from associated checking accounts this month"
+                            style={{ borderBottom: '2.5px solid #34d399' }}
+                          >
+                            Savings Added
+                          </FinanceTableHeaderCell>
+                        ) : null}
                         
                         {/* Credit/Interest Header: Savings interest is editable, checking credit is derived. */}
                         <FinanceTableHeaderCell
@@ -1856,6 +1866,13 @@ export function AccountPage({
                             <td>
                               <span className="excel-cell-val">{formatMoney(row.start)}</span>
                             </td>
+                            {isSavingsLedger ? (
+                              <td className="excel-col-credit">
+                                <span className="excel-cell-val excel-bold-col" style={{ color: '#34d399' }}>
+                                  {formatMoney(row.savings)}
+                                </span>
+                              </td>
+                            ) : null}
                             <td className="excel-col-credit">
                               {isSavingsLedger ? (
                                 <FinanceMoneyCellInput
