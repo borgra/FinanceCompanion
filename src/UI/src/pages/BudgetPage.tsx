@@ -459,7 +459,9 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
 
               <div className="budget-progress-panel">
                 <div className="budget-progress-header">
-                  <span>Essential Budget: {formatMoney(totals.essentialMonth)}</span>
+                  <span>
+                    Essential Budget: {formatMoney(totals.essentialMonth)} ({formatPercent(totals.essentialPercentNet)})
+                  </span>
                 </div>
                 <div className="budget-progress-track" aria-hidden="true">
                   <span className="budget-progress-fill" style={{ width: `${clampPercent(totals.essentialPercentNet ?? 0)}%` }} />
@@ -467,7 +469,9 @@ export function BudgetPage({ incomeRepository, budgetRepository }: BudgetPagePro
               </div>
               <div className="budget-progress-panel">
                 <div className="budget-progress-header">
-                  <span>Total Budget: {formatMoney(totals.totalMonth)}</span>
+                  <span>
+                    Total Budget: {formatMoney(totals.totalMonth)} ({formatPercent(totals.percentNet)})
+                  </span>
                 </div>
                 <div className="budget-progress-track" aria-hidden="true">
                   <span

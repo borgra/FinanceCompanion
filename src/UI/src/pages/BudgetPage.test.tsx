@@ -38,8 +38,8 @@ describe('BudgetPage', () => {
 
     expect(await screen.findByText('Monthly Posture')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /Expand Housing category/i })).toBeInTheDocument();
-    expect(screen.getByText('Essential Budget: $2,620.00')).toBeInTheDocument();
-    expect(screen.getByText('Total Budget: $2,900.00')).toBeInTheDocument();
+    expect(screen.getByText('Essential Budget: $2,620.00 (34.9%)')).toBeInTheDocument();
+    expect(screen.getByText('Total Budget: $2,900.00 (38.7%)')).toBeInTheDocument();
     expect(screen.getByText('Budget category list')).toBeInTheDocument();
     expect(screen.getByText('Master categories')).toBeInTheDocument();
     expect(screen.queryByLabelText('Sort categories')).not.toBeInTheDocument();
@@ -135,7 +135,7 @@ describe('BudgetPage', () => {
 
     await user.click(classification);
     expect(classification).toBeChecked();
-    expect(screen.getAllByText('Essential Budget: $2,900.00')).toHaveLength(1);
+    expect(screen.getAllByText('Essential Budget: $2,900.00 (38.7%)')).toHaveLength(1);
   });
 
   it('saves parent edits, additions, updates, and removals in one retryable category draft request', async () => {
