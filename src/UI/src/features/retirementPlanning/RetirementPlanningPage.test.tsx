@@ -311,12 +311,14 @@ describe('RetirementPlanningPage', () => {
     expect(screen.queryByRole('columnheader', { name: 'Year / age' })).not.toBeInTheDocument();
     expect(within(contributionTable).getByRole('columnheader', { name: 'Taxable' })).toHaveAttribute('colspan', '4');
     expect(within(contributionTable).getByRole('columnheader', { name: 'Retirement' })).toHaveAttribute('colspan', '4');
+    expect(within(contributionTable).getAllByRole('columnheader', { name: 'Contribution' })).toHaveLength(2);
     expect(within(contributionTable).queryByRole('columnheader', { name: /withdrawal/i })).not.toBeInTheDocument();
     expect(within(standardTable).getByRole('columnheader', { name: 'Withdrawal' })).toBeInTheDocument();
     expect(within(standardTable).queryByRole('columnheader', { name: /planned withdrawal|withdrawals \(T \/ R\)|total withdrawal/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Withdrawal %' })).not.toBeInTheDocument();
-    expect(within(standardTable).getByRole('columnheader', { name: 'Taxable' })).toHaveAttribute('colspan', '4');
-    expect(within(standardTable).getByRole('columnheader', { name: 'Retirement' })).toHaveAttribute('colspan', '4');
+    expect(within(standardTable).getByRole('columnheader', { name: 'Taxable' })).toHaveAttribute('colspan', '3');
+    expect(within(standardTable).getByRole('columnheader', { name: 'Retirement' })).toHaveAttribute('colspan', '3');
+    expect(within(standardTable).queryByRole('columnheader', { name: 'Contribution' })).not.toBeInTheDocument();
     expect(within(standardTable).getAllByRole('columnheader', { name: 'End' })).toHaveLength(2);
     const mobileCards = screen.getByLabelText('Annual projection details');
     expect(mobileCards.querySelectorAll('details').length).toBeGreaterThan(0);
