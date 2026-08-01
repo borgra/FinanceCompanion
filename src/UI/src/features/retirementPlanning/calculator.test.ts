@@ -125,20 +125,23 @@ describe('retirement projection', () => {
     expect(result.rows[2]).toMatchObject({ taxableContribution: 0, retirementContribution: 0 });
   });
 
-  it('uses conservative compounding during contribution years by applying contributions after annual growth', () => {
+  it('prorates first-year growth like contributions, then uses full annual growth', () => {
     const result = calculateRetirementProjection(planFor({
       currentAge: 41, retirementAge: 43, longevityAge: 62, annualRoiPercent: 10,
       taxableContribution: { monthlyAmount: 100 / 12, annualIncreasePercent: 0, endAge: 41 },
       retirementContribution: { monthlyAmount: 200 / 12, annualIncreasePercent: 0, endAge: 41 },
-    }), { taxable: 1000, retirement: 2000, hsa: 0, valuedAt: null, source: '', warnings: [] }, new Date(2026, 0, 1));
+    }), { taxable: 1000, retirement: 2000, hsa: 0, valuedAt: null, source: '', warnings: [] }, new Date(2026, 7, 1));
 
     expect(result.rows[0]).toMatchObject({
-      age: 41, taxableContribution: 100 * 11 / 12, retirementContribution: 200 * 11 / 12,
+      age: 41, taxableContribution: 100 * 4 / 12, retirementContribution: 200 * 4 / 12,
       taxableWithdrawal: 0, retirementWithdrawal: 0, totalWithdrawal: 0,
-      endTaxable: 1000 * 1.1 + 100 * 11 / 12, endRetirement: 2000 * 1.1 + 200 * 11 / 12,
+      endTaxable: 1000 + 1000 * 0.1 * 4 / 12 + 100 * 4 / 12,
+      endRetirement: 2000 + 2000 * 0.1 * 4 / 12 + 200 * 4 / 12,
     });
-    expect(result.rows[0].taxableGrowth).toBeCloseTo(100);
-    expect(result.rows[0].retirementGrowth).toBeCloseTo(200);
+    expect(result.rows[0].taxableGrowth).toBeCloseTo(1000 * 0.1 * 4 / 12);
+    expect(result.rows[0].retirementGrowth).toBeCloseTo(2000 * 0.1 * 4 / 12);
+    expect(result.rows[1].taxableGrowth).toBeCloseTo(result.rows[1].startTaxable * 0.1);
+    expect(result.rows[1].retirementGrowth).toBeCloseTo(result.rows[1].startRetirement * 0.1);
   });
   it('excludes HSA by default and includes it only after opt-in', () => {
     const valuation = { taxable: 0, retirement: 1000, hsa: 500, valuedAt: null, source: '', warnings: [], isComplete: true };

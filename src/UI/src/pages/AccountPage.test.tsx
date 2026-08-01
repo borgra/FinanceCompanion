@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import { createMockAccountRepository } from '../domain/accountRepository';
 import { type Account, defaultMonthlyRecords } from '../domain/account';
@@ -86,6 +86,8 @@ const renderPage = (initialAccounts?: Account[], defaultViewMode: 'aggregate' | 
 };
 
 describe('AccountPage', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('updates an account from the edit modal', async () => {
     const repository = renderPage();
 
@@ -203,6 +205,7 @@ describe('AccountPage', () => {
   });
 
   it('keeps selector current balance tied to the account current-month net total', async () => {
+    vi.setSystemTime(new Date(2026, 6, 1, 12));
     renderPage();
 
     const primaryName = await screen.findByText('Liberty Federal Credit Union');
@@ -699,6 +702,7 @@ describe('AccountPage', () => {
   });
 
   it('renders Bank Dashboard by default with emergency fund configs and chart', async () => {
+    vi.setSystemTime(new Date(2026, 6, 1, 12));
     const mockAccounts: Account[] = [
       {
         id: 'acc-checking-1',

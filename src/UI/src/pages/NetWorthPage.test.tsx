@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defaultMonthlyRecords, type Account } from '../domain/account';
 import { createMockAccountRepository } from '../domain/accountRepository';
 import { createMockHoldingRepository } from '../domain/holdingRepository';
@@ -24,7 +24,10 @@ const account = (overrides: Partial<Account>): Account => ({
 });
 
 describe('NetWorthPage', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('groups accounts, edits investment snapshots, and charts variance from the configured baseline', async () => {
+    vi.setSystemTime(new Date(2026, 6, 1, 12));
     const user = userEvent.setup();
     const netWorthRepository = createMockNetWorthRepository(15000);
     const saveSnapshot = vi.spyOn(netWorthRepository, 'putInvestmentSnapshots');

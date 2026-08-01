@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defaultMonthlyRecords, type Account } from '../domain/account';
 import { createMockAccountRepository } from '../domain/accountRepository';
 import type { IncomeSource } from '../domain/incomeSource';
@@ -42,6 +42,8 @@ const incomeSource = (overrides: Partial<IncomeSource> = {}): IncomeSource => ({
 });
 
 describe('FundingSchedulePage', () => {
+  afterEach(() => vi.useRealTimers());
+
   it('creates and deletes investment accounts from the investing workflow', async () => {
     const repository = createMockAccountRepository({
       initialAccounts: [
@@ -108,6 +110,7 @@ describe('FundingSchedulePage', () => {
   });
 
   it('aggregates checking investment amounts and saves non-payroll allocations', async () => {
+    vi.setSystemTime(new Date(2026, 6, 1, 12));
     const checkingOne = account({
       id: 'checking-one',
       name: 'Primary Checking',

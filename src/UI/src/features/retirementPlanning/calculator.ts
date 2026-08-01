@@ -180,13 +180,14 @@ export function calculateRetirementProjection(plan: RetirementPlan, valuation: V
     const isContributionYear = age < plan.retirementAge;
     const taxableBase = Math.max(0, startTaxable + taxableContribution - taxableWithdrawal);
     const retirementBase = Math.max(0, startRetirement + retirementContribution - retirementWithdrawal);
-    const taxableGrowth = isContributionYear ? startTaxable * roi : taxableBase * roi;
-    const retirementGrowth = isContributionYear ? startRetirement * roi : retirementBase * roi;
+    const contributionYearRoi = age === plan.currentAge ? roi * firstYearRemainingMonths / 12 : roi;
+    const taxableGrowth = isContributionYear ? startTaxable * contributionYearRoi : taxableBase * roi;
+    const retirementGrowth = isContributionYear ? startRetirement * contributionYearRoi : retirementBase * roi;
     taxable = isContributionYear
-      ? Math.max(0, startTaxable * (1 + roi) + taxableContribution)
+      ? Math.max(0, startTaxable + taxableGrowth + taxableContribution)
       : Math.max(0, taxableBase + taxableGrowth);
     retirement = isContributionYear
-      ? Math.max(0, startRetirement * (1 + roi) + retirementContribution)
+      ? Math.max(0, startRetirement + retirementGrowth + retirementContribution)
       : Math.max(0, retirementBase + retirementGrowth);
     const status: ProjectionRow['status'] = age < plan.retirementAge
       ? 'pre_retirement'

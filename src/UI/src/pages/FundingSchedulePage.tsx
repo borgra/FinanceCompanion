@@ -36,10 +36,8 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 const payrollDeductibleTypes: InvestmentAccountType[] = ['401k', 'HSA'];
 const maxAccountNameLength = 100;
 const maxAccountBalance = 999_999_999.99;
-const currentProjectionMonthIndex = Math.max(
-  0,
-  Math.min(projectionMonthsList.length - 1, new Date().getMonth()),
-);
+const getCurrentProjectionMonthIndex = (date: Date) =>
+  Math.max(0, Math.min(projectionMonthsList.length - 1, date.getMonth()));
 const investmentGroups: Array<{
   id: InvestmentGroupId;
   label: string;
@@ -313,7 +311,11 @@ const getScopeContribution = (
     .filter((account) => scope === 'all' || getInvestmentGroupId(account) === scope)
     .reduce((sum, account) => sum + getMonthlyContribution(account, month, incomeSources), 0);
 
-const getAccountCurrentContribution = (account: Account, incomeSources: IncomeSource[]) =>
+const getAccountCurrentContribution = (
+  account: Account,
+  incomeSources: IncomeSource[],
+  currentProjectionMonthIndex: number,
+) =>
   projectionMonthsList
     .slice(0, currentProjectionMonthIndex + 1)
     .reduce((sum, month) => sum + getMonthlyContribution(account, month, incomeSources), 0);
@@ -322,6 +324,7 @@ export function FundingSchedulePage({
   accountRepository,
   incomeRepository,
 }: FundingSchedulePageProps) {
+  const currentProjectionMonthIndex = getCurrentProjectionMonthIndex(new Date());
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [draftAccounts, setDraftAccounts] = useState<Account[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
@@ -777,7 +780,7 @@ export function FundingSchedulePage({
                   </div>
                   <div className="account-selector-item-right">
                     <span className="account-selector-item-bal">
-                      Current Contributions: {formatMoney(getAccountCurrentContribution(account, incomeSources))}
+                      Current Contributions: {formatMoney(getAccountCurrentContribution(account, incomeSources, currentProjectionMonthIndex))}
                     </span>
                     <div className="investment-account-actions">
                       <button
