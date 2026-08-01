@@ -38,12 +38,14 @@ export type SecurityMetadata = {
   dividendCurrentYear?: number | null;
   dividendGrowthRate?: number | null;
   estimatedFuturePayout?: number | null;
+  dividendStatus?: string | null;
   sma20?: number | null;
   sma50?: number | null;
   sma200?: number | null;
   detailsUpdatedAt?: string | null;
   detailsStatus?: string | null;
   payoutDetails?: SecurityPayoutDetails[];
+  sourcePayoutDetails?: SecurityPayoutDetails[];
   manualPayoutDetails?: SecurityPayoutDetails[];
   corporateActions?: CorporateAction[];
 };

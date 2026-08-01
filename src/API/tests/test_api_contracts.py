@@ -298,7 +298,7 @@ def test_security_can_be_searched_and_added_to_multiple_accounts():
     assert any(item["security"]["symbol"] == "VTI" for item in holdings_response.json())
 
 
-def test_security_details_refresh_persists_stock_and_payout_details():
+def test_security_details_refresh_updates_market_data_without_adding_provider_dividends():
     client = build_test_client()
     authenticate(client)
 
@@ -321,19 +321,12 @@ def test_security_details_refresh_persists_stock_and_payout_details():
     refreshed_security = refresh_response.json()["security"]
     assert refreshed_security["price"] == 321.45
     assert refreshed_security["peRatio"] == 24.2
-    assert refreshed_security["estimatedFuturePayout"] == 3.72
-    assert refreshed_security["dividendStatus"] == "recent"
-    assert refreshed_security["payoutDetails"] == [
-        {
-            "exDividendDate": "2026-06-28",
-            "amount": 0.45,
-            "declarationDate": "2026-06-10",
-            "recordDate": "2026-06-29",
-                "paymentDate": "2026-07-02",
-                "source": "dividends",
-                "mode": "source",
-            }
-        ]
+    assert refreshed_security["estimatedFuturePayout"] is None
+    assert refreshed_security["dividendPreviousYear"] is None
+    assert refreshed_security["dividendCurrentYear"] is None
+    assert refreshed_security["dividendGrowthRate"] is None
+    assert refreshed_security["dividendStatus"] is None
+    assert refreshed_security["payoutDetails"] == []
 
     holdings_response = client.get("/api/v1/holdings")
 
@@ -344,7 +337,7 @@ def test_security_details_refresh_persists_stock_and_payout_details():
         if item["id"] == holding_id
     )
     assert persisted_security["price"] == 321.45
-    assert persisted_security["payoutDetails"][0]["paymentDate"] == "2026-07-02"
+    assert persisted_security["payoutDetails"] == []
 
 
 def test_existing_security_add_reuses_holding_and_keeps_saved_details():
@@ -381,7 +374,7 @@ def test_existing_security_add_reuses_holding_and_keeps_saved_details():
     payload = second_response.json()
     assert payload["id"] == holding_id
     assert payload["security"]["price"] == 321.45
-    assert payload["security"]["payoutDetails"][0]["exDividendDate"] == "2026-06-28"
+    assert payload["security"]["payoutDetails"] == []
     assert payload["accountPositions"] == [
         {"accountId": "acc-taxable-brokerage", "quantity": 12.5, "costBasis": 3100},
         {"accountId": "acc-roth-ira", "quantity": 0, "costBasis": None},
@@ -396,7 +389,7 @@ def test_existing_security_add_reuses_holding_and_keeps_saved_details():
     ]) == 1
 
 
-def test_manual_payouts_persist_until_a_refresh_explicitly_replaces_them():
+def test_manual_payouts_persist_even_when_a_legacy_refresh_requests_replacement():
     client = build_test_client()
     authenticate(client)
     holding_id = "holding-jepq"
@@ -430,8 +423,9 @@ def test_manual_payouts_persist_until_a_refresh_explicitly_replaces_them():
     )
 
     assert replaced_response.status_code == 200
-    assert replaced_response.json()["security"]["manualPayoutDetails"] == []
-    assert replaced_response.json()["security"]["payoutDetails"][0]["mode"] == "source"
+    replaced_security = replaced_response.json()["security"]
+    assert replaced_security["manualPayoutDetails"] == manual_response.json()["security"]["manualPayoutDetails"]
+    assert replaced_security["payoutDetails"][0]["mode"] == "manual"
 
 
 def test_delete_holding_removes_security_from_holdings():
@@ -528,7 +522,7 @@ def test_holding_import_updates_only_listed_account_positions():
     response = client.put("/api/v1/holdings/import", json={"rows": [{
         "symbol": security["symbol"],
         "name": security["name"],
-        "price": security["price"],
+        "price": security["price"] or 315.12,
         "accountPositions": [
             {"accountId": "acc-401k", "quantity": 43, "costBasis": None},
         ],

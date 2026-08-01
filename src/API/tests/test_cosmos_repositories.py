@@ -234,7 +234,7 @@ def test_account_create_and_update(mock_table_client):
         yield_rate=0.0,
         assigned_income_source_ids=["income-source-primary"],
         columns=[AccountColumn("col-1", "Rent", "home")],
-        monthly_records=[MonthlyRecord("Jan-26", 4000, {"col-1": 1500}, 500, 200)],
+        monthly_records=[MonthlyRecord("Jan-26", 4000, 0, {"col-1": 1500}, 500, 200)],
         created_at="2026-01-01T00:00:00Z",
         updated_at="2026-01-01T00:00:00Z",
         savings_account_id=None
@@ -319,6 +319,7 @@ def test_holding_stores_security_identity_and_details_separately(mock_table_clie
             }
         ],
         "manualPayouts": [],
+        "corporateActions": [],
     }
     positions = json.loads(entity["accountPositionsJson"])
     assert positions == [
@@ -409,6 +410,7 @@ def test_holding_writes_none_recent_dividend_section_without_null_totals(mock_ta
         "status": "none_recent",
         "sourcePayouts": [],
         "manualPayouts": [],
+        "corporateActions": [],
     }
 
 

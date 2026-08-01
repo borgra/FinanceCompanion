@@ -243,6 +243,10 @@ class SecurityMetadataPayload(CamelModel):
         default_factory=list,
         serialization_alias="payoutDetails",
     )
+    source_payout_details: list[SecurityPayoutDetailsPayload] = Field(
+        default_factory=list,
+        serialization_alias="sourcePayoutDetails",
+    )
     manual_payout_details: list[SecurityPayoutDetailsPayload] = Field(
         default_factory=list,
         serialization_alias="manualPayoutDetails",
@@ -336,9 +340,6 @@ class HoldingManualPayoutsRequest(CamelModel):
         serialization_alias="manualPayoutDetails",
     )
 
-
-class SecurityDetailsRefreshRequest(CamelModel):
-    replace_manual_payouts: bool = Field(default=False, serialization_alias="replaceManualPayouts")
 
 
 

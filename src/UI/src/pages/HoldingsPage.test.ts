@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from '../domain/account';
+import { createMockHoldingRepository } from '../domain/holdingRepository';
 import { createHoldingImportTemplate, parseCorporateActionImport, parseHoldingImport, parsePassiveIncomeImport } from './HoldingsPage';
 import { normalizePayoutAmount } from './PassiveIncomePage';
 
@@ -118,5 +119,51 @@ describe('corporate action imports and normalization', () => {
       { symbol: 'MSFT', action: { effectiveDate: '2024-06-15', type: 'stock_split', oldShares: 1, newShares: 4 } },
       { symbol: 'ABC', action: { effectiveDate: '2024-09-30', type: 'reverse_stock_split', oldShares: 10, newShares: 1 } },
     ]);
+  });
+});
+
+describe('holding security refresh', () => {
+  it('preserves manually owned dividend data for individual and bulk refreshes', async () => {
+    const repository = createMockHoldingRepository();
+    const payout = { exDividendDate: '2026-07-01', paymentDate: '2026-07-05', amount: 0.31, source: 'user', mode: 'manual' as const };
+    const sourcePayout = { exDividendDate: '2025-07-01', paymentDate: '2025-07-05', amount: 0.21, source: 'saved-source', mode: 'source' as const };
+    const security = {
+      symbol: 'VTI', name: 'Saved VTI', exchange: 'NYSE Arca', assetType: 'ETF', currency: 'USD', price: 300,
+      dividendPreviousYear: 1.1, dividendCurrentYear: 1.2, dividendGrowthRate: 0.09,
+      estimatedFuturePayout: 1.3, dividendStatus: 'manual', payoutDetails: [payout],
+      sourcePayoutDetails: [sourcePayout], manualPayoutDetails: [payout], detailsUpdatedAt: '2026-01-01T00:00:00Z',
+    };
+    const created = await repository.createHolding({ security, accountPositions: [] });
+
+    const refreshed = await repository.refreshHoldingSecurityDetails(created.id);
+
+    expect(refreshed.security.price).toBe(315);
+    expect(refreshed.security).toMatchObject({
+      dividendPreviousYear: 1.1,
+      dividendCurrentYear: 1.2,
+      dividendGrowthRate: 0.09,
+      estimatedFuturePayout: 1.3,
+      dividendStatus: 'manual',
+      payoutDetails: [payout],
+      sourcePayoutDetails: [sourcePayout],
+      manualPayoutDetails: [payout],
+    });
+
+    const bulkSecurity = { ...security, symbol: 'SCHD', name: 'Saved SCHD', price: 28 };
+    const bulkHolding = await repository.createHolding({ security: bulkSecurity, accountPositions: [] });
+    const bulkResult = await repository.refreshHeldSecurityDetails();
+    const bulkRefreshed = bulkResult.holdings.find((holding) => holding.id === bulkHolding.id);
+
+    expect(bulkRefreshed?.security.price).toBe(29);
+    expect(bulkRefreshed?.security).toMatchObject({
+      dividendPreviousYear: 1.1,
+      dividendCurrentYear: 1.2,
+      dividendGrowthRate: 0.09,
+      estimatedFuturePayout: 1.3,
+      dividendStatus: 'manual',
+      payoutDetails: [payout],
+      sourcePayoutDetails: [sourcePayout],
+      manualPayoutDetails: [payout],
+    });
   });
 });

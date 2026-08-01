@@ -29,10 +29,10 @@ export const createHoldingApiRepository = (client: HttpClient): HoldingRepositor
     }),
   purgePaymentData: () => client.delete<Holding[]>('/holdings/payouts'),
   deleteHolding: (id: string) => client.delete(`/holdings/${id}`),
-  refreshHoldingSecurityDetails: (id: string, options) =>
-    client.post<Holding>(`/holdings/${id}/security-details/refresh`, options ?? {}),
-  refreshHeldSecurityDetails: (options) =>
-    client.post<SecurityDetailsRefreshResult>('/holdings/security-details/refresh', options ?? {}),
+  refreshHoldingSecurityDetails: (id: string) =>
+    client.post<Holding>(`/holdings/${id}/security-details/refresh`),
+  refreshHeldSecurityDetails: () =>
+    client.post<SecurityDetailsRefreshResult>('/holdings/security-details/refresh'),
   updateManualPayoutDetails: (id, payouts) =>
     client.put<Holding>(`/holdings/${id}/manual-payouts`, { manualPayoutDetails: payouts }),
 });

@@ -519,20 +519,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setSuccessMessage(`${updated.security.symbol} corporate actions were saved.`);
   };
   const refreshHoldingDetails = async (holdingId: string) => {
-    const holding = holdings.find((item) => item.id === holdingId);
-    const hasManualPayouts = Boolean(holding?.security.manualPayoutDetails?.length);
-    const replaceManualPayouts = hasManualPayouts
-      ? window.confirm(
-          `Replace ${holding?.security.symbol} manual payment data with the latest source data? Select Cancel to keep manual payment data.`,
-        )
-      : false;
     setRefreshingHoldingIds((current) => new Set(current).add(holdingId));
     setError(null);
     setSuccessMessage(null);
     try {
-      const refreshed = hasManualPayouts
-        ? await holdingRepository.refreshHoldingSecurityDetails(holdingId, { replaceManualPayouts })
-        : await holdingRepository.refreshHoldingSecurityDetails(holdingId);
+      const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holdingId);
       setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
       setSuccessMessage(`${refreshed.security.symbol} was updated.`);
     } catch {
@@ -569,22 +560,12 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setError(null);
     setSuccessMessage(null);
     const failedSymbols: string[] = [];
-    const holdingsWithManualPayouts = holdingsToRefresh.filter(
-      (holding) => holding.security.manualPayoutDetails?.length,
-    );
-    const replaceManualPayouts = holdingsWithManualPayouts.length > 0
-      ? window.confirm(
-          `Replace manual payment data for all ${holdingsWithManualPayouts.length} affected holdings with source data? Select Cancel to keep all manual payment data.`,
-        )
-      : false;
 
     try {
       for (const [index, holding] of holdingsToRefresh.entries()) {
         setRefreshingHoldingIds((current) => new Set(current).add(holding.id));
         try {
-          const refreshed = holdingsWithManualPayouts.length > 0
-            ? await holdingRepository.refreshHoldingSecurityDetails(holding.id, { replaceManualPayouts })
-            : await holdingRepository.refreshHoldingSecurityDetails(holding.id);
+          const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holding.id);
           setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
         } catch {
           failedSymbols.push(holding.security.symbol);

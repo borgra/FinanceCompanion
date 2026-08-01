@@ -21,10 +21,26 @@ export type HoldingRepository = {
   importCorporateActions?: (rows: CorporateActionImportRow[]) => Promise<HoldingImportResult>;
   purgePaymentData?: () => Promise<Holding[]>;
   deleteHolding: (id: string) => Promise<void>;
-  refreshHoldingSecurityDetails: (id: string, options?: { replaceManualPayouts?: boolean }) => Promise<Holding>;
-  refreshHeldSecurityDetails: (options?: { replaceManualPayouts?: boolean }) => Promise<SecurityDetailsRefreshResult>;
+  refreshHoldingSecurityDetails: (id: string) => Promise<Holding>;
+  refreshHeldSecurityDetails: () => Promise<SecurityDetailsRefreshResult>;
   updateManualPayoutDetails: (id: string, payouts: SecurityPayoutDetails[]) => Promise<Holding>;
 };
+
+const mergeRefreshedSecurity = (
+  current: SecurityMetadata,
+  refreshed: SecurityMetadata,
+): SecurityMetadata => ({
+  ...current,
+  ...refreshed,
+  dividendPreviousYear: current.dividendPreviousYear,
+  dividendCurrentYear: current.dividendCurrentYear,
+  dividendGrowthRate: current.dividendGrowthRate,
+  estimatedFuturePayout: current.estimatedFuturePayout,
+  dividendStatus: current.dividendStatus,
+  payoutDetails: current.payoutDetails,
+  sourcePayoutDetails: current.sourcePayoutDetails,
+  manualPayoutDetails: current.manualPayoutDetails,
+});
 
 const nowIso = () => new Date().toISOString();
 
@@ -306,7 +322,7 @@ export function createMockHoldingRepository(): HoldingRepository {
       }
       holdings = holdings.filter((holding) => holding.id !== id);
     },
-    refreshHoldingSecurityDetails: async (id, options) => {
+    refreshHoldingSecurityDetails: async (id) => {
       const existing = holdings.find((holding) => holding.id === id);
       if (!existing) {
         throw new Error('Holding not found.');
@@ -320,15 +336,7 @@ export function createMockHoldingRepository(): HoldingRepository {
       const updated: Holding = {
         ...existing,
         security: {
-          ...existing.security,
-          ...catalogSecurity,
-          payoutDetails:
-            existing.security.manualPayoutDetails?.length && !options?.replaceManualPayouts
-              ? existing.security.manualPayoutDetails
-              : catalogSecurity?.payoutDetails ?? existing.security.payoutDetails,
-          manualPayoutDetails: options?.replaceManualPayouts
-            ? []
-            : existing.security.manualPayoutDetails,
+          ...mergeRefreshedSecurity(existing.security, catalogSecurity),
           detailsStatus: 'fresh',
           detailsUpdatedAt: nowIso(),
         },
@@ -341,7 +349,7 @@ export function createMockHoldingRepository(): HoldingRepository {
         accountPositions: updated.accountPositions.map((position) => ({ ...position })),
       };
     },
-    refreshHeldSecurityDetails: async (options) => {
+    refreshHeldSecurityDetails: async () => {
       const refreshed = await Promise.all(
         holdings.map((holding) => {
           if (!needsSecurityRefresh(holding.security.detailsUpdatedAt)) {
@@ -356,15 +364,7 @@ export function createMockHoldingRepository(): HoldingRepository {
           const updated: Holding = {
             ...holding,
             security: {
-              ...holding.security,
-              ...catalogSecurity,
-              payoutDetails:
-                holding.security.manualPayoutDetails?.length && !options?.replaceManualPayouts
-                  ? holding.security.manualPayoutDetails
-                  : catalogSecurity?.payoutDetails ?? holding.security.payoutDetails,
-              manualPayoutDetails: options?.replaceManualPayouts
-                ? []
-                : holding.security.manualPayoutDetails,
+              ...mergeRefreshedSecurity(holding.security, catalogSecurity),
               detailsStatus: 'fresh',
               detailsUpdatedAt: nowIso(),
             },

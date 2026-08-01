@@ -45,12 +45,6 @@ def _has_valid_price(price: float | None) -> bool:
     return price is not None and isfinite(price) and price > 0
 
 
-def _effective_payout_details(
-    source_payout_details: list,
-    manual_payout_details: list,
-) -> list:
-    return manual_payout_details or source_payout_details
-
 
 def merge_security_details(
     current: SecurityMetadata,
@@ -58,12 +52,9 @@ def merge_security_details(
     *,
     status: str,
     updated_at: str,
-    replace_manual_payouts: bool = False,
 ) -> SecurityMetadata:
     if not _has_valid_price(details.price):
         return current
-    source_payout_details = details.source_payout_details or details.payout_details
-    manual_payout_details = [] if replace_manual_payouts else current.manual_payout_details
     return SecurityMetadata(
         symbol=current.symbol,
         name=details.name or current.name,
@@ -77,19 +68,19 @@ def merge_security_details(
         thirty_day_yield=_coalesce(details.thirty_day_yield, current.thirty_day_yield),
         fifty_two_week_low=_coalesce(details.fifty_two_week_low, current.fifty_two_week_low),
         fifty_two_week_high=_coalesce(details.fifty_two_week_high, current.fifty_two_week_high),
-        dividend_previous_year=_coalesce(details.dividend_previous_year, current.dividend_previous_year),
-        dividend_current_year=_coalesce(details.dividend_current_year, current.dividend_current_year),
-        dividend_growth_rate=_coalesce(details.dividend_growth_rate, current.dividend_growth_rate),
-        estimated_future_payout=_coalesce(details.estimated_future_payout, current.estimated_future_payout),
-        dividend_status=_coalesce(details.dividend_status, current.dividend_status),
+        dividend_previous_year=current.dividend_previous_year,
+        dividend_current_year=current.dividend_current_year,
+        dividend_growth_rate=current.dividend_growth_rate,
+        estimated_future_payout=current.estimated_future_payout,
+        dividend_status=current.dividend_status,
         sma20=_coalesce(details.sma20, current.sma20),
         sma50=_coalesce(details.sma50, current.sma50),
         sma200=_coalesce(details.sma200, current.sma200),
         details_updated_at=updated_at,
         details_status=details.details_status or status,
-        payout_details=_effective_payout_details(source_payout_details, manual_payout_details),
-        source_payout_details=source_payout_details,
-        manual_payout_details=manual_payout_details,
+        payout_details=current.payout_details,
+        source_payout_details=current.source_payout_details,
+        manual_payout_details=current.manual_payout_details,
     )
 
 
@@ -106,8 +97,6 @@ class RefreshHoldingSecurityDetails:
         self,
         user_id: str,
         holding_id: str,
-        *,
-        replace_manual_payouts: bool = False,
     ) -> Holding:
         holdings = self._repository.list_for_user(user_id)
         holding = next((item for item in holdings if item.id == holding_id), None)
@@ -123,7 +112,6 @@ class RefreshHoldingSecurityDetails:
                 details,
                 status="fresh",
                 updated_at=timestamp,
-                replace_manual_payouts=replace_manual_payouts,
             ),
             updated_at=timestamp,
         )
@@ -142,8 +130,6 @@ class RefreshHeldSecurityDetails:
     def execute(
         self,
         user_id: str,
-        *,
-        replace_manual_payouts: bool = False,
     ) -> SecurityDetailsRefreshResult:
         holdings = self._repository.list_for_user(user_id)
         details_by_symbol: dict[str, SecurityMetadata] = {}
@@ -179,7 +165,6 @@ class RefreshHeldSecurityDetails:
                     details,
                     status="fresh",
                     updated_at=timestamp,
-                    replace_manual_payouts=replace_manual_payouts,
                 ),
                 updated_at=timestamp,
             )

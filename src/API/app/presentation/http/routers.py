@@ -58,7 +58,6 @@ from app.presentation.http.schemas import (
     IncomeSourceStatusRequest,
     IncomeSourceUpsertRequest,
     SecurityDetailsRefreshResultPayload,
-    SecurityDetailsRefreshRequest,
     SecurityMetadataPayload,
     UserResponse,
 )
@@ -480,14 +479,10 @@ def import_holding_details(request: HoldingImportRequest, user=Depends(require_s
 
 @router.post("/holdings/security-details/refresh", response_model=SecurityDetailsRefreshResultPayload)
 def refresh_held_security_details(
-    request: SecurityDetailsRefreshRequest | None = None,
     user=Depends(require_session_user),
     container=Depends(get_container),
 ) -> SecurityDetailsRefreshResultPayload:
-    result = container.refresh_held_security_details.execute(
-        user.user_id,
-        replace_manual_payouts=request.replace_manual_payouts if request else False,
-    )
+    result = container.refresh_held_security_details.execute(user.user_id)
     return to_security_details_refresh_result_payload(
         result.holdings,
         result.failed_symbols,
@@ -497,17 +492,12 @@ def refresh_held_security_details(
 @router.post("/holdings/{holding_id}/security-details/refresh", response_model=HoldingPayload)
 def refresh_holding_security_details(
     holding_id: str,
-    request: SecurityDetailsRefreshRequest | None = None,
     user=Depends(require_session_user),
     container=Depends(get_container),
 ) -> HoldingPayload:
     try:
         return to_holding_payload(
-            container.refresh_holding_security_details.execute(
-                user.user_id,
-                holding_id,
-                replace_manual_payouts=request.replace_manual_payouts if request else False,
-            )
+            container.refresh_holding_security_details.execute(user.user_id, holding_id)
         )
     except SecurityDetailsUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc

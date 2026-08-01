@@ -277,6 +277,10 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
             to_security_payout_details(item)
             for item in payload.payout_details
         ],
+        source_payout_details=[
+            to_security_payout_details(item)
+            for item in payload.source_payout_details
+        ],
         manual_payout_details=[
             to_security_payout_details(item)
             for item in payload.manual_payout_details
@@ -315,6 +319,10 @@ def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayl
         payout_details=[
             to_security_payout_details_payload(payout)
             for payout in item.payout_details
+        ],
+        source_payout_details=[
+            to_security_payout_details_payload(payout)
+            for payout in item.source_payout_details
         ],
         manual_payout_details=[
             to_security_payout_details_payload(payout)

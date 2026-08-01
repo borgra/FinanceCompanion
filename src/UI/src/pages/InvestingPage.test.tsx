@@ -249,6 +249,14 @@ describe('InvestingPage', () => {
           exchange: 'NYSE Arca',
           assetType: 'ETF',
           currency: 'USD',
+          dividendCurrentYear: 1.2,
+          dividendStatus: 'manual',
+          payoutDetails: [
+            { exDividendDate: '2026-07-01', paymentDate: '2026-07-05', amount: 0.31, source: 'user', mode: 'manual' },
+          ],
+          manualPayoutDetails: [
+            { exDividendDate: '2026-07-01', paymentDate: '2026-07-05', amount: 0.31, source: 'user', mode: 'manual' },
+          ],
           price: 315,
         },
         accountPositions: [{ accountId: 'acc-taxable-brokerage', quantity: 10, costBasis: null }],
@@ -270,6 +278,8 @@ describe('InvestingPage', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
     ];
+    const confirm = vi.spyOn(window, 'confirm');
+    confirm.mockClear();
     const refreshHoldingSecurityDetails = vi.fn(async (id: string) => {
       const holding = holdings.find((item) => item.id === id);
       if (!holding) {
@@ -311,6 +321,7 @@ describe('InvestingPage', () => {
 
     expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
     expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(1, 'holding-vti');
+    expect(confirm).not.toHaveBeenCalled();
 
     await new Promise((resolve) => {
       window.setTimeout(resolve, 2900);
@@ -416,6 +427,18 @@ describe('InvestingPage', () => {
   });
   it('shows passive income by month with prior actuals and current and next-year estimates', async () => {
     const holdingRepository = createMockHoldingRepository();
+    const vti = (await holdingRepository.searchSecurities('vti'))[0];
+    const manualPayouts = (vti.payoutDetails ?? []).map((payout) => ({ ...payout, mode: 'manual' as const, source: 'user' }));
+    await holdingRepository.createHolding({
+      security: { ...vti, payoutDetails: manualPayouts, manualPayoutDetails: manualPayouts },
+      accountPositions: [
+        { accountId: 'acc-taxable-brokerage', quantity: 12.5, costBasis: null },
+      ],
+    });
+
+    const confirm = vi.spyOn(window, 'confirm');
+    confirm.mockClear();
+    const refreshHoldingSecurityDetails = vi.spyOn(holdingRepository, 'refreshHoldingSecurityDetails');
     const currentYear = new Date().getFullYear();
     render(
       <InvestingPage
@@ -426,17 +449,11 @@ describe('InvestingPage', () => {
     );
 
     await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
-    await userEvent.type(screen.getByLabelText('Security'), 'vti');
-    await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
-    await userEvent.type(
-      screen.getByLabelText('VTI quantity for Fidelity Taxable Brokerage'),
-      '12.5',
-    );
-    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    await screen.findByText('Holdings saved.');
-    await userEvent.click(screen.getByRole('button', { name: 'Update VTI holding' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Update VTI holding' }));
     await screen.findByText('VTI was updated.');
+    expect(confirm).not.toHaveBeenCalled();
+    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
+    expect(refreshHoldingSecurityDetails.mock.calls[0]).toHaveLength(1);
 
     await userEvent.click(screen.getByRole('tab', { name: 'Passive Income' }));
 

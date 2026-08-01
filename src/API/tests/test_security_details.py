@@ -2,7 +2,7 @@ from app.application.use_cases.security_details import (
     RefreshHeldSecurityDetails,
     RefreshHoldingSecurityDetails,
 )
-from app.domain.models import Holding, HoldingAccountPosition, SecurityMetadata
+from app.domain.models import Holding, HoldingAccountPosition, SecurityMetadata, SecurityPayoutDetails
 from app.infrastructure.in_memory_repositories import now_iso
 
 
@@ -58,6 +58,26 @@ def holding(
             symbol=symbol,
             name="Vanguard Total Stock Market ETF",
             exchange="NYSE Arca",
+            dividend_previous_year=1.1,
+            dividend_current_year=1.2,
+            dividend_growth_rate=0.09,
+            estimated_future_payout=1.3,
+            dividend_status="manual",
+            payout_details=[SecurityPayoutDetails(
+                ex_dividend_date="2026-07-01",
+                payment_date="2026-07-05",
+                amount=0.31,
+                source="user",
+                mode="manual",
+            )],
+            source_payout_details=[SecurityPayoutDetails(
+                ex_dividend_date="2025-07-01",
+                amount=0.21,
+                source="saved-source",
+            )],
+            manual_payout_details=[SecurityPayoutDetails(
+                ex_dividend_date="2026-07-01", payment_date="2026-07-05", amount=0.31, source="user", mode="manual",
+            )],
             asset_type="ETF",
             currency="USD",
             price=315.12,
@@ -83,10 +103,15 @@ def test_refresh_holding_security_details_persists_merged_details():
     assert provider.requested_symbols == ["VTI"]
     assert refreshed.security.price == 321.45
     assert refreshed.security.pe_ratio == 24.6
-    assert refreshed.security.dividend_previous_year == 3.4
-    assert refreshed.security.dividend_current_year == 3.6
-    assert refreshed.security.dividend_growth_rate == 0.0588
-    assert refreshed.security.dividend_status == "recent"
+    assert refreshed.security.dividend_previous_year == 1.1
+    assert refreshed.security.dividend_current_year == 1.2
+    assert refreshed.security.dividend_growth_rate == 0.09
+    assert refreshed.security.estimated_future_payout == 1.3
+    assert refreshed.security.dividend_status == "manual"
+    assert refreshed.security.payout_details[0].amount == 0.31
+    assert refreshed.security.source_payout_details[0].amount == 0.21
+    assert refreshed.security.manual_payout_details[0].amount == 0.31
+    assert refreshed.security.payout_details[0].mode == "manual"
     assert refreshed.security.sma20 == 318.2
     assert refreshed.security.details_status == "fresh"
     assert refreshed.security.details_updated_at is not None
@@ -121,6 +146,9 @@ def test_bulk_refresh_deduplicates_symbols_and_updates_matching_holdings():
     assert result.failed_symbols == []
     assert [item.security.price for item in result.holdings] == [321.45, 321.45]
 
+    assert all(item.security.dividend_current_year == 1.2 for item in result.holdings)
+    assert all(item.security.payout_details[0].amount == 0.31 for item in result.holdings)
+    assert all(item.security.manual_payout_details[0].mode == "manual" for item in result.holdings)
 
 def test_bulk_refresh_skips_details_updated_within_48_hours():
     repository = FakeHoldingRepository([
