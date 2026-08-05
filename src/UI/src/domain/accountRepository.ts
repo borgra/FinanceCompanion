@@ -37,9 +37,13 @@ const draftToAccountFields = (draft: AccountDraft) => ({
   investmentAccountType:
     draft.type === 'Investment' ? draft.investmentAccountType : undefined,
   investmentBrokerage:
-    draft.type === 'Investment' ? draft.investmentBrokerage : undefined,
+    draft.type === 'Investment' && draft.investmentAccountType !== 'Pension'
+      ? draft.investmentBrokerage
+      : undefined,
   manageHoldings:
-    draft.type === 'Investment' ? draft.manageHoldings : false,
+    draft.type === 'Investment' && draft.investmentAccountType !== 'Pension'
+      ? draft.manageHoldings
+      : false,
   yearlyContribution:
     draft.type === 'Investment' ? Number(draft.yearlyContribution) || 0 : undefined,
   employerIncomeSourceId:
@@ -54,6 +58,10 @@ const draftToAccountFields = (draft: AccountDraft) => ({
     draft.type === 'Investment' ? Number(draft.employerMatchAmount) || 0 : undefined,
   employerMatchPercent:
     draft.type === 'Investment' ? Number(draft.employerMatchPercent) || 0 : undefined,
+  employerName:
+    draft.type === 'Investment' && draft.investmentAccountType === 'Pension'
+      ? (draft.employerName || '').trim()
+      : undefined,
   columns: draft.columns.map((c) => ({ ...c })),
   monthlyRecords: draft.monthlyRecords.map((r) => ({
     month: r.month,

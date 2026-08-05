@@ -206,6 +206,90 @@ def test_seeded_contracts_are_served_after_authentication():
     assert session_response.json()["email"] == "steveborgra@gmail.com"
 
 
+def test_pension_employer_round_trips_and_holdings_fields_are_forced_off():
+    client = build_test_client()
+    authenticate(client)
+
+    response = client.post(
+        "/api/v1/accounts",
+        json={
+            "name": "City Pension",
+            "type": "Investment",
+            "startingBalance": 10000,
+            "startDate": "2026-01-01",
+            "yieldRate": 4,
+            "investmentAccountType": "Pension",
+            "investmentBrokerage": "Fidelity",
+            "manageHoldings": True,
+            "employerName": "City of Chicago",
+            "columns": [],
+            "monthlyRecords": [
+                {
+                    "month": "Jan-26",
+                    "credit": 0,
+                    "additionalIncome": 0,
+                    "outflows": {},
+                    "invest": 100,
+                    "savings": 0,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    pension = response.json()
+    assert pension["employerName"] == "City of Chicago"
+    assert pension["investmentBrokerage"] is None
+    assert pension["manageHoldings"] is False
+    assert pension["monthlyRecords"][0]["invest"] == 100
+
+    listed = client.get("/api/v1/accounts")
+    persisted = next(item for item in listed.json() if item["id"] == pension["id"])
+    assert persisted["employerName"] == "City of Chicago"
+    assert persisted["investmentBrokerage"] is None
+    assert persisted["manageHoldings"] is False
+
+def test_holding_write_paths_reject_pension_accounts():
+    client = build_test_client()
+    authenticate(client)
+    pension = client.post(
+        "/api/v1/accounts",
+        json={
+            "name": "City Pension",
+            "type": "Investment",
+            "startingBalance": 10000,
+            "startDate": "2026-01-01",
+            "yieldRate": 4,
+            "investmentAccountType": "Pension",
+            "manageHoldings": True,
+            "employerName": "City of Chicago",
+            "columns": [],
+            "monthlyRecords": [],
+        },
+    ).json()
+    existing = client.get("/api/v1/holdings").json()[0]
+    pension_position = [{"accountId": pension["id"], "quantity": 1, "costBasis": None}]
+    holding_request = {
+        "security": existing["security"],
+        "accountPositions": pension_position,
+    }
+
+    assert client.post("/api/v1/holdings", json=holding_request).status_code == 400
+    assert client.put(f"/api/v1/holdings/{existing['id']}", json=holding_request).status_code == 400
+    assert client.put(
+        "/api/v1/holdings/batch",
+        json={"holdings": [{"id": existing["id"], **holding_request}]},
+    ).status_code == 400
+    assert client.put(
+        "/api/v1/holdings/import",
+        json={"rows": [{
+            "symbol": existing["security"]["symbol"],
+            "name": existing["security"]["name"],
+            "price": existing["security"]["price"] or 1,
+            "accountPositions": pension_position,
+        }]},
+    ).status_code == 400
+
 def test_budget_category_essential_classification_persists_through_updates():
     client = build_test_client()
     authenticate(client)

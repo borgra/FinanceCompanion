@@ -149,8 +149,12 @@ def to_account(account_id: str, payload: AccountUpsertRequest, created_at: str, 
         updated_at=updated_at,
         savings_account_id=payload.savings_account_id,
         investment_account_type=payload.investment_account_type,
-        investment_brokerage=payload.investment_brokerage,
-        manage_holdings=payload.manage_holdings,
+        investment_brokerage=(
+            None if payload.investment_account_type == "Pension" else payload.investment_brokerage
+        ),
+        manage_holdings=(
+            False if payload.investment_account_type == "Pension" else payload.manage_holdings
+        ),
         yearly_contribution=payload.yearly_contribution,
         employer_income_source_id=payload.employer_income_source_id,
         employer_match_rate_percent=payload.employer_match_rate_percent,
@@ -158,6 +162,7 @@ def to_account(account_id: str, payload: AccountUpsertRequest, created_at: str, 
         employer_match_start_date=payload.employer_match_start_date,
         employer_match_amount=payload.employer_match_amount,
         employer_match_percent=payload.employer_match_percent,
+        employer_name=payload.employer_name,
     )
 
 
@@ -181,6 +186,7 @@ def to_account_payload(item: Account) -> AccountPayload:
         employer_match_start_date=item.employer_match_start_date,
         employer_match_amount=item.employer_match_amount,
         employer_match_percent=item.employer_match_percent,
+        employer_name=item.employer_name,
         columns=[
             AccountColumnPayload(
                 id=column.id,

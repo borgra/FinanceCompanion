@@ -216,6 +216,7 @@ def _account_from_entity(entity: dict) -> Account:
             if entity.get("employerMatchPercent") is not None
             else None
         ),
+        employer_name=entity.get("employerName"),
     )
 
 
@@ -245,6 +246,7 @@ def _account_to_entity(user_id: str, account: Account) -> dict:
         "employerMatchStartDate": account.employer_match_start_date,
         "employerMatchAmount": account.employer_match_amount,
         "employerMatchPercent": account.employer_match_percent,
+        "employerName": account.employer_name,
     }
 
 

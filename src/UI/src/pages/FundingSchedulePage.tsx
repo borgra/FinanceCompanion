@@ -24,7 +24,7 @@ type FundingSchedulePageProps = {
   incomeRepository: IncomeSourceRepository;
 };
 
-type InvestmentGroupId = 'taxable' | 'retirement' | 'hsa';
+type InvestmentGroupId = 'taxable' | 'retirement' | 'hsa' | 'pension';
 
 type ScheduleMetricScope = 'all' | InvestmentGroupId;
 
@@ -58,6 +58,11 @@ const investmentGroups: Array<{
     label: 'HSA',
     description: 'Driven by planned contributions and employer match rules.',
   },
+  {
+    id: 'pension',
+    label: 'Pension',
+    description: 'Project fixed income pension growth and special contributions.',
+  },
 ];
 
 type InvestmentAccountDraft = {
@@ -75,6 +80,7 @@ type InvestmentAccountDraft = {
   employerMatchStartDate: string;
   employerMatchAmount: string;
   employerMatchPercent: string;
+  employerName: string;
 };
 
 const brokerageOptions: Array<{
@@ -117,6 +123,7 @@ const getInvestmentGroupIdForType = (
   investmentAccountType: InvestmentAccountType | undefined,
 ): InvestmentGroupId => {
   if (investmentAccountType === 'HSA') return 'hsa';
+  if (investmentAccountType === 'Pension') return 'pension';
   if (investmentAccountType === 'Taxable' || investmentAccountType === 'IRA') return 'taxable';
   return 'retirement';
 };
@@ -147,9 +154,11 @@ const ensureScheduleRecords = (account: Account) => {
   );
 };
 
-const emptyInvestmentDraft = (): InvestmentAccountDraft => ({
+const emptyInvestmentDraft = (
+  investmentAccountType: InvestmentAccountType = 'Taxable',
+): InvestmentAccountDraft => ({
   name: '',
-  investmentAccountType: 'Taxable',
+  investmentAccountType,
   investmentBrokerage: 'Fidelity',
   manageHoldings: true,
   startingBalance: '',
@@ -162,6 +171,7 @@ const emptyInvestmentDraft = (): InvestmentAccountDraft => ({
   employerMatchStartDate: '',
   employerMatchAmount: '',
   employerMatchPercent: '0',
+  employerName: '',
 });
 
 const accountToInvestmentDraft = (account: Account): InvestmentAccountDraft => ({
@@ -192,6 +202,7 @@ const accountToInvestmentDraft = (account: Account): InvestmentAccountDraft => (
         : '',
   employerMatchPercent:
     account.employerMatchPercent !== undefined ? String(account.employerMatchPercent) : '0',
+  employerName: account.employerName || '',
 });
 
 const draftToAccountDraft = (draft: InvestmentAccountDraft): AccountDraft => ({
@@ -203,8 +214,8 @@ const draftToAccountDraft = (draft: InvestmentAccountDraft): AccountDraft => ({
   assignedIncomeSourceIds: [],
   savingsAccountId: '',
   investmentAccountType: draft.investmentAccountType,
-  investmentBrokerage: draft.investmentBrokerage,
-  manageHoldings: draft.manageHoldings,
+  investmentBrokerage: draft.investmentAccountType === 'Pension' ? 'Fidelity' : draft.investmentBrokerage,
+  manageHoldings: draft.investmentAccountType === 'Pension' ? false : draft.manageHoldings,
   yearlyContribution: String(Number(draft.yearlyContribution) || 0),
   employerIncomeSourceId: draft.employerIncomeSourceId,
   employerMatchRatePercent: String(Number(draft.employerMatchRatePercent) || 0),
@@ -212,6 +223,7 @@ const draftToAccountDraft = (draft: InvestmentAccountDraft): AccountDraft => ({
   employerMatchStartDate: draft.employerMatchStartDate,
   employerMatchAmount: String(Number(draft.employerMatchAmount) || 0),
   employerMatchPercent: draft.employerMatchPercent,
+  employerName: draft.employerName,
   columns: [],
   monthlyRecords: defaultMonthlyRecords(),
 });
@@ -311,6 +323,20 @@ const getScopeContribution = (
     .filter((account) => scope === 'all' || getInvestmentGroupId(account) === scope)
     .reduce((sum, account) => sum + getMonthlyContribution(account, month, incomeSources), 0);
 
+export const getPensionProjectionRows = (account: Account) => {
+  let startingAmount = account.startingBalance;
+  const monthlyGrowthRate = account.yieldRate / 100 / 12;
+
+  return projectionMonthsList.map((month) => {
+    const contribution = getRecordForMonth(account, month).invest;
+    const growthAmount = startingAmount * monthlyGrowthRate;
+    const total = startingAmount + growthAmount + contribution;
+    const row = { month, startingAmount, growthAmount, contribution, total };
+    startingAmount = total;
+    return row;
+  });
+};
+
 const getAccountCurrentContribution = (
   account: Account,
   incomeSources: IncomeSource[],
@@ -329,6 +355,7 @@ export function FundingSchedulePage({
   const [draftAccounts, setDraftAccounts] = useState<Account[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<InvestmentGroupId>('taxable');
+  const [selectedPensionAccountId, setSelectedPensionAccountId] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -339,6 +366,7 @@ export function FundingSchedulePage({
   const [loadError, setLoadError] = useState<string>();
   const [saveError, setSaveError] = useState<string>();
   const [accountError, setAccountError] = useState<string>();
+  const [pensionValidationError, setPensionValidationError] = useState<string>();
 
   const syncInvestmentAccountOrder = useCallback((loadedAccounts: Account[]) => {
     const investmentIds = loadedAccounts
@@ -402,6 +430,7 @@ export function FundingSchedulePage({
       taxable: investmentAccounts.filter((account) => getInvestmentGroupId(account) === 'taxable'),
       retirement: investmentAccounts.filter((account) => getInvestmentGroupId(account) === 'retirement'),
       hsa: investmentAccounts.filter((account) => getInvestmentGroupId(account) === 'hsa'),
+      pension: investmentAccounts.filter((account) => getInvestmentGroupId(account) === 'pension'),
     }),
     [investmentAccounts],
   );
@@ -415,6 +444,10 @@ export function FundingSchedulePage({
   const monthlyNetIncome = annualNetIncome / 12;
   const activeGroup = investmentGroups.find((group) => group.id === activeGroupId) ?? investmentGroups[0];
   const activeInvestmentAccounts = investmentAccountsByGroup[activeGroup.id];
+  const selectedPension = investmentAccountsByGroup.pension.find(
+    (account) => account.id === selectedPensionAccountId,
+  ) ?? investmentAccountsByGroup.pension[0];
+  const pensionProjectionRows = selectedPension ? getPensionProjectionRows(selectedPension) : [];
   const showsBudgetColumn = activeGroup.id === 'taxable';
   const showsRemainingColumn = activeGroup.id === 'taxable';
 
@@ -430,6 +463,7 @@ export function FundingSchedulePage({
       taxable: totalByScope('taxable'),
       retirement: totalByScope('retirement'),
       hsa: totalByScope('hsa'),
+      pension: totalByScope('pension'),
     };
   }, [incomeSources, investmentAccounts]);
 
@@ -495,6 +529,22 @@ export function FundingSchedulePage({
     );
   };
 
+
+  const updatePensionContribution = (accountId: string, month: string, value: string) => {
+    const nextValue = Math.max(0, parseMoneyInput(value));
+    setDraftAccounts((currentAccounts) =>
+      currentAccounts.map((account) =>
+        account.id === accountId
+          ? {
+              ...account,
+              monthlyRecords: ensureScheduleRecords(account).map((record) =>
+                record.month === month ? { ...record, invest: nextValue } : record,
+              ),
+            }
+          : account,
+      ),
+    );
+  };
   const moveInvestmentAccountColumn = (accountId: string, direction: -1 | 1) => {
     const visibleIds = activeInvestmentAccounts.map((account) => account.id);
     const visibleIndex = visibleIds.indexOf(accountId);
@@ -528,8 +578,14 @@ export function FundingSchedulePage({
 
   const openCreateAccountModal = () => {
     setEditingAccountId(null);
-    setAccountDraft(emptyInvestmentDraft());
+    const defaultType: InvestmentAccountType =
+      activeGroupId === 'retirement' ? '401k'
+        : activeGroupId === 'hsa' ? 'HSA'
+          : activeGroupId === 'pension' ? 'Pension'
+            : 'Taxable';
+    setAccountDraft(emptyInvestmentDraft(defaultType));
     setAccountError(undefined);
+    setPensionValidationError(undefined);
     setIsAccountModalOpen(true);
   };
 
@@ -537,6 +593,7 @@ export function FundingSchedulePage({
     setEditingAccountId(account.id);
     setAccountDraft(accountToInvestmentDraft(account));
     setAccountError(undefined);
+    setPensionValidationError(undefined);
     setIsAccountModalOpen(true);
   };
 
@@ -544,6 +601,7 @@ export function FundingSchedulePage({
     setEditingAccountId(null);
     setAccountDraft(emptyInvestmentDraft());
     setAccountError(undefined);
+    setPensionValidationError(undefined);
     setIsAccountModalOpen(false);
   };
 
@@ -554,6 +612,10 @@ export function FundingSchedulePage({
     const matchCap = Number(accountDraft.employerMatchCapPercent);
     const employerMatchAmount = Number(accountDraft.employerMatchAmount);
     const yearlyContribution = Number(accountDraft.yearlyContribution);
+    const annualGrowth = Number(accountDraft.yieldRate);
+    const hasStartingBalance = accountDraft.startingBalance.trim() !== '';
+    const hasAnnualGrowth = accountDraft.yieldRate.trim() !== '';
+    const isPension = accountDraft.investmentAccountType === 'Pension';
     const needsPayrollSettings = payrollDeductibleTypes.includes(
       accountDraft.investmentAccountType,
     );
@@ -564,6 +626,12 @@ export function FundingSchedulePage({
       Number.isNaN(startingBalance) ||
       startingBalance < 0 ||
       startingBalance > maxAccountBalance ||
+      (isPension &&
+        (!hasStartingBalance ||
+          !hasAnnualGrowth ||
+          !accountDraft.employerName.trim() ||
+          Number.isNaN(annualGrowth) ||
+          annualGrowth < 0)) ||
       (needsPayrollSettings &&
         (Number.isNaN(yearlyContribution) ||
           yearlyContribution < 0 ||
@@ -575,9 +643,15 @@ export function FundingSchedulePage({
           (!accountDraft.employerIncomeSourceId &&
             (Number.isNaN(employerMatchAmount) || employerMatchAmount < 0))))
     ) {
+      if (isPension) {
+        setPensionValidationError(
+          'Enter a name, starting balance, annual growth percentage, and employer.',
+        );
+      }
       return;
     }
 
+    setPensionValidationError(undefined);
     setIsSaving(true);
     setAccountError(undefined);
     try {
@@ -701,7 +775,7 @@ export function FundingSchedulePage({
       ) : null}
 
       <section className="investment-workspace" aria-label="Investment account workspace">
-        <div className="filter-tabs" role="tablist" aria-label="Investment account type">
+        <div className="filter-tabs" role="tablist" aria-label="Investment account type" style={{ overflowX: 'auto', flexWrap: 'nowrap' }}>
           {investmentGroups.map((group) => (
             <button
               aria-selected={activeGroupId === group.id}
@@ -756,16 +830,20 @@ export function FundingSchedulePage({
                   role="listitem"
                 >
                   <div className="account-selector-item-left investment-account-row-main">
-                    <span
-                      className={`brokerage-icon ${brokerage.className}`}
-                      aria-hidden="true"
-                    >
-                      {brokerage.icon}
-                    </span>
+                    {account.investmentAccountType !== 'Pension' ? (
+                      <span
+                        className={`brokerage-icon ${brokerage.className}`}
+                        aria-hidden="true"
+                      >
+                        {brokerage.icon}
+                      </span>
+                    ) : null}
                     <div className="investment-account-row-labels">
                       <span className="account-selector-item-name">{account.name}</span>
                       <span className="account-selector-item-type">
-                        {brokerage.label}
+                        {account.investmentAccountType === 'Pension'
+                          ? account.employerName || 'Employer not set'
+                          : brokerage.label}
                         {isPayrollDeductible(account)
                           ? ` - ${formatMoney(account.yearlyContribution || 0)} yearly, ${
                               account.employerIncomeSourceId
@@ -783,6 +861,18 @@ export function FundingSchedulePage({
                       Current Contributions: {formatMoney(getAccountCurrentContribution(account, incomeSources, currentProjectionMonthIndex))}
                     </span>
                     <div className="investment-account-actions">
+                      {account.investmentAccountType === 'Pension' ? (
+                        <button
+                          className="secondary-action"
+                          type="button"
+                          aria-label={`View ${account.name} schedule`}
+                          aria-controls={`pension-projection-${account.id}`}
+                          aria-pressed={selectedPension?.id === account.id}
+                          onClick={() => setSelectedPensionAccountId(account.id)}
+                        >
+                          View schedule
+                        </button>
+                      ) : null}
                       <button
                         className="link-button"
                         type="button"
@@ -835,6 +925,48 @@ export function FundingSchedulePage({
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
+          {activeGroup.id === 'pension' && selectedPension ? (
+            <div className="excel-table-fullwidth" id={`pension-projection-${selectedPension.id}`} role="region" aria-label={`${selectedPension.name} pension projection`}>
+              <h3>{selectedPension.name} Projection</h3>
+              <FinanceTable wrapperStyle={{ margin: 0 }} aria-label={`${selectedPension.name} pension projection`}>
+                <thead>
+                  <tr>
+                    <FinanceTableHeaderCell scope="col">Month</FinanceTableHeaderCell>
+                    <FinanceTableHeaderCell scope="col">Starting Amount</FinanceTableHeaderCell>
+                    <FinanceTableHeaderCell scope="col">Growth Amount</FinanceTableHeaderCell>
+                    <FinanceTableHeaderCell scope="col" isEditable>Contribution</FinanceTableHeaderCell>
+                    <FinanceTableHeaderCell scope="col">Total</FinanceTableHeaderCell>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pensionProjectionRows.map((row, monthIndex) => (
+                    <tr key={row.month}>
+                      <th className="excel-bold-col" scope="row">{row.month}</th>
+                      <td><FinanceMoneyCellValue formatValue={formatMoney} value={row.startingAmount} /></td>
+                      <td><FinanceMoneyCellValue formatValue={formatMoney} value={row.growthAmount} /></td>
+                      <td>
+                        <FinanceMoneyCellInput
+                          aria-label={`${selectedPension.name} ${row.month} contribution`}
+                          focusId={`pension-${selectedPension.id}-${monthIndex}`}
+                          formatValue={formatMoney}
+                          nextFocusId={
+                            monthIndex < pensionProjectionRows.length - 1
+                              ? `pension-${selectedPension.id}-${monthIndex + 1}`
+                              : undefined
+                          }
+                          value={row.contribution}
+                          onValueChange={(nextValue) =>
+                            updatePensionContribution(selectedPension.id, row.month, nextValue)
+                          }
+                        />
+                      </td>
+                      <td><FinanceMoneyCellValue className="excel-bold-col" formatValue={formatMoney} value={row.total} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </FinanceTable>
+            </div>
+          ) : (
           <div className="excel-table-fullwidth">
             <FinanceTable wrapperStyle={{ margin: 0 }}>
               <thead>
@@ -1002,14 +1134,16 @@ export function FundingSchedulePage({
               </tbody>
             </FinanceTable>
           </div>
+          )}
 
         </>
       )}
 
       {isAccountModalOpen ? (
         <div className="modal-overlay" onClick={closeAccountModal}>
-          <div className="modal-container" onClick={(event) => event.stopPropagation()}>
-            <h2>{editingAccountId ? 'Edit Account' : 'Add Account'}</h2>
+          <div className="modal-container" role="dialog" aria-modal="true" aria-labelledby="investment-account-modal-title" style={{ maxHeight: '90vh', overflowY: 'auto' }} onClick={(event) => event.stopPropagation()}>
+            <h2 id="investment-account-modal-title">{editingAccountId ? 'Edit Account' : 'Add Account'}</h2>
+            {pensionValidationError ? <p role="alert" className="alert error-alert">{pensionValidationError}</p> : null}
             <div className="modal-form">
               <label className="field">
                 <span>Account Name</span>
@@ -1020,10 +1154,13 @@ export function FundingSchedulePage({
                   }
                   placeholder="e.g. Brokerage"
                   maxLength={maxAccountNameLength}
+                  required
+                  aria-invalid={Boolean(pensionValidationError && !accountDraft.name.trim())}
                   autoFocus
                 />
               </label>
 
+              {accountDraft.investmentAccountType !== 'Pension' ? (
               <label className="field">
                 <span>Investment Account Type</span>
                 <select
@@ -1034,7 +1171,9 @@ export function FundingSchedulePage({
                       ...accountDraft,
                       investmentAccountType: nextType,
                       manageHoldings:
-                        nextType === '401k' ? false : accountDraft.manageHoldings,
+                        nextType === '401k' || nextType === 'Pension'
+                          ? false
+                          : accountDraft.manageHoldings,
                     });
                   }}
                   style={{ border: '1.5px solid var(--md-sys-color-outline)', borderRadius: 'var(--md-sys-shape-corner-s)', height: '48px', color: 'var(--md-sys-color-on-surface)', backgroundColor: 'transparent', padding: '10px' }}
@@ -1043,9 +1182,13 @@ export function FundingSchedulePage({
                   <option value="401k" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>401k</option>
                   <option value="IRA" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>IRA</option>
                   <option value="HSA" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>HSA</option>
+                  <option value="Pension" style={{ backgroundColor: 'var(--md-sys-color-surface)' }}>Pension</option>
                 </select>
               </label>
+              ) : null}
 
+              {accountDraft.investmentAccountType !== 'Pension' ? (
+                <>
               <label className={`column-mode-option${accountDraft.manageHoldings ? ' selected' : ''}`}>
                 <input
                   className="income-credit-checkbox"
@@ -1084,6 +1227,8 @@ export function FundingSchedulePage({
                   ))}
                 </select>
               </label>
+                </>
+              ) : null}
 
               <label className="field">
                 <span>Starting Balance</span>
@@ -1099,11 +1244,14 @@ export function FundingSchedulePage({
                     }
                     placeholder="0.00"
                     inputMode="decimal"
+                    required={accountDraft.investmentAccountType === 'Pension'}
+                    aria-invalid={Boolean(pensionValidationError && !accountDraft.startingBalance.trim())}
                     data-has-prefix="true"
                   />
                 </div>
               </label>
 
+              {accountDraft.investmentAccountType !== 'Pension' ? (
               <label className="field">
                 <span>Start Month</span>
                 <input
@@ -1117,12 +1265,16 @@ export function FundingSchedulePage({
                   }
                 />
               </label>
+              ) : null}
 
               <label className="field">
-                <span>Yield / APY (%)</span>
+                <span>{accountDraft.investmentAccountType === 'Pension' ? 'Annual Growth (%)' : 'Yield / APY (%)'}</span>
                 <input
                   type="number"
                   step="0.01"
+                  min="0"
+                  required={accountDraft.investmentAccountType === 'Pension'}
+                  aria-invalid={Boolean(pensionValidationError && (!accountDraft.yieldRate.trim() || Number(accountDraft.yieldRate) < 0))}
                   value={accountDraft.yieldRate}
                   onChange={(event) =>
                     setAccountDraft({ ...accountDraft, yieldRate: event.target.value })
@@ -1131,6 +1283,21 @@ export function FundingSchedulePage({
                 />
               </label>
 
+              {accountDraft.investmentAccountType === 'Pension' ? (
+                <label className="field">
+                  <span>Employer</span>
+                  <input
+                    value={accountDraft.employerName}
+                    onChange={(event) =>
+                      setAccountDraft({ ...accountDraft, employerName: event.target.value })
+                    }
+                    placeholder="e.g. City of Chicago"
+                    maxLength={maxAccountNameLength}
+                    required
+                    aria-invalid={Boolean(pensionValidationError && !accountDraft.employerName.trim())}
+                  />
+                </label>
+              ) : null}
               {payrollDeductibleTypes.includes(accountDraft.investmentAccountType) ? (
                 <>
                   <label className="field">

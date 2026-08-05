@@ -148,6 +148,7 @@ class AccountPayload(CamelModel):
     employer_match_start_date: str | None = Field(default=None, serialization_alias="employerMatchStartDate")
     employer_match_amount: float | None = Field(default=None, serialization_alias="employerMatchAmount")
     employer_match_percent: float | None = Field(default=None, serialization_alias="employerMatchPercent")
+    employer_name: str | None = Field(default=None, serialization_alias="employerName")
     columns: list[AccountColumnPayload]
     monthly_records: list[MonthlyRecordPayload] = Field(serialization_alias="monthlyRecords")
     created_at: str = Field(serialization_alias="createdAt")
@@ -172,6 +173,7 @@ class AccountUpsertRequest(CamelModel):
     employer_match_start_date: str | None = Field(default=None, serialization_alias="employerMatchStartDate")
     employer_match_amount: float | None = Field(default=None, serialization_alias="employerMatchAmount")
     employer_match_percent: float | None = Field(default=None, serialization_alias="employerMatchPercent")
+    employer_name: str | None = Field(default=None, serialization_alias="employerName")
     columns: list[AccountColumnPayload] = Field(default_factory=list)
     monthly_records: list[MonthlyRecordPayload] = Field(default_factory=list, serialization_alias="monthlyRecords")
 

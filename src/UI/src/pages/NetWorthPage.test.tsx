@@ -157,6 +157,42 @@ describe('NetWorthPage', () => {
     await waitFor(() => expect(putInvestmentSnapshots).toHaveBeenCalledTimes(2));
     expect(retry).toBeDisabled();
   });
+  it('renders pensions after HSA from compounded account projections and ignores snapshots and holdings', async () => {
+    const pension = account({
+      id: 'pension',
+      name: 'City Pension',
+      type: 'Investment',
+      investmentAccountType: 'Pension',
+      startingBalance: 10000,
+      yieldRate: 12,
+      manageHoldings: false,
+      employerName: 'City of Chicago',
+    });
+    pension.monthlyRecords[0].invest = 100;
+    const netWorthRepository = createMockNetWorthRepository(0);
+    vi.spyOn(netWorthRepository, 'get').mockResolvedValue({
+      beginningNetWorth: 0,
+      investmentSnapshots: { pension: { 'Jan-26': 999999 } },
+      trackMortgageInNetWorth: false,
+      mortgageSchedule: null,
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    const holdingRepository = createMockHoldingRepository();
+    vi.spyOn(holdingRepository, 'listHoldings').mockResolvedValue([{
+      id: 'legacy-pension-holding',
+      security: { symbol: 'BAD', name: 'Ignored', exchange: '', assetType: 'Stock', currency: 'USD', price: 500 },
+      accountPositions: [{ accountId: 'pension', quantity: 1000, costBasis: null }],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    }]);
+
+    render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [pension] })} incomeRepository={createMockIncomeSourceRepository({ initialSources: [] })} holdingRepository={holdingRepository} netWorthRepository={netWorthRepository} />);
+
+    expect(await screen.findByRole('columnheader', { name: 'Pension' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /City Pension.*snapshot/i })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('row', { name: /Jan-26/ })).getAllByText('$10,200.00')[0]).toBeInTheDocument();
+    expect(within(screen.getByRole('row', { name: /Feb-26/ })).getAllByText('$10,302.00')[0]).toBeInTheDocument();
+  });
 });
 
 

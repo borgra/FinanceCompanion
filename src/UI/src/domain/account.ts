@@ -1,6 +1,6 @@
 export type AccountType = 'Checking' | 'Savings' | 'Investment';
 
-export type InvestmentAccountType = 'Taxable' | '401k' | 'IRA' | 'HSA';
+export type InvestmentAccountType = 'Taxable' | '401k' | 'IRA' | 'HSA' | 'Pension';
 export type InvestmentBrokerage = 'Fidelity' | 'eTrade' | 'Robinhood';
 
 export type AccountColumn = {
@@ -38,6 +38,7 @@ export type Account = {
   employerMatchStartDate?: string;
   employerMatchAmount?: number;
   employerMatchPercent?: number;
+  employerName?: string;
   columns: AccountColumn[];
   monthlyRecords: MonthlyRecord[];
   createdAt: string;
@@ -62,6 +63,7 @@ export type AccountDraft = {
   employerMatchStartDate: string;
   employerMatchAmount: string;
   employerMatchPercent: string;
+  employerName?: string;
   columns: AccountColumn[];
   monthlyRecords: MonthlyRecord[];
 };
@@ -109,6 +111,7 @@ export const emptyAccountDraft = (): AccountDraft => ({
   employerMatchStartDate: '',
   employerMatchAmount: '',
   employerMatchPercent: '0',
+  employerName: '',
   columns: [],
   monthlyRecords: defaultMonthlyRecords(),
 });
@@ -143,6 +146,7 @@ export const toAccountDraft = (account: Account): AccountDraft => ({
     account.employerMatchAmount !== undefined ? String(account.employerMatchAmount) : '',
   employerMatchPercent:
     account.employerMatchPercent !== undefined ? String(account.employerMatchPercent) : '0',
+  employerName: account.employerName || '',
   columns: (account.columns || []).map((c) => ({ ...c })),
   monthlyRecords: account.monthlyRecords.map((r) => ({
     ...r,

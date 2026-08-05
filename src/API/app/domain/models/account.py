@@ -30,3 +30,4 @@ class Account:
     employer_match_start_date: str | None = None
     employer_match_amount: float | None = None
     employer_match_percent: float | None = None
+    employer_name: str | None = None

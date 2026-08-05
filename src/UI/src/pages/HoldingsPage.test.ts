@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from '../domain/account';
 import { createMockHoldingRepository } from '../domain/holdingRepository';
-import { createHoldingImportTemplate, parseCorporateActionImport, parseHoldingImport, parsePassiveIncomeImport } from './HoldingsPage';
+import { createHoldingImportTemplate, isHoldingsEligibleAccount, parseCorporateActionImport, parseHoldingImport, parsePassiveIncomeImport } from './HoldingsPage';
 import { normalizePayoutAmount } from './PassiveIncomePage';
 
 const investmentAccounts: Account[] = [
@@ -19,7 +19,10 @@ const investmentAccounts: Account[] = [
   },
 ];
 
+const pensionAccount: Account = { ...investmentAccounts[0], id: 'acc-pension', name: 'City Pension', investmentAccountType: 'Pension', manageHoldings: true };
+
 const accountsWithUnmanagedHolding = [
+  pensionAccount,
   ...investmentAccounts,
   { ...investmentAccounts[0], id: 'acc-unmanaged', name: 'Unmanaged brokerage', manageHoldings: false },
 ];
@@ -64,6 +67,15 @@ describe('createHoldingImportTemplate', () => {
   });
 });
 
+describe('holdings account eligibility', () => {
+  it('excludes pensions even when legacy data says holdings are manageable', () => {
+    expect(isHoldingsEligibleAccount(pensionAccount)).toBe(false);
+    expect(() => parseHoldingImport(
+      'Ticker,Name,Price,Account: City Pension (acc-pension)\nVTI,Vanguard Total Market,325.25,43',
+      accountsWithUnmanagedHolding,
+    )).toThrow('configured investment account');
+  });
+});
 describe('parseHoldingImport', () => {
   it('accepts a subset of account columns and maps only those positions', () => {
     const rows = parseHoldingImport(

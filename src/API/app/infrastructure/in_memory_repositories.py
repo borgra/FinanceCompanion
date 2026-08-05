@@ -123,6 +123,7 @@ def _account_from_dict(data: dict) -> Account:
         employer_match_start_date=data.get("employerMatchStartDate"),
         employer_match_amount=data.get("employerMatchAmount"),
         employer_match_percent=data.get("employerMatchPercent"),
+        employer_name=data.get("employerName"),
     )
 
 

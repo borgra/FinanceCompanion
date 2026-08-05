@@ -365,4 +365,52 @@ describe('FundingSchedulePage', () => {
     expect(allocation).toHaveProperty('selectionStart', 0);
     expect(allocation).toHaveProperty('selectionEnd', 3);
   });
+  it('creates a fixed income pension and compounds growth monthly with saved special contributions', async () => {
+    const repository = createMockAccountRepository({ initialAccounts: [] });
+    const incomeRepository = createMockIncomeSourceRepository({ initialSources: [] });
+
+    render(
+      <FundingSchedulePage
+        accountRepository={repository}
+        incomeRepository={incomeRepository}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole('tab', { name: 'Pension' }));
+    await userEvent.click(screen.getByRole('button', { name: /add account/i }));
+
+    expect(screen.queryByRole('combobox', { name: /investment account type/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/brokerage/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/manage holdings/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/start month/i)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+    expect(screen.getByRole('alert')).toHaveTextContent('starting balance');
+    expect(screen.getByLabelText(/starting balance/i)).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText(/annual growth/i)).toHaveAttribute('aria-invalid', 'true');
+
+    await userEvent.type(screen.getByLabelText(/account name/i), 'City Pension');
+    await userEvent.type(screen.getByLabelText(/starting balance/i), '10000');
+    await userEvent.type(screen.getByLabelText(/annual growth/i), '4');
+    await userEvent.type(screen.getByLabelText(/^employer$/i), 'City of Chicago');
+    await userEvent.click(screen.getByRole('button', { name: /create account/i }));
+
+    expect(await screen.findByRole('heading', { name: 'City Pension Projection' })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'City Pension pension projection' })).toBeInTheDocument();
+    expect(screen.getAllByText('$33.33')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('$10,033.33')[0]).toBeInTheDocument();
+
+    const januaryContribution = screen.getByLabelText('City Pension Jan-26 contribution');
+    await userEvent.type(januaryContribution, '100');
+    expect(screen.getAllByText('$10,133.33')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('$10,167.11')[0]).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    const saved = (await repository.listAccounts())[0];
+    expect(saved.investmentAccountType).toBe('Pension');
+    expect(saved.employerName).toBe('City of Chicago');
+    expect(saved.manageHoldings).toBe(false);
+    expect(saved.investmentBrokerage).toBeUndefined();
+    expect(saved.monthlyRecords[0].invest).toBe(100);
+  });
 });

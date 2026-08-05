@@ -74,6 +74,11 @@ const needsRefresh = (detailsUpdatedAt?: string | null, now = Date.now()) => {
   return !Number.isFinite(updatedAt) || now - updatedAt > refreshAllMaximumAgeMs;
 };
 
+export const isHoldingsEligibleAccount = (account: Account) =>
+  account.type === 'Investment' &&
+  account.manageHoldings === true &&
+  account.investmentAccountType !== 'Pension';
+
 const importAccountHeader = (account: Account) => `Account: ${account.name} (${account.id})`;
 
 const isIsoDate = (value: string) => {
@@ -82,7 +87,7 @@ const isIsoDate = (value: string) => {
 };
 
 export const createHoldingImportTemplate = (accounts: Account[], holdings: Holding[]) => {
-  const managedAccounts = accounts.filter((account) => account.manageHoldings);
+  const managedAccounts = accounts.filter(isHoldingsEligibleAccount);
 
   return [
     ['Ticker', 'Name', 'Price', ...managedAccounts.map(importAccountHeader)].join(','),
@@ -106,7 +111,12 @@ export const parseHoldingImport = (csv: string, investmentAccounts: Account[]): 
   const headers = lines[0].split(',').map((header) => header.trim());
   const requiredHeaders = ['Ticker', 'Name', 'Price'];
   if (headers.length < requiredHeaders.length + 1 || requiredHeaders.some((header, index) => header !== headers[index])) throw new Error('Include Ticker, Name, Price, and at least one Account column from the downloaded template.');
-  const accountByHeader = new Map(investmentAccounts.map((account) => [importAccountHeader(account), account]));
+  const accountByHeader = new Map(
+    investmentAccounts.filter(isHoldingsEligibleAccount).map((account) => [
+      importAccountHeader(account),
+      account,
+    ]),
+  );
   const selectedAccounts = headers.slice(requiredHeaders.length).map((header) => accountByHeader.get(header));
   if (selectedAccounts.some((account) => !account) || new Set(selectedAccounts.map((account) => account?.id)).size !== selectedAccounts.length) throw new Error('Each Account column must match a configured investment account and may appear only once.');
   const symbols = new Set<string>();
@@ -278,7 +288,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   }, [holdingRepository, isAddDialogOpen, query, selectedSecurity]);
 
   const managedAccounts = useMemo(
-    () => accounts.filter((account) => account.manageHoldings),
+    () => accounts.filter(isHoldingsEligibleAccount),
     [accounts],
   );
 
@@ -784,7 +794,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
             <label htmlFor="holdings-account-filter">Account</label>
             <select id="holdings-account-filter" aria-label="Filter holdings by account" value={selectedAccountFilterId} onChange={(event) => setSelectedAccountFilterId(event.target.value)}>
               <option value="">All accounts</option>
-              {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+              {managedAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
             </select>
             {selectedAccountFilterId ? <button className="link-button" type="button" onClick={() => setSelectedAccountFilterId('')}>Show all accounts</button> : null}
           </div>

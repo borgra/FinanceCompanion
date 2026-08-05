@@ -93,6 +93,13 @@ def _ensure_income_sources_are_unassigned(
                 detail="Income source is already assigned to another account.",
             )
 
+def _holdings_eligible_account_ids(container, user_id: str) -> set[str]:
+    return {
+        account.id
+        for account in container.list_accounts.execute(user_id)
+        if account.type == "Investment"
+        and account.investment_account_type != "Pension"
+    }
 
 @router.get("/health")
 def health() -> dict[str, str]:
@@ -429,7 +436,7 @@ def create_holding(request: HoldingCreateRequest, user=Depends(require_session_u
     if not request.account_positions:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one account.")
 
-    account_ids = {account.id for account in container.list_accounts.execute(user.user_id)}
+    account_ids = _holdings_eligible_account_ids(container, user.user_id)
     unknown_account_ids = [
         position.account_id
         for position in request.account_positions
@@ -456,7 +463,7 @@ def import_holding_details(request: HoldingImportRequest, user=Depends(require_s
     symbols = [row.symbol.casefold() for row in request.rows]
     if len(symbols) != len(set(symbols)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Each ticker may appear only once.")
-    account_ids = {account.id for account in container.list_accounts.execute(user.user_id)}
+    account_ids = _holdings_eligible_account_ids(container, user.user_id)
     for row in request.rows:
         imported_account_ids = [position.account_id for position in row.account_positions]
         if len(imported_account_ids) != len(set(imported_account_ids)):
@@ -610,7 +617,7 @@ def update_holdings_batch(request: HoldingBatchRequest, user=Depends(require_ses
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Each holding may appear only once.")
     if any(item_id not in existing_by_id for item_id in requested_ids):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Holding not found.")
-    account_ids = {account.id for account in container.list_accounts.execute(user.user_id)}
+    account_ids = _holdings_eligible_account_ids(container, user.user_id)
     for item in request.holdings:
         if not item.account_positions:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one account.")
@@ -634,7 +641,7 @@ def update_holding(holding_id: str, request: HoldingCreateRequest, user=Depends(
     if not request.account_positions:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one account.")
 
-    account_ids = {account.id for account in container.list_accounts.execute(user.user_id)}
+    account_ids = _holdings_eligible_account_ids(container, user.user_id)
     unknown_account_ids = [
         position.account_id
         for position in request.account_positions

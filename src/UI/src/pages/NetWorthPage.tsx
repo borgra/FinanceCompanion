@@ -25,7 +25,7 @@ type NetWorthPageProps = {
 };
 
 type NetWorthGroup = {
-  id: 'banking' | 'taxable' | 'retirement' | 'hsa';
+  id: 'banking' | 'taxable' | 'retirement' | 'hsa' | 'pension';
   label: string;
   accounts: Account[];
 };
@@ -102,6 +102,19 @@ const computeBankingValues = (
   });
 };
 
+export const computePensionValues = (account: Account, months: Array<{ name: string }>) => {
+  let startingAmount = Number(account.startingBalance) || 0;
+  const monthlyGrowthRate = (Number(account.yieldRate) || 0) / 100 / 12;
+  return months.map((month) => {
+    const contribution = Number(
+      account.monthlyRecords.find((record) => record.month === month.name)?.invest,
+    ) || 0;
+    const growth = startingAmount * monthlyGrowthRate;
+    const value = startingAmount + growth + contribution;
+    startingAmount = value;
+    return { month: month.name, value };
+  });
+};
 const groupAccounts = (accounts: Account[]): NetWorthGroup[] => {
   const sorted = (items: Account[]) => [...items].sort((a, b) => a.name.localeCompare(b.name));
   return [
@@ -109,6 +122,7 @@ const groupAccounts = (accounts: Account[]): NetWorthGroup[] => {
     { id: 'taxable', label: 'Investing Taxable', accounts: sorted(accounts.filter((account) => account.type === 'Investment' && account.investmentAccountType === 'Taxable')) },
     { id: 'retirement', label: 'Investing Retirement', accounts: sorted(accounts.filter((account) => account.type === 'Investment' && (account.investmentAccountType === '401k' || account.investmentAccountType === 'IRA'))) },
     { id: 'hsa', label: 'Investing HSA', accounts: sorted(accounts.filter((account) => account.type === 'Investment' && account.investmentAccountType === 'HSA')) },
+    { id: 'pension', label: 'Pension', accounts: sorted(accounts.filter((account) => account.type === 'Investment' && account.investmentAccountType === 'Pension')) },
   ].filter((group) => group.accounts.length > 0) as NetWorthGroup[];
 };
 
@@ -229,6 +243,9 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
 
   const months = useMemo(getProjectionMonths, []);
   const groups = useMemo(() => groupAccounts(accounts), [accounts]);
+  const pensionValues = useMemo(() => new Map(accounts
+    .filter((account) => account.investmentAccountType === 'Pension')
+    .map((account) => [account.id, computePensionValues(account, months)])), [accounts, months]);
   const bankingValues = useMemo(() => new Map(accounts
     .filter((account) => account.type !== 'Investment')
     .map((account) => [account.id, computeBankingValues(account, incomeSources, months)])), [accounts, incomeSources, months]);
@@ -236,15 +253,17 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
   const rows = useMemo<MonthlyNetWorthRow[]>(() => months.map((month) => {
     const valuesByAccountId = new Map<string, number>();
     for (const account of accounts) {
-      const value = account.type === 'Investment'
-        ? investmentSnapshots[account.id]?.[month.name] ?? (sumHoldingValuesForAccount(account.id, holdings) || account.startingBalance)
-        : bankingValues.get(account.id)?.find((item) => item.month === month.name)?.value ?? 0;
+      const value = account.investmentAccountType === 'Pension'
+        ? pensionValues.get(account.id)?.find((item) => item.month === month.name)?.value ?? 0
+        : account.type === 'Investment'
+          ? investmentSnapshots[account.id]?.[month.name] ?? (sumHoldingValuesForAccount(account.id, holdings) || account.startingBalance)
+          : bankingValues.get(account.id)?.find((item) => item.month === month.name)?.value ?? 0;
       valuesByAccountId.set(account.id, value);
     }
     const accountsTotal = [...valuesByAccountId.values()].reduce((sum, value) => sum + value, 0);
     const homeValue = mortgageEquityForMonth(mortgageSchedule, month.dateCode);
     return { month: month.name, valuesByAccountId, homeValue, total: accountsTotal + homeValue };
-  }), [accounts, bankingValues, holdings, investmentSnapshots, months, mortgageSchedule]);
+  }), [accounts, bankingValues, holdings, investmentSnapshots, months, mortgageSchedule, pensionValues]);
 
   const now = new Date();
   const currentMonth = months.find((month) => month.dateCode === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)?.name ?? months[0]?.name ?? '';
@@ -314,10 +333,10 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
         </button>
       </div>      <FinanceTable aria-label="Net worth table" className="net-worth-table" wrapperClassName="excel-table-fullwidth" style={{ width: '100%' }}>
         <thead><tr><FinanceTableHeaderCell rowSpan={2}>Month</FinanceTableHeaderCell>{groups.map((group) => <FinanceTableHeaderCell key={group.id} colSpan={group.accounts.length}>{group.label}</FinanceTableHeaderCell>)}{trackMortgage ? <FinanceTableHeaderCell rowSpan={2}>Home Value</FinanceTableHeaderCell> : null}<FinanceTableHeaderCell rowSpan={2}>Total</FinanceTableHeaderCell></tr>
-          <tr>{groups.flatMap((group) => group.accounts.map((account) => <FinanceTableHeaderCell key={account.id} isEditable={account.type === 'Investment'}>{account.name}</FinanceTableHeaderCell>))}</tr></thead>
+          <tr>{groups.flatMap((group) => group.accounts.map((account) => <FinanceTableHeaderCell key={account.id} isEditable={account.type === 'Investment' && account.investmentAccountType !== 'Pension'}>{account.name}</FinanceTableHeaderCell>))}</tr></thead>
         <tbody>{rows.map((row) => <tr key={row.month} className={row.month === currentMonth ? 'excel-row-current' : undefined}>
           <td className="excel-bold-col">{row.month}</td>
-          {groups.flatMap((group) => group.accounts.map((account) => <td key={`${row.month}-${account.id}`}>{account.type === 'Investment'
+          {groups.flatMap((group) => group.accounts.map((account) => <td key={`${row.month}-${account.id}`}>{account.type === 'Investment' && account.investmentAccountType !== 'Pension'
             ? <FinanceMoneyCellInput aria-label={`${account.name} ${row.month} snapshot`} value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} onValueChange={(value) => updateSnapshotLocally(account.id, row.month, value)} />
             : <FinanceMoneyCellValue value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} />}</td>))}
           {trackMortgage ? <td className="excel-bold-col"><FinanceMoneyCellValue value={row.homeValue} formatValue={formatMoney} /></td> : null}<td className="excel-bold-col"><FinanceMoneyCellValue value={row.total} formatValue={formatMoney} /></td>

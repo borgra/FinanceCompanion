@@ -13,9 +13,13 @@ const draftToPayload = (draft: AccountDraft) => ({
   investmentAccountType:
     draft.type === 'Investment' ? draft.investmentAccountType : null,
   investmentBrokerage:
-    draft.type === 'Investment' ? draft.investmentBrokerage : null,
+    draft.type === 'Investment' && draft.investmentAccountType !== 'Pension'
+      ? draft.investmentBrokerage
+      : null,
   manageHoldings:
-    draft.type === 'Investment' ? draft.manageHoldings : false,
+    draft.type === 'Investment' && draft.investmentAccountType !== 'Pension'
+      ? draft.manageHoldings
+      : false,
   yearlyContribution:
     draft.type === 'Investment' ? Number(draft.yearlyContribution) || 0 : null,
   employerIncomeSourceId:
@@ -34,6 +38,10 @@ const draftToPayload = (draft: AccountDraft) => ({
     draft.type === 'Investment' ? Number(draft.employerMatchAmount) || 0 : null,
   employerMatchPercent:
     draft.type === 'Investment' ? Number(draft.employerMatchPercent) || 0 : null,
+  employerName:
+    draft.type === 'Investment' && draft.investmentAccountType === 'Pension'
+      ? (draft.employerName || '').trim()
+      : null,
   columns: draft.columns,
   monthlyRecords: draft.monthlyRecords,
 });
