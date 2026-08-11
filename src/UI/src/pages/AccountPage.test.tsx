@@ -1,5 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import '../styles.css';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import { createMockAccountRepository } from '../domain/accountRepository';
@@ -737,6 +738,17 @@ describe('AccountPage', () => {
     // 1. Verify Bank Dashboard header and details
     expect(await screen.findByText('Bank Dashboard', { selector: 'h2' })).toBeInTheDocument();
     expect(screen.getByText('Combined view of all checking and savings accounts.')).toBeInTheDocument();
+
+    const projectionChart = screen.getByRole('img', { name: 'Aggregate bank balance projection by month. Current month: Jul-26' });
+    expect(projectionChart).toHaveAccessibleName('Aggregate bank balance projection by month. Current month: Jul-26');
+    const currentMonth = projectionChart.querySelector('[aria-current="date"]');
+    expect(currentMonth).not.toBeNull();
+    expect(projectionChart.querySelectorAll('[aria-current="date"]')).toHaveLength(1);
+    const currentMonthLabel = within(currentMonth as HTMLElement).getByText('Jul-26');
+    expect(currentMonthLabel).toHaveClass('bank-projection-current-label');
+    expect(getComputedStyle(currentMonthLabel).color).toBe('rgb(56, 189, 248)');
+    expect(within(projectionChart).getByText('Aug-26')).not.toHaveClass('bank-projection-current-label');
+    expect(currentMonth).not.toHaveClass('bank-projection-current');
 
     // 2. Verify emergency fund coverage multiples:
     // Total aggregate balance is $82,500.00.

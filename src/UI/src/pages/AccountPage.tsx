@@ -1160,7 +1160,7 @@ export function AccountPage({
                 Bars are colored <span style={{ color: '#34d399', fontWeight: 'bold' }}>Green</span> when &gt;= threshold, and <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>Amber</span> when below.
               </span>
             </div>
-            <div className="passive-income-chart" role="img" aria-label="Aggregate bank balance projection by month">
+            <div className="passive-income-chart" role="img" aria-label={`Aggregate bank balance projection by month. Current month: ${currentProjectionMonth.name}`}>
               <div className="passive-income-y-axis">
                 <span>{formatMoney(maxAggregateMonthTotal)}</span>
                 <span>{formatMoney(maxAggregateMonthTotal / 2)}</span>
@@ -1195,7 +1195,7 @@ export function AccountPage({
 
                   return (
                     <div
-                      className={`passive-income-bar-item${isCurrentMonth ? ' bank-projection-current' : ''}`}
+                      className="passive-income-bar-item"
                       key={month.name}
                       aria-current={isCurrentMonth ? 'date' : undefined}
                       onMouseEnter={() => setHoveredMonth(month.name)}
@@ -1274,7 +1274,12 @@ export function AccountPage({
                       <strong style={{ fontSize: '0.68rem', fontFamily: 'Consolas, monospace' }}>
                         {formatMoney(month.total)}
                       </strong>
-                      <span style={{ fontSize: '0.72rem', fontWeight: 800 }}>{month.name}</span>
+                      <span
+                        className={isCurrentMonth ? 'bank-projection-current-label' : undefined}
+                        style={{ color: isCurrentMonth ? '#38bdf8' : undefined, fontSize: '0.72rem', fontWeight: 800 }}
+                      >
+                        {month.name}
+                      </span>
                     </div>
                   );
                 })}

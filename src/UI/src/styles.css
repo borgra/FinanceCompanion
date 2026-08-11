@@ -2312,25 +2312,13 @@ button.security-result:hover {
   font-size: 0.7rem;
 }
 
-.bank-projection-current {
-  border-radius: var(--md-sys-shape-corner-s);
-  background-color: rgba(56, 189, 248, 0.12);
-  box-shadow: inset 0 0 0 2px #38bdf8, 0 0 0 2px rgba(56, 189, 248, 0.18);
-}
-
-.bank-projection-current::after {
-  content: 'Current month';
-  position: absolute;
-  top: -24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 2px 5px;
-  border-radius: var(--md-sys-shape-corner-xs);
-  background: #38bdf8;
-  color: #081018;
-  font-size: 0.62rem;
+.passive-income-bar-item > span.bank-projection-current-label {
+  color: var(--md-sys-color-secondary);
   font-weight: 800;
-  white-space: nowrap;
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
 .bank-budget-coverage-metrics {
