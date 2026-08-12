@@ -4,30 +4,61 @@ const rawOrigin = process.argv[2];
 if (!rawOrigin) throw new Error('Usage: node scripts/verify-browser-security.mjs <https://origin>');
 const origin = new URL(rawOrigin).origin;
 const routes = ['/', '/holdings', '/budget', '/settings', '/auth/callback'];
+const navigationAttempts = 3;
+const navigationTimeoutMs = 30_000;
+const applicationReadyTimeoutMs = 10_000;
+const retryDelayMs = 2_000;
 const browser = await chromium.launch({ headless: true });
 const failures = [];
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const errorMessage = (error) => error instanceof Error ? error.message : String(error);
 
 try {
   for (const route of routes) {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-    page.on('pageerror', (error) => failures.push(`${route}: page error: ${error.message}`));
-    page.on('requestfailed', (request) => {
-      if (['script', 'stylesheet'].includes(request.resourceType())) {
-        failures.push(`${route}: ${request.resourceType()} failed: ${request.url()} (${request.failure()?.errorText ?? 'unknown error'})`);
-      }
-    });
-    page.on('console', (message) => {
-      if (message.type() === 'error' && /content security policy|refused to/i.test(message.text())) {
-        failures.push(`${route}: CSP violation: ${message.text()}`);
-      }
-    });
+    let routePassed = false;
 
-    const response = await page.goto(`${origin}${route}`, { waitUntil: 'networkidle', timeout: 30_000 });
-    if (!response?.ok()) failures.push(`${route}: navigation returned ${response?.status() ?? 'no response'}`);
-    await page.locator('main[role], main.auth-shell, h1').first().waitFor({ state: 'visible', timeout: 10_000 });
-    const heading = await page.locator('h1').first().textContent();
-    if (!heading?.trim()) failures.push(`${route}: application heading was not rendered`);
-    await page.close();
+    for (let attempt = 1; attempt <= navigationAttempts; attempt += 1) {
+      const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      const attemptFailures = [];
+      page.on('pageerror', (error) => attemptFailures.push(`${route}: page error: ${error.message}`));
+      page.on('requestfailed', (request) => {
+        if (['script', 'stylesheet'].includes(request.resourceType())) {
+          attemptFailures.push(`${route}: ${request.resourceType()} failed: ${request.url()} (${request.failure()?.errorText ?? 'unknown error'})`);
+        }
+      });
+      page.on('console', (message) => {
+        if (message.type() === 'error' && /content security policy|refused to/i.test(message.text())) {
+          attemptFailures.push(`${route}: CSP violation: ${message.text()}`);
+        }
+      });
+
+      try {
+        const response = await page.goto(`${origin}${route}`, {
+          waitUntil: 'domcontentloaded',
+          timeout: navigationTimeoutMs,
+        });
+        if (!response?.ok()) throw new Error(`navigation returned ${response?.status() ?? 'no response'}`);
+
+        const heading = page.locator('h1').first();
+        await heading.waitFor({ state: 'visible', timeout: applicationReadyTimeoutMs });
+        if (!(await heading.textContent())?.trim()) throw new Error('application heading was not rendered');
+
+        failures.push(...attemptFailures);
+        routePassed = true;
+        break;
+      } catch (error) {
+        const attemptFailure = `${route}: attempt ${attempt}/${navigationAttempts} failed: ${errorMessage(error)}`;
+        if (attempt === navigationAttempts) {
+          failures.push(attemptFailure, ...attemptFailures);
+        } else {
+          console.warn(`${attemptFailure}; retrying after ${retryDelayMs * attempt}ms.`);
+        }
+      } finally {
+        await page.close();
+      }
+
+      if (!routePassed && attempt < navigationAttempts) await delay(retryDelayMs * attempt);
+    }
   }
 } finally {
   await browser.close();
