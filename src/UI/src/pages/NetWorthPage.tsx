@@ -12,8 +12,9 @@ import type { Holding } from '../domain/holding';
 import type { HoldingRepository } from '../domain/holdingRepository';
 import type { IncomeSource } from '../domain/incomeSource';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
-import type { InvestmentSnapshots, MortgageSchedule } from '../domain/netWorth';
+import type { InvestmentSnapshots, MonthlyNetWorthSnapshots, MortgageSchedule } from '../domain/netWorth';
 import { MortgageSchedulePanel } from './MortgageSchedulePanel';
+import { NetWorthSnapshotPanel } from './NetWorthSnapshotPanel';
 import type { NetWorthRepository } from '../domain/netWorthRepository';
 
 type NetWorthPageProps = {
@@ -43,10 +44,13 @@ const formatMoney = (value: number) => value < 0
   : currencyFormatter.format(value);
 const formatPercent = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
 
-const getProjectionMonths = () => projectionMonthsList.map((month, index) => ({
-  name: month,
-  dateCode: `2026-${String(index + 1).padStart(2, '0')}`,
-}));
+const getProjectionMonths = (year: number) => {
+  const shortYear = String(year).slice(-2);
+  return projectionMonthsList.map((month, index) => ({
+    name: `${month.slice(0, 3)}-${shortYear}`,
+    dateCode: `${year}-${String(index + 1).padStart(2, '0')}`,
+  }));
+};
 
 const mortgageEquityForMonth = (schedule: MortgageSchedule | null, monthCode: string) => {
   if (!schedule || schedule.startingOutstandingMortgage <= 0 || monthCode < schedule.scheduleStartMonth) return 0;
@@ -89,7 +93,7 @@ const computeBankingValues = (
   const startCode = account.startDate?.slice(0, 7) ?? '2026-01';
   return months.map((month) => {
     if (month.dateCode < startCode) return { month: month.name, value: 0 };
-    const record = account.monthlyRecords.find((candidate) => candidate.month === month.name);
+    const record = account.monthlyRecords.find((candidate) => candidate.month.slice(0, 3) === month.name.slice(0, 3));
     if (!record) return { month: month.name, value: currentStart };
     const credit = account.type === 'Savings'
       ? Number(record.credit) || 0
@@ -107,7 +111,7 @@ export const computePensionValues = (account: Account, months: Array<{ name: str
   const monthlyGrowthRate = (Number(account.yieldRate) || 0) / 100 / 12;
   return months.map((month) => {
     const contribution = Number(
-      account.monthlyRecords.find((record) => record.month === month.name)?.invest,
+      account.monthlyRecords.find((record) => record.month.slice(0, 3) === month.name.slice(0, 3))?.invest,
     ) || 0;
     const growth = startingAmount * monthlyGrowthRate;
     const value = startingAmount + growth + contribution;
@@ -204,6 +208,7 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [investmentSnapshots, setInvestmentSnapshots] = useState<InvestmentSnapshots>({});
+  const [monthlySnapshots, setMonthlySnapshots] = useState<MonthlyNetWorthSnapshots>({});
   const [beginningNetWorth, setBeginningNetWorth] = useState(0);
   const [trackMortgage, setTrackMortgage] = useState(false);
   const [mortgageSchedule, setMortgageSchedule] = useState<MortgageSchedule | null>(null);
@@ -227,6 +232,7 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
       const snapshots = netWorth?.investmentSnapshots ?? {};
 
       setInvestmentSnapshots(snapshots);
+      setMonthlySnapshots(netWorth?.monthlySnapshots ?? {});
       setBeginningNetWorth(netWorth?.beginningNetWorth ?? 0);
       setTrackMortgage(mortgageTrackingOverride ?? netWorth?.trackMortgageInNetWorth ?? true);
       setMortgageSchedule(netWorth?.mortgageSchedule ?? null);
@@ -241,7 +247,8 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
 
   useEffect(() => { if (mortgageTrackingOverride !== undefined) setTrackMortgage(mortgageTrackingOverride); }, [mortgageTrackingOverride]);
 
-  const months = useMemo(getProjectionMonths, []);
+  const projectionYear = new Date().getFullYear();
+  const months = useMemo(() => getProjectionMonths(projectionYear), [projectionYear]);
   const groups = useMemo(() => groupAccounts(accounts), [accounts]);
   const pensionValues = useMemo(() => new Map(accounts
     .filter((account) => account.investmentAccountType === 'Pension')
@@ -268,6 +275,16 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
   const now = new Date();
   const currentMonth = months.find((month) => month.dateCode === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)?.name ?? months[0]?.name ?? '';
   const currentRow = rows.find((row) => row.month === currentMonth) ?? rows[rows.length - 1];
+  const snapshotValues = useMemo(() => {
+    const values = new Map(currentRow?.valuesByAccountId ?? []);
+    for (const account of accounts) {
+      if (account.type === 'Investment' && account.investmentAccountType !== 'Pension') {
+        const hasPositions = holdings.some((holding) => holding.accountPositions.some((position) => position.accountId === account.id));
+        values.set(account.id, hasPositions ? sumHoldingValuesForAccount(account.id, holdings) : account.startingBalance);
+      }
+    }
+    return values;
+  }, [accounts, currentRow, holdings]);
   const currentNetWorth = currentRow?.total ?? 0;
   const varianceAmount = currentNetWorth - beginningNetWorth;
   const variancePercent = beginningNetWorth === 0 ? 0 : varianceAmount / beginningNetWorth * 100;
@@ -325,6 +342,19 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
           { label: 'Variance %', value: formatPercent(variancePercent) },
         ].map((item) => <div key={item.label} style={{ border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: 16, background: 'var(--md-sys-color-surface)', padding: 16 }}><p style={{ fontSize: '.78rem', textTransform: 'uppercase', letterSpacing: '.08em' }}>{item.label}</p><strong style={{ display: 'block', marginTop: 6, fontSize: '1.15rem' }}>{item.value}</strong></div>)}
       </section>
+      {currentRow ? <NetWorthSnapshotPanel
+        accounts={accounts}
+        currentValues={snapshotValues}
+        homeEquity={currentRow.homeValue}
+        includeHomeEquity={trackMortgage}
+        monthlySnapshots={monthlySnapshots}
+        formatMoney={formatMoney}
+        onSave={async (month, snapshot) => {
+          const saved = await netWorthRepository.putMonthlySnapshot(month, snapshot);
+          setMonthlySnapshots(saved.monthlySnapshots ?? {});
+          return saved;
+        }}
+      /> : null}
       {saveError ? <p role="alert" style={{ color: 'var(--md-sys-color-error)', marginBottom: 12 }}>{saveError}</p> : null}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <button className="primary-action" type="button" disabled={!hasDirtySnapshots || isSavingSnapshots} onClick={() => void saveSnapshots()}>

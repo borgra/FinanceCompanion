@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import replace
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
@@ -52,6 +53,7 @@ from app.presentation.http.schemas import (
     NetWorthConfigurationPutRequest,
     MortgageSchedulePutRequest,
     NetWorthPutRequest,
+    MonthlyNetWorthSnapshotPutRequest,
     
     HoldingPayload,
     IncomeSourcePayload,
@@ -159,20 +161,20 @@ def get_net_worth(user=Depends(require_session_user), container=Depends(get_cont
 
 
 def _to_net_worth_payload(value: NetWorth) -> NetWorthPayload:
-    return NetWorthPayload(beginningNetWorth=value.beginning_net_worth, investmentSnapshots=value.investment_snapshots, trackMortgageInNetWorth=value.track_mortgage_in_net_worth, mortgageSchedule=value.mortgage_schedule, updatedAt=value.updated_at)
+    return NetWorthPayload(beginningNetWorth=value.beginning_net_worth, investmentSnapshots=value.investment_snapshots, trackMortgageInNetWorth=value.track_mortgage_in_net_worth, mortgageSchedule=value.mortgage_schedule, monthlySnapshots=value.monthly_snapshots, updatedAt=value.updated_at)
 
 
 @router.put("/net-worth", response_model=NetWorthPayload)
 def put_net_worth(request: NetWorthPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
-    current = container.get_net_worth.execute(user.user_id)
-    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=request.beginning_net_worth, investment_snapshots=current.investment_snapshots if current else {}, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth if current else False, mortgage_schedule=current.mortgage_schedule if current else None))
+    current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
+    value = container.put_net_worth.execute(user.user_id, replace(current, beginning_net_worth=request.beginning_net_worth, updated_at=now_iso()))
     return _to_net_worth_payload(value)
 
 
 @router.put("/net-worth/investment-snapshots", response_model=NetWorthPayload)
 def put_investment_snapshots(request: InvestmentSnapshotsPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
     current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
-    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=request.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=current.mortgage_schedule))
+    value = container.put_net_worth.execute(user.user_id, replace(current, investment_snapshots=request.investment_snapshots, updated_at=now_iso()))
     return _to_net_worth_payload(value)
 
 
@@ -180,14 +182,29 @@ def put_investment_snapshots(request: InvestmentSnapshotsPutRequest, user=Depend
 def put_investment_snapshot(account_id: str, month: str, request: InvestmentSnapshotPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
     current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
     snapshots = {key: dict(values) for key, values in current.investment_snapshots.items()}; snapshots.setdefault(account_id, {})[month] = request.value
-    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=current.mortgage_schedule))
+    value = container.put_net_worth.execute(user.user_id, replace(current, investment_snapshots=snapshots, updated_at=now_iso()))
     return _to_net_worth_payload(value)
 
+
+@router.put("/net-worth/snapshots/{month}", response_model=NetWorthPayload)
+def put_monthly_net_worth_snapshot(month: str, request: MonthlyNetWorthSnapshotPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
+    try:
+        parsed_date = date.fromisoformat(request.as_of_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Snapshot date is invalid.") from exc
+    expected_month = f"{parsed_date.year:04d}-{parsed_date.month:02d}"
+    if month != expected_month:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Snapshot date must be in the requested month.")
+    current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
+    snapshots = dict(current.monthly_snapshots)
+    snapshots[month] = request.model_dump(by_alias=True, exclude_none=True)
+    value = container.put_net_worth.execute(user.user_id, replace(current, monthly_snapshots=snapshots, updated_at=now_iso()))
+    return _to_net_worth_payload(value)
 
 @router.put("/net-worth/configuration", response_model=NetWorthPayload)
 def put_net_worth_configuration(request: NetWorthConfigurationPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
     current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
-    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=current.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=request.track_mortgage_in_net_worth, mortgage_schedule=current.mortgage_schedule))
+    value = container.put_net_worth.execute(user.user_id, replace(current, track_mortgage_in_net_worth=request.track_mortgage_in_net_worth, updated_at=now_iso()))
     return _to_net_worth_payload(value)
 
 
@@ -201,7 +218,7 @@ def put_mortgage_schedule(request: MortgageSchedulePutRequest, user=Depends(requ
     if request.starting_outstanding_mortgage > 0 and not has_principal_payment:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail='A principal payment is required while a balance remains.')
     current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, investment_snapshots={}, updated_at=now_iso())
-    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=current.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=request.model_dump(by_alias=True)))
+    value = container.put_net_worth.execute(user.user_id, replace(current, mortgage_schedule=request.model_dump(by_alias=True), updated_at=now_iso()))
     return _to_net_worth_payload(value)
 
 @router.delete("/net-worth/mortgage-schedule", response_model=NetWorthPayload)
@@ -218,7 +235,7 @@ def delete_mortgage_schedule(user=Depends(require_session_user), container=Depen
         'principalOverrides': {},
         'extraPrincipalOverrides': {},
     }
-    value = container.put_net_worth.execute(user.user_id, NetWorth(beginning_net_worth=current.beginning_net_worth, investment_snapshots=current.investment_snapshots, updated_at=now_iso(), track_mortgage_in_net_worth=current.track_mortgage_in_net_worth, mortgage_schedule=cleared_schedule))
+    value = container.put_net_worth.execute(user.user_id, replace(current, mortgage_schedule=cleared_schedule, updated_at=now_iso()))
     return _to_net_worth_payload(value)
 @router.get("/income-sources", response_model=list[IncomeSourcePayload])
 def list_income_sources(user=Depends(require_session_user), container=Depends(get_container)) -> list[IncomeSourcePayload]:
@@ -478,6 +495,8 @@ def import_holding_details(request: HoldingImportRequest, user=Depends(require_s
                 row.name.strip(),
                 row.price,
                 [to_holding_account_position(position) for position in row.account_positions],
+                "dividend_growth_rate" in row.model_fields_set,
+                row.dividend_growth_rate,
             )
             for row in request.rows
         ],

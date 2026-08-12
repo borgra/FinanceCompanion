@@ -31,7 +31,7 @@ const holdings = [
   {
     id: 'holding-msft',
     security: {
-      symbol: 'MSFT', name: 'Microsoft Corporation', price: 510.25,
+      symbol: 'MSFT', name: 'Microsoft Corporation', price: 510.25, dividendGrowthRate: 0.0479,
       exchange: 'NASDAQ', assetType: 'Stock', currency: 'USD',
     },
     accountPositions: [
@@ -54,15 +54,15 @@ const holdings = [
 describe('createHoldingImportTemplate', () => {
   it('prepopulates every account column with the current holding quantities', () => {
     expect(createHoldingImportTemplate(accountsWithUnmanagedHolding, holdings)).toBe(
-      'Ticker,Name,Price,Account: Etrade (acc-etrade),Account: Audrey 401k (acc-401k)\r\n' +
-      'MSFT,Microsoft Corporation,510.25,50,75\r\n' +
-      'VTI,Vanguard Total Market,325.25,0,2.5\r\n',
+      'Ticker,Name,Price,Dividend Growth Rate (%),Account: Etrade (acc-etrade),Account: Audrey 401k (acc-401k)\r\n' +
+      'MSFT,Microsoft Corporation,510.25,4.79,50,75\r\n' +
+      'VTI,Vanguard Total Market,325.25,,0,2.5\r\n',
     );
   });
 
   it('creates a valid header-only template when there are no holdings', () => {
     expect(createHoldingImportTemplate(accountsWithUnmanagedHolding, [])).toBe(
-      'Ticker,Name,Price,Account: Etrade (acc-etrade),Account: Audrey 401k (acc-401k)\r\n',
+      'Ticker,Name,Price,Dividend Growth Rate (%),Account: Etrade (acc-etrade),Account: Audrey 401k (acc-401k)\r\n',
     );
   });
 });
@@ -93,6 +93,40 @@ describe('parseHoldingImport', () => {
     ]);
   });
 });
+
+
+  it('converts percent DGR values, preserves a present blank as null, and keeps the account offset', () => {
+    const rows = parseHoldingImport(
+      'Ticker,Name,Price,Dividend Growth Rate (%),Account: Audrey 401k (acc-401k)\n' +
+      'VTI,Vanguard Total Market,325.25,4.79,43\n' +
+      'MSFT,Microsoft,510.25,,12',
+      investmentAccounts,
+    );
+
+    expect(rows).toEqual([
+      {
+        symbol: 'VTI',
+        name: 'Vanguard Total Market',
+        price: 325.25,
+        dividendGrowthRate: 0.0479,
+        accountPositions: [{ accountId: 'acc-401k', quantity: 43, costBasis: null }],
+      },
+      {
+        symbol: 'MSFT',
+        name: 'Microsoft',
+        price: 510.25,
+        dividendGrowthRate: null,
+        accountPositions: [{ accountId: 'acc-401k', quantity: 12, costBasis: null }],
+      },
+    ]);
+  });
+
+  it('still requires an account column when the DGR header is present', () => {
+    expect(() => parseHoldingImport(
+      'Ticker,Name,Price,Dividend Growth Rate (%)\nVTI,Vanguard Total Market,325.25,4.79',
+      investmentAccounts,
+    )).toThrow('at least one Account column');
+  });
 
 describe('parsePassiveIncomeImport', () => {
   it('parses one payment per CSV row and groups multiple payments for a ticker', () => {

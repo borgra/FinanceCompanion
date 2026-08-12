@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -8,3 +9,4 @@ class NetWorth:
     updated_at: str
     track_mortgage_in_net_worth: bool = False
     mortgage_schedule: dict[str, float | str] | None = None
+    monthly_snapshots: dict[str, dict[str, Any]] = field(default_factory=dict)

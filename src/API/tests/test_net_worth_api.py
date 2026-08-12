@@ -165,3 +165,54 @@ def test_deleting_mortgage_schedule_preserves_other_net_worth_data():
         'extraPrincipalOverrides': {},
     }
     assert response.json()['trackMortgageInNetWorth'] is True
+
+
+def test_monthly_snapshot_replaces_only_the_requested_month_and_preserves_configuration():
+    client = build_test_client()
+    authenticate(client)
+    client.put('/api/v1/net-worth/configuration', json={'trackMortgageInNetWorth': True})
+
+    july = client.put('/api/v1/net-worth/snapshots/2026-07', json={
+        'asOfDate': '2026-07-31',
+        'accountValues': {'checking': {'accountName': 'Checking', 'value': 1000}},
+    })
+    august = client.put('/api/v1/net-worth/snapshots/2026-08', json={
+        'asOfDate': '2026-08-03',
+        'accountValues': {
+            'checking': {'accountName': 'Checking', 'value': 1200},
+            'closed': {'accountName': 'Closed account', 'value': 500},
+        },
+        'homeEquity': 250000,
+    })
+    replacement = client.put('/api/v1/net-worth/snapshots/2026-08', json={
+        'asOfDate': '2026-08-11',
+        'accountValues': {'checking': {'accountName': 'Checking', 'value': 1400}},
+    })
+
+    assert july.status_code == 200
+    assert august.status_code == 200
+    assert replacement.status_code == 200
+    body = replacement.json()
+    assert body['beginningNetWorth'] == 250000
+    assert body['trackMortgageInNetWorth'] is True
+    assert body['monthlySnapshots']['2026-07'] == july.json()['monthlySnapshots']['2026-07']
+    assert body['monthlySnapshots']['2026-08'] == {
+        'asOfDate': '2026-08-11',
+        'accountValues': {'checking': {'accountName': 'Checking', 'value': 1400.0}},
+    }
+
+
+def test_monthly_snapshot_validates_date_month_values_and_authentication():
+    client = build_test_client()
+    payload = {
+        'asOfDate': '2026-08-11',
+        'accountValues': {'checking': {'accountName': 'Checking', 'value': 1000}},
+    }
+    assert client.put('/api/v1/net-worth/snapshots/2026-08', json=payload).status_code == 401
+    authenticate(client)
+    assert client.put('/api/v1/net-worth/snapshots/2026-07', json=payload).status_code == 422
+    assert client.put('/api/v1/net-worth/snapshots/2026-02', json={**payload, 'asOfDate': '2026-02-31'}).status_code == 422
+    assert client.put('/api/v1/net-worth/snapshots/2026-08', json={
+        **payload,
+        'accountValues': {'checking': {'accountName': 'Checking', 'value': 'NaN'}},
+    }).status_code == 422

@@ -74,12 +74,12 @@ class ImportHoldingDetails:
     def __init__(self, repository: HoldingRepository) -> None:
         self._repository = repository
 
-    def execute(self, user_id: str, rows: list[tuple[str, str, float, list[HoldingAccountPosition]]]) -> tuple[list[Holding], list[str]]:
+    def execute(self, user_id: str, rows: list[tuple[str, str, float, list[HoldingAccountPosition], bool, float | None]]) -> tuple[list[Holding], list[str]]:
         holdings_by_symbol = {holding.security.symbol.casefold(): holding for holding in self._repository.list_for_user(user_id)}
         updated: list[Holding] = []
         unmatched: list[str] = []
         timestamp = now_iso()
-        for symbol, name, price, account_positions in rows:
+        for symbol, name, price, account_positions, has_dividend_growth_rate, dividend_growth_rate in rows:
             holding = holdings_by_symbol.get(symbol.casefold())
             if holding is None:
                 unmatched.append(symbol)
@@ -113,12 +113,13 @@ class ImportHoldingDetails:
                 holding.security.name == name
                 and holding.security.price == price
                 and holding.account_positions == merged_positions
+                and (not has_dividend_growth_rate or holding.security.dividend_growth_rate == dividend_growth_rate)
             ):
                 updated.append(holding)
                 continue
             refreshed = replace(
                 holding,
-                security=replace(holding.security, name=name, price=price, details_updated_at=timestamp, details_status="manual"),
+                security=replace(holding.security, name=name, price=price, dividend_growth_rate=dividend_growth_rate if has_dividend_growth_rate else holding.security.dividend_growth_rate, details_updated_at=timestamp, details_status="manual"),
                 account_positions=merged_positions,
                 updated_at=timestamp,
             )

@@ -240,6 +240,7 @@ class InMemoryDataStore:
                 updated_at=item["updatedAt"],
                 track_mortgage_in_net_worth=bool(item.get("trackMortgageInNetWorth", False)),
                 mortgage_schedule=deepcopy(item.get("mortgageSchedule")),
+                monthly_snapshots=deepcopy(item.get("monthlySnapshots", {})),
             )
             for user_id, item in data["net_worth"].items()
         }

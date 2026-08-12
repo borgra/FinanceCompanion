@@ -765,6 +765,7 @@ class CosmosNetWorthRepository:
             updated_at=entity["updatedAt"],
             track_mortgage_in_net_worth=bool(entity.get("trackMortgageInNetWorth", False)),
             mortgage_schedule=json.loads(entity["mortgageScheduleJson"]) if entity.get("mortgageScheduleJson") else None,
+            monthly_snapshots=json.loads(entity.get("monthlySnapshotsJson", "{}")),
         )
 
     def put_for_user(self, user_id: str, net_worth: NetWorth) -> NetWorth:
@@ -775,6 +776,7 @@ class CosmosNetWorthRepository:
             "investmentSnapshotsJson": json.dumps(net_worth.investment_snapshots),
             "trackMortgageInNetWorth": net_worth.track_mortgage_in_net_worth,
             "mortgageScheduleJson": json.dumps(net_worth.mortgage_schedule) if net_worth.mortgage_schedule is not None else None,
+            "monthlySnapshotsJson": json.dumps(net_worth.monthly_snapshots),
             "updatedAt": net_worth.updated_at,
         })
         return deepcopy(net_worth)
