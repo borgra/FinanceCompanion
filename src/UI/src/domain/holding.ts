@@ -74,7 +74,14 @@ export type SecurityDetailsRefreshResult = {
   failedSymbols: string[];
 };
 
-export type HoldingImportRow = { symbol: string; name: string; price: number; accountPositions: HoldingAccountPosition[] };
+export type HoldingImportRow = {
+  symbol: string;
+  name: string;
+  price: number;
+  accountPositions: HoldingAccountPosition[];
+  /** Omitted for legacy CSVs, null when the current-template cell is explicitly blank. */
+  dividendGrowthRate?: number | null;
+};
 
 export type HoldingImportResult = {
   holdings: Holding[];

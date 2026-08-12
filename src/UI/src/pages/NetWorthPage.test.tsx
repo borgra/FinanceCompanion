@@ -5,6 +5,7 @@ import { defaultMonthlyRecords, type Account } from '../domain/account';
 import { createMockAccountRepository } from '../domain/accountRepository';
 import { createMockHoldingRepository } from '../domain/holdingRepository';
 import { createMockIncomeSourceRepository } from '../domain/incomeSourceRepository';
+import type { MonthlyNetWorthSnapshot } from '../domain/netWorth';
 import { createMockNetWorthRepository } from '../domain/netWorthRepository';
 import { NetWorthPage } from './NetWorthPage';
 
@@ -130,6 +131,8 @@ describe('NetWorthPage', () => {
 
     expect(within(summary).getByText('$1,600.00')).toBeInTheDocument();
     expect(within(summary).getByText('+10.7%')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Take July 2026 snapshot' }));
+    expect(screen.getByRole('textbox', { name: 'Fidelity Taxable snapshot value' })).toHaveValue('$4,000.00');
   });
 
   it('retains dirty snapshot drafts when the batch save fails so it can be retried', async () => {
@@ -143,6 +146,7 @@ describe('NetWorthPage', () => {
       get: async () => ({ beginningNetWorth: 100000, investmentSnapshots: {}, updatedAt: '2026-01-01T00:00:00Z' }),
       put: async (beginningNetWorth: number) => ({ beginningNetWorth, investmentSnapshots: {}, updatedAt: '2026-01-01T00:00:00Z' }),
       putInvestmentSnapshots,
+      putMonthlySnapshot: async (_month: string, snapshot: MonthlyNetWorthSnapshot) => ({ beginningNetWorth: 100000, investmentSnapshots: {}, monthlySnapshots: { '2026-07': snapshot }, updatedAt: '2026-01-01T00:00:00Z' }),
     };
     render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [account({ id: 'taxable', name: 'Fidelity Taxable', type: 'Investment', startingBalance: 4000, investmentAccountType: 'Taxable', manageHoldings: true, yearlyContribution: 0 })] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={netWorthRepository} />);
     const snapshot = await screen.findByRole('textbox', { name: 'Fidelity Taxable Jul-26 snapshot' });
@@ -192,6 +196,35 @@ describe('NetWorthPage', () => {
     expect(screen.queryByRole('textbox', { name: /City Pension.*snapshot/i })).not.toBeInTheDocument();
     expect(within(screen.getByRole('row', { name: /Jan-26/ })).getAllByText('$10,200.00')[0]).toBeInTheDocument();
     expect(within(screen.getByRole('row', { name: /Feb-26/ })).getAllByText('$10,302.00')[0]).toBeInTheDocument();
+  });
+  it('uses the current local year and month when calculating captured banking values', async () => {
+    vi.setSystemTime(new Date(2027, 7, 15, 12));
+    const user = userEvent.setup();
+    const checking = account({ id: 'checking', name: 'Checking', startingBalance: 1000 });
+    checking.monthlyRecords[7].outflows = { rent: 100 };
+    render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [checking] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={createMockNetWorthRepository(0)} />);
+
+    const summary = await screen.findByLabelText('Net worth summary');
+    expect(within(summary).getByText('Current Net Worth (Aug-27)')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Take August 2027 snapshot' }));
+    expect(screen.getByRole('textbox', { name: 'Checking snapshot value' })).toHaveValue('$900.00');
+  });
+  it('captures a legitimate zero holdings value instead of the investment starting balance', async () => {
+    vi.setSystemTime(new Date(2026, 7, 15, 12));
+    const user = userEvent.setup();
+    const investment = account({ id: 'taxable', name: 'Taxable', type: 'Investment', investmentAccountType: 'Taxable', startingBalance: 5000, manageHoldings: true });
+    const holdingRepository = createMockHoldingRepository();
+    vi.spyOn(holdingRepository, 'listHoldings').mockResolvedValue([{
+      id: 'liquidated',
+      security: { symbol: 'ZERO', name: 'Liquidated', exchange: '', assetType: 'Stock', currency: 'USD', price: 100 },
+      accountPositions: [{ accountId: 'taxable', quantity: 0, costBasis: null }],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-08-15T00:00:00Z',
+    }]);
+    render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [investment] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={holdingRepository} netWorthRepository={createMockNetWorthRepository(0)} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Take August 2026 snapshot' }));
+    expect(screen.getByRole('textbox', { name: 'Taxable snapshot value' })).toHaveValue('$0.00');
   });
 });
 

@@ -6,6 +6,7 @@ type SecurityDetailsDialogProps = {
   security: SecurityMetadata;
   onClose: () => void;
   onSaveCorporateActions: (actions: CorporateAction[]) => Promise<void>;
+  onSaveDividendGrowthRate: (dividendGrowthRate: number | null) => Promise<void>;
 };
 
 const currencyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
@@ -16,17 +17,24 @@ const formatOptional = (value: number | null | undefined, formatter = numberForm
   value == null ? 'Not available' : formatter.format(value);
 
 const cloneActions = (actions: CorporateAction[] = []) => actions.map((action) => ({ ...action }));
+const toPercentDraft = (value: number | null | undefined) => value == null ? '' : String(value * 100);
+
 const isValidAction = (action: CorporateAction) =>
   Boolean(action.effectiveDate) && action.oldShares > 0 && action.newShares > 0 && action.oldShares !== action.newShares &&
   (action.type === 'stock_split' ? action.newShares > action.oldShares : action.newShares < action.oldShares);
 
-export function SecurityDetailsDialog({ security, onClose, onSaveCorporateActions }: SecurityDetailsDialogProps) {
+export function SecurityDetailsDialog({ security, onClose, onSaveCorporateActions, onSaveDividendGrowthRate }: SecurityDetailsDialogProps) {
   const [activeTab, setActiveTab] = useState<'details' | 'actions'>('details');
   const [actionDrafts, setActionDrafts] = useState(() => cloneActions(security.corporateActions));
   const [isSavingActions, setIsSavingActions] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [dividendGrowthRateDraft, setDividendGrowthRateDraft] = useState(() => toPercentDraft(security.dividendGrowthRate));
+  const [dividendGrowthRateBadInput, setDividendGrowthRateBadInput] = useState(false);
+  const [isSavingDividendGrowthRate, setIsSavingDividendGrowthRate] = useState(false);
+  const [dividendGrowthRateError, setDividendGrowthRateError] = useState<string | null>(null);
   const savedActions = useMemo(() => cloneActions(security.corporateActions), [security.corporateActions]);
+  const savedDividendGrowthRateDraft = useMemo(() => toPercentDraft(security.dividendGrowthRate), [security.dividendGrowthRate]);
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -41,6 +49,7 @@ export function SecurityDetailsDialog({ security, onClose, onSaveCorporateAction
   }, [onClose]);
 
   const actionsChanged = JSON.stringify(actionDrafts) !== JSON.stringify(savedActions);
+  const dividendGrowthRateChanged = dividendGrowthRateDraft !== savedDividendGrowthRateDraft;
   const updateAction = (id: string, patch: Partial<CorporateAction>) => {
     setActionDrafts((current) => current.map((action) => action.id === id ? { ...action, ...patch } : action));
     setActionError(null);
@@ -62,6 +71,25 @@ export function SecurityDetailsDialog({ security, onClose, onSaveCorporateAction
       setIsSavingActions(false);
     }
   };
+  const saveDividendGrowthRate = async (event: FormEvent) => {
+    event.preventDefault();
+    const normalizedDraft = dividendGrowthRateDraft.trim();
+    const percent = normalizedDraft === '' ? null : Number(normalizedDraft);
+    if (dividendGrowthRateBadInput || (percent !== null && (!Number.isFinite(percent) || percent < -100))) {
+      setDividendGrowthRateError('Enter a finite dividend growth rate of -100% or greater.');
+      return;
+    }
+    setIsSavingDividendGrowthRate(true);
+    setDividendGrowthRateError(null);
+    try {
+      await onSaveDividendGrowthRate(percent === null ? null : percent / 100);
+    } catch {
+      setDividendGrowthRateError('Unable to save the dividend growth rate.');
+    } finally {
+      setIsSavingDividendGrowthRate(false);
+    }
+  };
+
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -77,11 +105,19 @@ export function SecurityDetailsDialog({ security, onClose, onSaveCorporateAction
         </div>
 
         {activeTab === 'details' ? (
-          <div id="security-details-panel" role="tabpanel" aria-labelledby="security-details-tab">
+          <form id="security-details-panel" role="tabpanel" aria-labelledby="security-details-tab" noValidate onSubmit={(event) => void saveDividendGrowthRate(event)}>
             <dl className="security-details-grid">
-              <div><dt>Symbol</dt><dd>{security.symbol}</dd></div><div><dt>Exchange</dt><dd>{security.exchange}</dd></div><div><dt>Asset type</dt><dd>{security.assetType}</dd></div><div><dt>Currency</dt><dd>{security.currency}</dd></div><div><dt>Price</dt><dd>{formatOptional(security.price, currencyFormatter)}</dd></div><div><dt>Sector</dt><dd>{security.sector || 'Not available'}</dd></div><div><dt>Industry</dt><dd>{security.industry || 'Not available'}</dd></div><div><dt>P/E ratio</dt><dd>{formatOptional(security.peRatio)}</dd></div><div><dt>30-day yield</dt><dd>{formatOptional(security.thirtyDayYield, percentFormatter)}</dd></div><div><dt>52-week low</dt><dd>{formatOptional(security.fiftyTwoWeekLow, currencyFormatter)}</dd></div><div><dt>52-week high</dt><dd>{formatOptional(security.fiftyTwoWeekHigh, currencyFormatter)}</dd></div><div><dt>Dividend growth</dt><dd>{formatOptional(security.dividendGrowthRate, percentFormatter)}</dd></div>
+              <div><dt>Symbol</dt><dd>{security.symbol}</dd></div><div><dt>Exchange</dt><dd>{security.exchange}</dd></div><div><dt>Asset type</dt><dd>{security.assetType}</dd></div><div><dt>Currency</dt><dd>{security.currency}</dd></div><div><dt>Price</dt><dd>{formatOptional(security.price, currencyFormatter)}</dd></div><div><dt>Sector</dt><dd>{security.sector || 'Not available'}</dd></div><div><dt>Industry</dt><dd>{security.industry || 'Not available'}</dd></div><div><dt>P/E ratio</dt><dd>{formatOptional(security.peRatio)}</dd></div><div><dt>30-day yield</dt><dd>{formatOptional(security.thirtyDayYield, percentFormatter)}</dd></div><div><dt>52-week low</dt><dd>{formatOptional(security.fiftyTwoWeekLow, currencyFormatter)}</dd></div><div><dt>52-week high</dt><dd>{formatOptional(security.fiftyTwoWeekHigh, currencyFormatter)}</dd></div>
             </dl>
-          </div>
+            <label className="field" htmlFor="dividend-growth-rate"><span>Dividend growth rate (%)</span>
+              <input id="dividend-growth-rate" type="number" min="-100" step="any" value={dividendGrowthRateDraft} aria-invalid={Boolean(dividendGrowthRateError)} aria-describedby={dividendGrowthRateError ? 'dividend-growth-rate-error' : undefined} onChange={(event) => { setDividendGrowthRateDraft(event.target.value); setDividendGrowthRateBadInput(event.target.validity.badInput); setDividendGrowthRateError(null); }} />
+            </label>
+            {dividendGrowthRateError ? <p id="dividend-growth-rate-error" className="form-error" role="alert">{dividendGrowthRateError}</p> : null}
+            <div className="modal-actions">
+              <button className="secondary-action" type="button" disabled={!dividendGrowthRateChanged || isSavingDividendGrowthRate} onClick={() => { setDividendGrowthRateDraft(savedDividendGrowthRateDraft); setDividendGrowthRateBadInput(false); setDividendGrowthRateError(null); }}>Reset</button>
+              <button className="primary-action" type="submit" disabled={!dividendGrowthRateChanged || isSavingDividendGrowthRate}>{isSavingDividendGrowthRate ? 'Saving...' : 'Save changes'}</button>
+            </div>
+          </form>
         ) : (
           <form id="security-actions-panel" role="tabpanel" aria-labelledby="security-actions-tab" onSubmit={(event) => void saveActions(event)}>
             {actionDrafts.length === 0 ? <p className="status-copy">No corporate actions are recorded for this security.</p> : <div className="security-actions-editor" role="group" aria-label="Corporate actions">

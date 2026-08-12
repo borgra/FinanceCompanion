@@ -40,7 +40,7 @@ An amount the customer owes, including supported credit-card balances, loans, mo
 
 ### Snapshot
 
-An immutable recorded value for an account at an `asOfDate`. A monthly snapshot represents the balance or fair value at the selected month-end. It includes its source, recorded-at time, and data-quality status.
+A saved point-in-time record of the account values contributing to Net Worth at an `asOfDate`. The app keeps one snapshot per calendar month. Capturing again in the same month replaces that month's entire snapshot after confirmation, while other months remain unchanged. Snapshot values are editable without changing live accounts.
 
 ### Beginning Net Worth
 
@@ -66,7 +66,7 @@ Display `n/a` when Beginning Net Worth is zero or negative because percentage ch
 2. Include supported banking and investment accounts as assets.
 3. Include supported liability accounts, including credit cards and loans, as liabilities.
 4. Allow a user to include or exclude each account from net worth and set their ownership percentage.
-5. Store and display immutable monthly account snapshots with an as-of date and quality status.
+5. Store and display editable monthly account snapshots with an as-of date and one whole-record replacement per calendar month.
 6. Show asset subtotals, liability subtotals, and net worth for each complete month.
 7. Add a dated Beginning Net Worth baseline in Configuration and show net worth change from that date.
 8. Preserve historical snapshots for closed or deleted accounts.
@@ -116,7 +116,7 @@ Each included account snapshot must record:
 - Quality status: `complete`, `stale`, `missing`, or `excluded`.
 - Recorded-at timestamp.
 
-Snapshots are append-only for reporting. A correction creates a visibly revised snapshot with an audit reason; it must not silently rewrite a previously displayed historical month.
+A snapshot is stored as one whole record keyed by calendar month. Capturing again in the same month requires explicit confirmation and replaces the entire record so removed accounts cannot survive through a partial merge. Direct edits update only the selected snapshot and never mutate live account values. Other months remain unchanged.
 
 ### Banking Valuation
 
@@ -206,6 +206,8 @@ Validate currency values, prohibit ownership outside 0–100%, and require an ef
 - Given an included liability, when the user views the table, then it appears as a positive balance in a liability group and reduces Net Worth exactly once.
 - Given an investment account valued from holdings, when the user views a snapshot, then neither its recorded account balance nor its holdings are double counted.
 - Given a historical snapshot, when current market prices or balances change, then the historical month’s reported value does not change.
+- Given a snapshot already exists for the current month, when the user captures and confirms another snapshot, then the new whole-account record and today’s local date replace that month while all other months remain unchanged.
+- Given the user edits a saved snapshot value, when the edit is saved, then its total recalculates and the corresponding live account remains unchanged.
 - Given an included active account without a complete snapshot, when the user views that month, then the month is labeled incomplete and the UI identifies the affected account instead of silently presenting a partial Net Worth total.
 - Given a closed or deleted account with a historical snapshot, when the user views that historical month, then the account remains represented.
 - Given a baseline amount and effective date, when the user views a complete current snapshot, then the UI shows the dollar change and states the comparison date.

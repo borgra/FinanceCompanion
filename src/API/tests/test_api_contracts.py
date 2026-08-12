@@ -570,13 +570,31 @@ def test_holding_import_updates_matching_tickers_and_rejects_invalid_rows():
     assert created.status_code == 201
 
     response = client.put("/api/v1/holdings/import", json={"rows": [
-        {"symbol": "VTI", "name": "Vanguard Total Market", "price": 325.25},
+        {"symbol": "VTI", "name": "Vanguard Total Market", "price": 325.25, "dividendGrowthRate": 0.0479},
         {"symbol": "NONE", "name": "Unknown", "price": 12.0},
     ]})
     assert response.status_code == 200
     assert response.json()["holdings"][0]["security"]["name"] == "Vanguard Total Market"
     assert response.json()["holdings"][0]["security"]["price"] == 325.25
     assert response.json()["unmatchedSymbols"] == ["NONE"]
+    assert response.json()["holdings"][0]["security"]["dividendGrowthRate"] == 0.0479
+
+    legacy = client.put("/api/v1/holdings/import", json={"rows": [
+        {"symbol": "VTI", "name": "Legacy import", "price": 326.0},
+    ]})
+    assert legacy.status_code == 200
+    assert legacy.json()["holdings"][0]["security"]["dividendGrowthRate"] == 0.0479
+
+    cleared = client.put("/api/v1/holdings/import", json={"rows": [
+        {
+            "symbol": "VTI",
+            "name": "Cleared growth rate",
+            "price": 326.0,
+            "dividendGrowthRate": None,
+        },
+    ]})
+    assert cleared.status_code == 200
+    assert cleared.json()["holdings"][0]["security"]["dividendGrowthRate"] is None
 
     invalid = client.put("/api/v1/holdings/import", json={"rows": [
         {"symbol": "VTI", "name": "Vanguard", "price": 1},
@@ -588,6 +606,18 @@ def test_holding_import_updates_matching_tickers_and_rejects_invalid_rows():
         {"symbol": "VTI", "name": "Vanguard", "price": 0},
     ]})
     assert invalid_price.status_code == 422
+
+    below_minimum = client.put("/api/v1/holdings/import", json={"rows": [
+        {"symbol": "VTI", "name": "Vanguard", "price": 1, "dividendGrowthRate": -1.0001},
+    ]})
+    assert below_minimum.status_code == 422
+
+    nonfinite = client.put(
+        "/api/v1/holdings/import",
+        content='{"rows":[{"symbol":"VTI","name":"Vanguard","price":1,"dividendGrowthRate":"Infinity"}]}',
+        headers={"content-type": "application/json"},
+    )
+    assert nonfinite.status_code == 422
 
 
 def test_holding_import_updates_only_listed_account_positions():

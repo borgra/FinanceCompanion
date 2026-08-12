@@ -20,6 +20,9 @@ export const createNetWorthApiRepository = (client: HttpClient): NetWorthReposit
   putInvestmentSnapshots: (investmentSnapshots) => client.put<NetWorth>(
     '/net-worth/investment-snapshots', { investmentSnapshots },
   ),
+  putMonthlySnapshot: (month, snapshot) => client.put<NetWorth>(
+    `/net-worth/snapshots/${month}`, snapshot,
+  ),
   putConfiguration: (trackMortgageInNetWorth) => client.put<NetWorth>('/net-worth/configuration', { trackMortgageInNetWorth }),
   putMortgageSchedule: (mortgageSchedule) => client.put<NetWorth>('/net-worth/mortgage-schedule', mortgageSchedule),
   deleteMortgageSchedule: () => client.delete<NetWorth>('/net-worth/mortgage-schedule'),

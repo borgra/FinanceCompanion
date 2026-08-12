@@ -80,6 +80,7 @@ export const isHoldingsEligibleAccount = (account: Account) =>
   account.investmentAccountType !== 'Pension';
 
 const importAccountHeader = (account: Account) => `Account: ${account.name} (${account.id})`;
+const dividendGrowthRateImportHeader = 'Dividend Growth Rate (%)';
 
 const isIsoDate = (value: string) => {
   const date = new Date(`${value}T00:00:00Z`);
@@ -90,7 +91,7 @@ export const createHoldingImportTemplate = (accounts: Account[], holdings: Holdi
   const managedAccounts = accounts.filter(isHoldingsEligibleAccount);
 
   return [
-    ['Ticker', 'Name', 'Price', ...managedAccounts.map(importAccountHeader)].join(','),
+    ['Ticker', 'Name', 'Price', dividendGrowthRateImportHeader, ...managedAccounts.map(importAccountHeader)].join(','),
     ...holdings.map((holding) => {
       const quantitiesByAccountId = new Map(
         holding.accountPositions.map((position) => [position.accountId, position.quantity]),
@@ -99,6 +100,7 @@ export const createHoldingImportTemplate = (accounts: Account[], holdings: Holdi
         holding.security.symbol,
         holding.security.name,
         holding.security.price ?? '',
+        holding.security.dividendGrowthRate == null ? '' : holding.security.dividendGrowthRate * 100,
         ...managedAccounts.map((account) => quantitiesByAccountId.get(account.id) ?? 0),
       ].join(',');
     }),
@@ -111,20 +113,27 @@ export const parseHoldingImport = (csv: string, investmentAccounts: Account[]): 
   const headers = lines[0].split(',').map((header) => header.trim());
   const requiredHeaders = ['Ticker', 'Name', 'Price'];
   if (headers.length < requiredHeaders.length + 1 || requiredHeaders.some((header, index) => header !== headers[index])) throw new Error('Include Ticker, Name, Price, and at least one Account column from the downloaded template.');
+  const hasDividendGrowthRate = headers[requiredHeaders.length] === dividendGrowthRateImportHeader;
+  const accountHeaderOffset = requiredHeaders.length + (hasDividendGrowthRate ? 1 : 0);
+  if (headers.length < accountHeaderOffset + 1) throw new Error('Include Ticker, Name, Price, and at least one Account column from the downloaded template.');
   const accountByHeader = new Map(
     investmentAccounts.filter(isHoldingsEligibleAccount).map((account) => [
       importAccountHeader(account),
       account,
     ]),
   );
-  const selectedAccounts = headers.slice(requiredHeaders.length).map((header) => accountByHeader.get(header));
+  const selectedAccounts = headers.slice(accountHeaderOffset).map((header) => accountByHeader.get(header));
   if (selectedAccounts.some((account) => !account) || new Set(selectedAccounts.map((account) => account?.id)).size !== selectedAccounts.length) throw new Error('Each Account column must match a configured investment account and may appear only once.');
   const symbols = new Set<string>();
   return lines.slice(1).map((line, index) => {
     const values = line.split(',').map((value) => value.trim());
-    const [symbol, name, rawPrice, ...rawQuantities] = values;
+    const [symbol, name, rawPrice] = values;
+    const rawDividendGrowthRate = hasDividendGrowthRate ? values[requiredHeaders.length] : undefined;
+    const rawQuantities = values.slice(accountHeaderOffset);
     const price = Number(rawPrice);
     if (values.length !== headers.length || !/^[A-Za-z0-9.-]{1,20}$/.test(symbol) || !name || name.length > 200 || !Number.isFinite(price) || price <= 0 || price > 1_000_000) throw new Error(`Row ${index + 2} is invalid.`);
+    const dividendGrowthRatePercent = rawDividendGrowthRate === '' || rawDividendGrowthRate === undefined ? null : Number(rawDividendGrowthRate);
+    if (hasDividendGrowthRate && dividendGrowthRatePercent !== null && (!Number.isFinite(dividendGrowthRatePercent) || dividendGrowthRatePercent < -100)) throw new Error(`Row ${index + 2} has an invalid dividend growth rate.`);
     const accountPositions = rawQuantities.map((rawQuantity, quantityIndex) => {
       const quantity = rawQuantity === '' ? 0 : Number(rawQuantity);
       if (!Number.isFinite(quantity) || quantity < 0 || quantity > 1_000_000_000) throw new Error(`Row ${index + 2} has an invalid account quantity.`);
@@ -133,7 +142,11 @@ export const parseHoldingImport = (csv: string, investmentAccounts: Account[]): 
     const normalized = symbol.toUpperCase();
     if (symbols.has(normalized)) throw new Error(`Ticker ${normalized} appears more than once.`);
     symbols.add(normalized);
-    return { symbol: normalized, name, price, accountPositions };
+    const row: HoldingImportRow = { symbol: normalized, name, price, accountPositions };
+    if (hasDividendGrowthRate) {
+      row.dividendGrowthRate = dividendGrowthRatePercent === null ? null : dividendGrowthRatePercent / 100;
+    }
+    return row;
   });
 };
 export const parseCorporateActionImport = (csv: string): CorporateActionImportRow[] => {
@@ -528,6 +541,19 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setSecurityDetailsHolding(updated);
     setSuccessMessage(`${updated.security.symbol} corporate actions were saved.`);
   };
+  const saveDividendGrowthRate = async (dividendGrowthRate: number | null) => {
+    if (!securityDetailsHolding) return;
+    setError(null);
+    setSuccessMessage(null);
+    const updated = await holdingRepository.updateHolding(securityDetailsHolding.id, {
+      security: { ...securityDetailsHolding.security, dividendGrowthRate },
+      accountPositions: securityDetailsHolding.accountPositions,
+    });
+    setHoldings((current) => mergeRefreshedSecurityDetails(current, [updated]));
+    setSecurityDetailsHolding(updated);
+    setSuccessMessage(`${updated.security.symbol} dividend growth rate was saved.`);
+  };
+
   const refreshHoldingDetails = async (holdingId: string) => {
     setRefreshingHoldingIds((current) => new Set(current).add(holdingId));
     setError(null);
@@ -976,7 +1002,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       {successMessage ? <p className="form-success" role="status">{successMessage}</p> : null}
 
-      {securityDetailsHolding ? <SecurityDetailsDialog security={securityDetailsHolding.security} onClose={() => setSecurityDetailsHolding(null)} onSaveCorporateActions={saveCorporateActions} /> : null}
+      {securityDetailsHolding ? <SecurityDetailsDialog security={securityDetailsHolding.security} onClose={() => setSecurityDetailsHolding(null)} onSaveCorporateActions={saveCorporateActions} onSaveDividendGrowthRate={saveDividendGrowthRate} /> : null}
 
       {isAddDialogOpen ? (
         <div className="modal-overlay" onClick={closeAddDialog}>

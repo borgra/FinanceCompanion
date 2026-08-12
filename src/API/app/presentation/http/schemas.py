@@ -305,6 +305,7 @@ class HoldingImportRow(CamelModel):
     name: str = Field(min_length=1, max_length=200)
     price: float = Field(gt=0, le=1_000_000)
     account_positions: list[HoldingAccountPositionPayload] = Field(default_factory=list, serialization_alias="accountPositions")
+    dividend_growth_rate: FiniteFloat | None = Field(default=None, ge=-1, serialization_alias="dividendGrowthRate")
 
 
 
@@ -352,6 +353,7 @@ class NetWorthPayload(BaseModel):
     investment_snapshots: dict[str, dict[str, float]] = Field(default_factory=dict, alias="investmentSnapshots")
     track_mortgage_in_net_worth: bool = Field(default=False, alias="trackMortgageInNetWorth")
     mortgage_schedule: dict[str, Any] | None = Field(default=None, alias="mortgageSchedule")
+    monthly_snapshots: dict[str, dict[str, Any]] = Field(default_factory=dict, alias="monthlySnapshots")
     updated_at: str = Field(alias="updatedAt")
 
 
@@ -388,3 +390,18 @@ class InvestmentSnapshotsPutRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     investment_snapshots: dict[str, dict[str, float]] = Field(alias="investmentSnapshots")
+
+
+class SnapshotAccountValuePayload(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    account_name: str = Field(alias="accountName", min_length=1)
+    value: float = Field(allow_inf_nan=False)
+
+
+class MonthlyNetWorthSnapshotPutRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    as_of_date: str = Field(alias="asOfDate", pattern=r"^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$")
+    account_values: dict[str, SnapshotAccountValuePayload] = Field(alias="accountValues")
+    home_equity: float | None = Field(default=None, alias="homeEquity", allow_inf_nan=False)
