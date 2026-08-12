@@ -87,6 +87,20 @@ select {
   border: none;
 }
 
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background-color: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+}
+
+select option:disabled {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
 button {
   cursor: pointer;
   user-select: none;
