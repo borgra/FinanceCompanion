@@ -94,4 +94,44 @@ describe('workspace API', () => {
 
     expect(readBeginningNetWorth()).toBe(789);
   });
+
+  it('preserves omitted slices as missing so the session can use legacy fallbacks', async () => {
+    const get = vi.fn().mockResolvedValue({ schemaVersion: 1 });
+
+    const loaded = await loadWorkspace({ get } as unknown as HttpClient);
+
+    expect(loaded).toEqual({
+      schemaVersion: 1,
+      incomeSources: undefined,
+      budgetCategories: undefined,
+      accounts: undefined,
+      holdings: undefined,
+      netWorth: undefined,
+      retirementPlan: undefined,
+    });
+  });
+
+  it.each([
+    ['incomeSources', null],
+    ['budgetCategories', {}],
+    ['accounts', 'invalid'],
+    ['holdings', 4],
+    ['netWorth', []],
+    ['retirementPlan', false],
+  ])('rejects a malformed present %s slice', async (key, value) => {
+    const get = vi.fn().mockResolvedValue({ schemaVersion: 1, [key]: value });
+
+    await expect(loadWorkspace({ get } as unknown as HttpClient)).rejects.toThrow(
+      `Invalid workspace payload: ${key}`,
+    );
+  });
+
+  it('rejects missing, unknown, and malformed schema versions', async () => {
+    for (const payload of [{}, { schemaVersion: 2 }, { schemaVersion: '1' }]) {
+      const get = vi.fn().mockResolvedValue(payload);
+      await expect(loadWorkspace({ get } as unknown as HttpClient)).rejects.toThrow(
+        'Invalid workspace payload: unsupported schemaVersion.',
+      );
+    }
+  });
 });

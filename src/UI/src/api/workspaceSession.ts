@@ -24,6 +24,58 @@ const upsert = <T extends { id: string }>(items: T[], item: T): T[] =>
     ? items.map((current) => current.id === item.id ? item : current)
     : [...items, item];
 
+const createArrayReader = <T,>(
+  getCached: () => T[] | undefined,
+  setCached: (value: T[]) => void,
+  load: () => Promise<T[]>,
+) => {
+  let pending: Promise<T[]> | undefined;
+  return async (): Promise<T[]> => {
+    const cached = getCached();
+    if (cached !== undefined) return clone(cached);
+    if (!pending) {
+      pending = load().then(
+        (value) => {
+          const next = clone(value);
+          setCached(next);
+          return next;
+        },
+        (error: unknown) => {
+          pending = undefined;
+          throw error;
+        },
+      );
+    }
+    return clone(await pending);
+  };
+};
+
+const createSingletonReader = <T,>(
+  getCached: () => T | null | undefined,
+  setCached: (value: T | null) => void,
+  load: () => Promise<T | undefined>,
+) => {
+  let pending: Promise<T | undefined> | undefined;
+  return async (): Promise<T | undefined> => {
+    const cached = getCached();
+    if (cached !== undefined) return cached === null ? undefined : clone(cached);
+    if (!pending) {
+      pending = load().then(
+        (value) => {
+          setCached(value === undefined ? null : clone(value));
+          return value;
+        },
+        (error: unknown) => {
+          pending = undefined;
+          throw error;
+        },
+      );
+    }
+    const value = await pending;
+    return value === undefined ? undefined : clone(value);
+  };
+};
+
 export type WorkspaceRepositories = {
   incomeSourceRepository: IncomeSourceRepository;
   budgetRepository: BudgetRepository;
@@ -44,17 +96,47 @@ export function createWorkspaceSession(
   const holdingApi = createHoldingApiRepository(client);
   const netWorthApi = createNetWorthApiRepository(client);
   const retirementApi = createRetirementPlanApiRepository(client);
+  const readIncomeSources = createArrayReader(
+    () => state.incomeSources,
+    (value) => { state.incomeSources = value; },
+    incomeApi.listIncomeSources,
+  );
+  const readBudgetCategories = createArrayReader(
+    () => state.budgetCategories,
+    (value) => { state.budgetCategories = value; },
+    budgetApi.listCategoriesWithSubCategories,
+  );
+  const readAccounts = createArrayReader(
+    () => state.accounts,
+    (value) => { state.accounts = value; },
+    accountApi.listAccounts,
+  );
+  const readHoldings = createArrayReader(
+    () => state.holdings,
+    (value) => { state.holdings = value; },
+    holdingApi.listHoldings,
+  );
+  const readNetWorth = createSingletonReader(
+    () => state.netWorth,
+    (value) => { state.netWorth = value; },
+    netWorthApi.get,
+  );
+  const readRetirementPlan = createSingletonReader(
+    () => state.retirementPlan,
+    (value) => { state.retirementPlan = value; },
+    retirementApi.get,
+  );
 
   const reconcileIncome = (item: IncomeSource) => {
-    state.incomeSources = upsert(state.incomeSources, clone(item));
+    state.incomeSources = upsert(state.incomeSources ?? [], clone(item));
     return clone(item);
   };
   const reconcileAccount = (item: Account) => {
-    state.accounts = upsert(state.accounts, clone(item));
+    state.accounts = upsert(state.accounts ?? [], clone(item));
     return clone(item);
   };
   const reconcileHolding = (item: Holding) => {
-    state.holdings = upsert(state.holdings, clone(item));
+    state.holdings = upsert(state.holdings ?? [], clone(item));
     return clone(item);
   };
   const reconcileHoldings = (items: Holding[]) => {
@@ -71,38 +153,38 @@ export function createWorkspaceSession(
   };
 
   const incomeSourceRepository: IncomeSourceRepository = {
-    listIncomeSources: async () => clone(state.incomeSources),
+    listIncomeSources: readIncomeSources,
     createIncomeSource: async (draft) => reconcileIncome(await incomeApi.createIncomeSource(draft)),
     updateIncomeSource: async (id, draft) => reconcileIncome(await incomeApi.updateIncomeSource(id, draft)),
     setIncomeSourceStatus: async (id, status) => reconcileIncome(await incomeApi.setIncomeSourceStatus(id, status)),
   };
 
   const budgetRepository: BudgetRepository = {
-    listCategoriesWithSubCategories: async () => clone(state.budgetCategories),
+    listCategoriesWithSubCategories: readBudgetCategories,
     createCategory: async (...args) => {
       const saved = await budgetApi.createCategory(...args);
-      state.budgetCategories = upsert(state.budgetCategories, { ...clone(saved), subCategories: [] });
+      state.budgetCategories = upsert(state.budgetCategories ?? [], { ...clone(saved), subCategories: [] });
       return clone(saved);
     },
     updateCategory: async (...args) => {
       const saved = await budgetApi.updateCategory(...args);
-      state.budgetCategories = state.budgetCategories.map((category) =>
+      state.budgetCategories = (state.budgetCategories ?? []).map((category) =>
         category.id === saved.id ? { ...category, ...clone(saved) } : category,
       );
       return clone(saved);
     },
     saveCategoryDraft: async (draft) => {
       const saved = await budgetApi.saveCategoryDraft(draft);
-      state.budgetCategories = upsert(state.budgetCategories, clone(saved));
+      state.budgetCategories = upsert(state.budgetCategories ?? [], clone(saved));
       return clone(saved);
     },
     deleteCategory: async (id) => {
       await budgetApi.deleteCategory(id);
-      state.budgetCategories = state.budgetCategories.filter((category) => category.id !== id);
+      state.budgetCategories = (state.budgetCategories ?? []).filter((category) => category.id !== id);
     },
     createSubCategory: async (...args) => {
       const saved = await budgetApi.createSubCategory(...args);
-      state.budgetCategories = state.budgetCategories.map((category) =>
+      state.budgetCategories = (state.budgetCategories ?? []).map((category) =>
         category.id === saved.categoryId
           ? { ...category, subCategories: upsert(category.subCategories, clone(saved)) }
           : category,
@@ -111,7 +193,7 @@ export function createWorkspaceSession(
     },
     updateSubCategory: async (...args) => {
       const saved = await budgetApi.updateSubCategory(...args);
-      state.budgetCategories = state.budgetCategories.map((category) =>
+      state.budgetCategories = (state.budgetCategories ?? []).map((category) =>
         category.id === saved.categoryId
           ? { ...category, subCategories: upsert(category.subCategories, clone(saved)) }
           : category,
@@ -120,7 +202,7 @@ export function createWorkspaceSession(
     },
     deleteSubCategory: async (id) => {
       await budgetApi.deleteSubCategory(id);
-      state.budgetCategories = state.budgetCategories.map((category) => ({
+      state.budgetCategories = (state.budgetCategories ?? []).map((category) => ({
         ...category,
         subCategories: category.subCategories.filter((subCategory) => subCategory.id !== id),
       }));
@@ -128,7 +210,7 @@ export function createWorkspaceSession(
   };
 
   const accountRepository: AccountRepository = {
-    listAccounts: async () => clone(state.accounts),
+    listAccounts: readAccounts,
     createAccount: async (draft) => reconcileAccount(await accountApi.createAccount(draft)),
     updateAccount: async (id, draft) => reconcileAccount(await accountApi.updateAccount(id, draft)),
     updateAccountsBatch: async (changes) => clone(
@@ -139,13 +221,13 @@ export function createWorkspaceSession(
     ),
     deleteAccount: async (id) => {
       await accountApi.deleteAccount(id);
-      state.accounts = state.accounts.filter((account) => account.id !== id);
+      state.accounts = (state.accounts ?? []).filter((account) => account.id !== id);
     },
   };
 
   const holdingRepository: HoldingRepository = {
     searchSecurities: holdingApi.searchSecurities,
-    listHoldings: async () => clone(state.holdings),
+    listHoldings: readHoldings,
     createHolding: async (draft) => reconcileHolding(await holdingApi.createHolding(draft)),
     updateHolding: async (id, draft) => reconcileHolding(await holdingApi.updateHolding(id, draft)),
     updateHoldingsBatch: async (changes) => reconcileHoldings(await holdingApi.updateHoldingsBatch(changes)),
@@ -171,7 +253,7 @@ export function createWorkspaceSession(
     },
     deleteHolding: async (id) => {
       await holdingApi.deleteHolding(id);
-      state.holdings = state.holdings.filter((holding) => holding.id !== id);
+      state.holdings = (state.holdings ?? []).filter((holding) => holding.id !== id);
     },
     refreshHoldingSecurityDetails: async (id) => reconcileHolding(await holdingApi.refreshHoldingSecurityDetails(id)),
     refreshHeldSecurityDetails: async () => {
@@ -185,7 +267,7 @@ export function createWorkspaceSession(
   };
 
   const netWorthRepository: NetWorthRepository = {
-    get: async () => state.netWorth ? clone(state.netWorth) : undefined,
+    get: readNetWorth,
     put: async (value) => reconcileNetWorth(await netWorthApi.put(value)),
     putInvestmentSnapshots: async (value) => reconcileNetWorth(await netWorthApi.putInvestmentSnapshots(value)),
     putMonthlySnapshot: async (month, value) => reconcileNetWorth(await netWorthApi.putMonthlySnapshot(month, value)),
@@ -195,7 +277,7 @@ export function createWorkspaceSession(
   };
 
   const retirementPlanRepository: RetirementPlanRepository = {
-    get: async () => state.retirementPlan ? clone(state.retirementPlan) : undefined,
+    get: readRetirementPlan,
     put: async (value) => reconcileRetirementPlan(await retirementApi.put(value)),
   };
 

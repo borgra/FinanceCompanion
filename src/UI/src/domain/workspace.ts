@@ -7,10 +7,10 @@ import type { RetirementPlan } from './retirementPlan';
 
 export type Workspace = {
   schemaVersion: number;
-  incomeSources: IncomeSource[];
-  budgetCategories: BudgetCategoryWithSubCategories[];
-  accounts: Account[];
-  holdings: Holding[];
-  netWorth: NetWorth | null;
-  retirementPlan: RetirementPlan | null;
+  incomeSources?: IncomeSource[];
+  budgetCategories?: BudgetCategoryWithSubCategories[];
+  accounts?: Account[];
+  holdings?: Holding[];
+  netWorth?: NetWorth | null;
+  retirementPlan?: RetirementPlan | null;
 };
