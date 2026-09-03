@@ -3388,6 +3388,7 @@ button.security-result:hover {
 
 .account-selector-item {
   display: flex;
+  cursor: pointer;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
