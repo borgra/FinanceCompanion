@@ -12,6 +12,7 @@ export class ApiError extends Error {
 export class HttpClient {
   constructor(
     private readonly baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? defaultApiBaseUrl,
+    private readonly onUnauthorized?: () => void,
   ) {}
 
   async get<T>(path: string): Promise<T> {
@@ -43,6 +44,7 @@ export class HttpClient {
     });
 
     if (!response.ok) {
+      if (response.status === 401) this.onUnauthorized?.();
       let message = 'Request failed.';
       try {
         const payload = (await response.json()) as { detail?: string };

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -63,6 +63,8 @@ from app.presentation.http.schemas import (
     SecurityMetadataPayload,
     UserResponse,
 )
+from app.presentation.http.retirement_schemas import RetirementPlanPayload
+from app.presentation.http.workspace_schemas import WorkspacePayload
 
 router = APIRouter()
 
@@ -151,6 +153,40 @@ def get_session(user=Depends(require_session_user), container=Depends(get_contai
     except DomainError as exc:
         raise _domain_error_to_http(exc) from exc
     return to_user_response(current_user)
+
+
+@router.get("/workspace", response_model=WorkspacePayload)
+def get_workspace(
+    user=Depends(require_session_user),
+    container=Depends(get_container),
+) -> WorkspacePayload:
+    net_worth = container.get_net_worth.execute(user.user_id)
+    retirement_plan = container.get_retirement_plan.execute(user.user_id)
+    return WorkspacePayload(
+        schema_version=1,
+        income_sources=[
+            to_income_source_payload(item)
+            for item in container.list_income_sources.execute(user.user_id)
+        ],
+        budget_categories=[
+            to_budget_category_payload(item)
+            for item in container.list_budget_categories.execute(user.user_id)
+        ],
+        accounts=[
+            to_account_payload(item)
+            for item in container.list_accounts.execute(user.user_id)
+        ],
+        holdings=[
+            to_holding_payload(item)
+            for item in container.list_holdings.execute(user.user_id)
+        ],
+        net_worth=_to_net_worth_payload(net_worth) if net_worth is not None else None,
+        retirement_plan=(
+            RetirementPlanPayload.model_validate(asdict(retirement_plan))
+            if retirement_plan is not None
+            else None
+        ),
+    )
 
 
 @router.get("/net-worth", response_model=NetWorthPayload)
