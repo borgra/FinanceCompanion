@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /src/UI
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-type: development
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

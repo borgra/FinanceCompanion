@@ -31,20 +31,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate API Dockerfile
         run: test -f "${API_PATH}/Dockerfile"
 
       - name: Azure login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_DEPLOY_CLIENT_ID || vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Resolve Azure resources
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             API_CONTAINER_APP_NAME="$(az containerapp list \
@@ -128,7 +128,7 @@ jobs:
         run: docker push "${IMAGE_NAME}"
 
       - name: Configure API secrets
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             COSMOS_TABLE_CONNECTION_STRING="$(az cosmosdb keys list \
@@ -148,7 +148,7 @@ jobs:
               --only-show-errors
 
       - name: Deploy API image
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             az containerapp update \

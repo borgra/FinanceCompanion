@@ -29,17 +29,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Azure login
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_INFRA_CLIENT_ID || vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy Resource Group
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             started_at="$(date +%s)"
@@ -68,7 +68,7 @@ jobs:
             } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Deploy Frontend
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             started_at="$(date +%s)"
@@ -93,7 +93,7 @@ jobs:
             } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Deploy Data
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             started_at="$(date +%s)"
@@ -120,7 +120,7 @@ jobs:
             } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Deploy Runtime Base
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             started_at="$(date +%s)"
@@ -145,7 +145,7 @@ jobs:
             } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Deploy Runtime API
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             started_at="$(date +%s)"
@@ -181,7 +181,7 @@ jobs:
 
       - name: Deploy Optional Storage
         if: env.AZURE_ENABLE_BLOB_STORAGE == 'true'
-        uses: azure/cli@v2
+        uses: azure/cli@v3
         with:
           inlineScript: |
             started_at="$(date +%s)"
