@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTableBodyCellTabNavigation } from '../../components/useTableBodyCellTabNavigation';
 import type { AccountRepository } from '../../domain/accountRepository';
 import type { HoldingRepository } from '../../domain/holdingRepository';
 import { createDefaultRetirementPlan, type RetirementPlan } from '../../domain/retirementPlan';
@@ -94,6 +95,9 @@ export function RetirementPlanningPage({ accountRepository, holdingRepository, r
   const errorSummary = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLElement>(null);
   const detailTrigger = useRef<HTMLButtonElement>();
+  const contributionTableNavigation = useTableBodyCellTabNavigation();
+  const bridgeTableNavigation = useTableBodyCellTabNavigation();
+  const standardTableNavigation = useTableBodyCellTabNavigation();
 
   const load = useCallback(async () => {
     setState('loading');
@@ -334,7 +338,7 @@ export function RetirementPlanningPage({ accountRepository, holdingRepository, r
                 <h3 id="contribution-years-title">Contribution years</h3>
                 <p>Both accounts compound before retirement. Contributions are added after annual growth.</p>
                 <div className="retirement-table-wrap">
-                  <table className="retirement-table retirement-table--contribution">
+                  <table {...contributionTableNavigation} className="retirement-table retirement-table--contribution">
                     <caption>Contribution Years — annual compounding projection.</caption>
                     <thead><tr><td className="contribution-header-spacer" colSpan={2} aria-hidden="true" /><th className="contribution-taxable-group" colSpan={4} scope="colgroup">Taxable</th><th className="contribution-retirement-group" colSpan={4} scope="colgroup">Retirement</th><td className="contribution-header-spacer" aria-hidden="true" /></tr><tr><th>Year</th><th>Age</th><th className="contribution-taxable-column">Start</th><th className="contribution-taxable-column">Contribution</th><th className="contribution-taxable-column">Growth</th><th className="contribution-taxable-column">End</th><th className="contribution-retirement-column contribution-retirement-start">Start</th><th className="contribution-retirement-column">Contribution</th><th className="contribution-retirement-column">Growth</th><th className="contribution-retirement-column">End</th><th>End total</th></tr></thead>
                     <tbody>{contributionRows.length ? contributionRows.map((row) => <tr key={row.year}><th scope="row">{row.year}</th><td>{row.age}</td><td>{currency.format(row.startTaxable)}</td><td>{currency.format(row.taxableContribution)}</td><td>{currency.format(row.taxableGrowth)}</td><td>{currency.format(row.endTaxable)}</td><td>{currency.format(row.startRetirement)}</td><td>{currency.format(row.retirementContribution)}</td><td>{currency.format(row.retirementGrowth)}</td><td>{currency.format(row.endRetirement)}</td><td>{currency.format(row.totalEnd)}</td></tr>) : <tr><td colSpan={11}>No contribution years in this plan.</td></tr>}</tbody>
@@ -345,7 +349,7 @@ export function RetirementPlanningPage({ accountRepository, holdingRepository, r
                 <h3 id="bridge-retirement-years-title">Retirement years before age 60</h3>
                 <p>Taxable assets fund withdrawals in this bridge period; retirement assets continue compounding.</p>
                 <div className="retirement-table-wrap">
-                  <table className="retirement-table retirement-table--bridge">
+                  <table {...bridgeTableNavigation} className="retirement-table retirement-table--bridge">
                     <caption>Retirement Years before age 60 — taxable account drawdown.</caption>
                     <thead><tr><td className="bridge-header-spacer" colSpan={2} aria-hidden="true" /><th className="bridge-taxable-group" colSpan={3} scope="colgroup">Taxable</th><th className="bridge-retirement-group" scope="colgroup">Retirement</th><td className="bridge-header-spacer" colSpan={3} aria-hidden="true" /></tr><tr><th>Year</th><th>Age</th><th className="bridge-taxable-column">Start</th><th className="bridge-taxable-column">Withdrawal</th><th className="bridge-taxable-column">End</th><th className="bridge-retirement-column">End</th><th>Funding gap</th><th>Detail</th></tr></thead>
                     <tbody>{bridgeRows.length ? bridgeRows.map((row) => <tr key={row.year} className={row.unmetNeed ? 'projection-gap' : undefined}><th scope="row">{row.year}</th><td>{row.age}</td><td>{currency.format(row.startTaxable)}</td><td>{currency.format(row.taxableWithdrawal)}</td><td>{currency.format(row.endTaxable)}</td><td>{currency.format(row.endRetirement)}</td><td>{currency.format(row.unmetNeed)}</td><td><button type="button" className="text-action" onClick={(event) => showDetails(row, event.currentTarget)} aria-label={`Show calculation details for age ${row.age}`}>Details</button></td></tr>) : <tr><td colSpan={8}>No retirement years before age 60 apply to this plan.</td></tr>}</tbody>
@@ -356,7 +360,7 @@ export function RetirementPlanningPage({ accountRepository, holdingRepository, r
                 <h3 id="standard-retirement-years-title">Retirement years from age 60</h3>
                 <p>Taxable assets are used first, then retirement assets fund any remaining withdrawal need.</p>
                 <div className="retirement-table-wrap">
-                  <table className="retirement-table retirement-table--standard">
+                  <table {...standardTableNavigation} className="retirement-table retirement-table--standard">
                     <caption>Retirement Years from age 60 — standard retirement planning.</caption>
                     <thead><tr><td className="standard-header-spacer" colSpan={2} aria-hidden="true" /><th className="standard-taxable-group" colSpan={3} scope="colgroup">Taxable</th><th className="standard-retirement-group" colSpan={3} scope="colgroup">Retirement</th><td className="standard-header-spacer" colSpan={5} aria-hidden="true" /></tr><tr><th>Year</th><th>Age</th><th className="standard-taxable-column">Start</th><th className="standard-taxable-column">Growth</th><th className="standard-taxable-column">End</th><th className="standard-retirement-column">Start</th><th className="standard-retirement-column">Growth</th><th className="standard-retirement-column">End</th><th>Social Security</th><th>Withdrawal</th><th>End total</th><th>Status</th><th>Detail</th></tr></thead>
                     <tbody>{standardRetirementRows.length ? standardRetirementRows.map((row) => <tr key={row.year} className={row.unmetNeed ? 'projection-gap' : undefined}><th scope="row">{row.year}</th><td>{row.age}</td><td>{currency.format(row.startTaxable)}</td><td>{currency.format(row.taxableGrowth)}</td><td>{currency.format(row.endTaxable)}</td><td>{currency.format(row.startRetirement)}</td><td>{currency.format(row.retirementGrowth)}</td><td>{currency.format(row.endRetirement)}</td><td>{currency.format(row.socialSecurity)}</td><td>{currency.format(row.totalWithdrawal)}</td><td>{currency.format(row.totalEnd)}</td><td>{statusText(row.status)}</td><td><button type="button" className="text-action" onClick={(event) => showDetails(row, event.currentTarget)} aria-label={`Show calculation details for age ${row.age}`}>Details</button></td></tr>) : <tr><td colSpan={13}>No retirement years from age 60 apply to this plan.</td></tr>}</tbody>

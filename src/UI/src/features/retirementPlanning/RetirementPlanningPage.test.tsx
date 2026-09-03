@@ -329,4 +329,25 @@ describe('RetirementPlanningPage', () => {
       'Ending taxable:', 'Ending retirement:', 'Ending total:', 'Status:', 'Funding gap:',
     ]) expect(mobileCards).toHaveTextContent(label);
   });
+
+  it('opts each desktop projection table into body-cell Tab navigation', async () => {
+    const user = userEvent.setup();
+    renderPage({ plans: planRepository({ get: vi.fn(async () => savedPlan()) }) });
+
+    const contributionTable = await screen.findByRole('table', { name: /Contribution Years — annual compounding projection/ });
+    const bridgeTable = screen.getByRole('table', { name: /Retirement Years before age 60 — taxable account drawdown/ });
+    const standardTable = screen.getByRole('table', { name: /Retirement Years from age 60 — standard retirement planning/ });
+    const contributionYear = within(contributionTable).getAllByRole('rowheader')[0];
+    const contributionAge = contributionYear.parentElement?.querySelector('td');
+    const bridgeMessage = within(bridgeTable).getByText('No retirement years before age 60 apply to this plan.').closest('td');
+    const standardYear = within(standardTable).getAllByRole('rowheader')[0];
+
+    expect(contributionYear).toHaveAttribute('tabindex', '0');
+    expect(bridgeMessage).toHaveAttribute('tabindex', '0');
+    expect(standardYear).toHaveAttribute('tabindex', '0');
+
+    contributionYear.focus();
+    await user.keyboard('{Tab}');
+    expect(contributionAge).toHaveFocus();
+  });
 });

@@ -8,6 +8,7 @@ import type {
   ThHTMLAttributes,
 } from 'react';
 import { useEffect, useState } from 'react';
+import { useTableBodyCellTabNavigation } from './useTableBodyCellTabNavigation';
 
 type FinanceTableProps = TableHTMLAttributes<HTMLTableElement> & {
   children: ReactNode;
@@ -56,11 +57,22 @@ export function FinanceTable({
   className,
   wrapperClassName,
   wrapperStyle,
+  onKeyDownCapture,
   ...tableProps
 }: FinanceTableProps) {
+  const tableNavigation = useTableBodyCellTabNavigation();
+
   return (
     <div className={joinClassNames('excel-wrapper', wrapperClassName)} style={wrapperStyle}>
-      <table className={joinClassNames('excel-table', className)} {...tableProps}>
+      <table
+        ref={tableNavigation.ref}
+        className={joinClassNames('excel-table', className)}
+        {...tableProps}
+        onKeyDownCapture={(event) => {
+          onKeyDownCapture?.(event);
+          tableNavigation.onKeyDownCapture(event);
+        }}
+      >
         {children}
       </table>
     </div>
