@@ -17,23 +17,25 @@ def test_net_worth_is_user_scoped_singleton_with_idempotent_put():
     assert second.status_code == 200
     assert fetched.status_code == 200
     assert fetched.json()['beginningNetWorth'] == -1250.5
-    assert fetched.json()['investmentSnapshots'] == {}
+    assert fetched.json()['monthlyAccountValues'] == {}
+    assert 'monthlySnapshots' not in fetched.json()
+    assert 'investmentSnapshots' not in fetched.json()
     assert first.json()['updatedAt']
     assert second.json()['updatedAt']
 
 
-def test_investment_snapshots_are_persisted_without_overwriting_the_baseline():
+def test_monthly_account_values_are_persisted_without_overwriting_the_baseline():
     client = build_test_client()
     authenticate(client)
 
-    snapshot = client.put(
-        '/api/v1/net-worth/investment-snapshots/taxable-account/Jan-26',
-        json={'value': 12345.67},
-    )
+    values = client.put('/api/v1/net-worth/monthly-account-values', json={
+        'monthlyAccountValues': {'checking-account': {'Jan-26': 1000}, 'taxable-account': {'Jan-26': 12345.67}},
+    })
 
-    assert snapshot.status_code == 200
-    assert snapshot.json()['beginningNetWorth'] == 250000
-    assert snapshot.json()['investmentSnapshots'] == {
+    assert values.status_code == 200
+    assert values.json()['beginningNetWorth'] == 250000
+    assert values.json()['monthlyAccountValues'] == {
+        'checking-account': {'Jan-26': 1000.0},
         'taxable-account': {'Jan-26': 12345.67},
     }
 
@@ -42,29 +44,38 @@ def test_investment_snapshots_are_persisted_without_overwriting_the_baseline():
 
     assert baseline.status_code == 200
     assert baseline.json()['beginningNetWorth'] == 100000
-    assert baseline.json()['investmentSnapshots'] == snapshot.json()['investmentSnapshots']
-    assert fetched.json()['investmentSnapshots'] == snapshot.json()['investmentSnapshots']
+    assert baseline.json()['monthlyAccountValues'] == values.json()['monthlyAccountValues']
+    assert fetched.json()['monthlyAccountValues'] == values.json()['monthlyAccountValues']
 
 
 def test_net_worth_rejects_non_finite_values_and_requires_authentication():
     client = build_test_client()
 
     assert client.get('/api/v1/net-worth').status_code == 401
-    assert client.put(
-        '/api/v1/net-worth/investment-snapshots/account/Jan-26',
-        json={'value': 1},
-    ).status_code == 401
+    assert client.put('/api/v1/net-worth/monthly-account-values', json={
+        'monthlyAccountValues': {'account': {'Jan-26': 1}},
+    }).status_code == 401
     authenticate(client)
 
     for value in ('Infinity', '-Infinity', 'NaN'):
         response = client.put('/api/v1/net-worth', json={'beginningNetWorth': value})
         assert response.status_code == 422
-        snapshot_response = client.put(
-            '/api/v1/net-worth/investment-snapshots/account/Jan-26',
-            json={'value': value},
-        )
-        assert snapshot_response.status_code == 422
-def test_mortgage_configuration_and_schedule_are_preserved_with_snapshots():
+        values_response = client.put('/api/v1/net-worth/monthly-account-values', json={
+            'monthlyAccountValues': {'account': {'Jan-26': value}},
+        })
+        assert values_response.status_code == 422
+
+
+def test_legacy_snapshot_endpoints_are_removed():
+    client = build_test_client()
+    authenticate(client)
+
+    assert client.put('/api/v1/net-worth/investment-snapshots', json={'investmentSnapshots': {}}).status_code == 404
+    assert client.put('/api/v1/net-worth/investment-snapshots/account/Jan-26', json={'value': 1}).status_code == 404
+    assert client.put('/api/v1/net-worth/snapshots/2026-08', json={}).status_code == 404
+
+
+def test_mortgage_configuration_and_schedule_are_preserved_with_monthly_account_values():
     client = build_test_client()
     authenticate(client)
 
@@ -84,12 +95,12 @@ def test_mortgage_configuration_and_schedule_are_preserved_with_snapshots():
     assert saved.status_code == 200
     assert saved.json()['mortgageSchedule'] == {**schedule, 'principalOverrides': {}, 'extraPrincipalOverrides': {}}
 
-    snapshots = client.put('/api/v1/net-worth/investment-snapshots', json={
-        'investmentSnapshots': {'taxable': {'Jan-26': 5000}},
+    values = client.put('/api/v1/net-worth/monthly-account-values', json={
+        'monthlyAccountValues': {'taxable': {'Jan-26': 5000}},
     })
-    assert snapshots.status_code == 200
-    assert snapshots.json()['trackMortgageInNetWorth'] is True
-    assert snapshots.json()['mortgageSchedule'] == {**schedule, 'principalOverrides': {}, 'extraPrincipalOverrides': {}}
+    assert values.status_code == 200
+    assert values.json()['trackMortgageInNetWorth'] is True
+    assert values.json()['mortgageSchedule'] == {**schedule, 'principalOverrides': {}, 'extraPrincipalOverrides': {}}
 
 
 def test_mortgage_schedule_requires_paydown_when_balance_remains():
@@ -165,54 +176,3 @@ def test_deleting_mortgage_schedule_preserves_other_net_worth_data():
         'extraPrincipalOverrides': {},
     }
     assert response.json()['trackMortgageInNetWorth'] is True
-
-
-def test_monthly_snapshot_replaces_only_the_requested_month_and_preserves_configuration():
-    client = build_test_client()
-    authenticate(client)
-    client.put('/api/v1/net-worth/configuration', json={'trackMortgageInNetWorth': True})
-
-    july = client.put('/api/v1/net-worth/snapshots/2026-07', json={
-        'asOfDate': '2026-07-31',
-        'accountValues': {'checking': {'accountName': 'Checking', 'value': 1000}},
-    })
-    august = client.put('/api/v1/net-worth/snapshots/2026-08', json={
-        'asOfDate': '2026-08-03',
-        'accountValues': {
-            'checking': {'accountName': 'Checking', 'value': 1200},
-            'closed': {'accountName': 'Closed account', 'value': 500},
-        },
-        'homeEquity': 250000,
-    })
-    replacement = client.put('/api/v1/net-worth/snapshots/2026-08', json={
-        'asOfDate': '2026-08-11',
-        'accountValues': {'checking': {'accountName': 'Checking', 'value': 1400}},
-    })
-
-    assert july.status_code == 200
-    assert august.status_code == 200
-    assert replacement.status_code == 200
-    body = replacement.json()
-    assert body['beginningNetWorth'] == 250000
-    assert body['trackMortgageInNetWorth'] is True
-    assert body['monthlySnapshots']['2026-07'] == july.json()['monthlySnapshots']['2026-07']
-    assert body['monthlySnapshots']['2026-08'] == {
-        'asOfDate': '2026-08-11',
-        'accountValues': {'checking': {'accountName': 'Checking', 'value': 1400.0}},
-    }
-
-
-def test_monthly_snapshot_validates_date_month_values_and_authentication():
-    client = build_test_client()
-    payload = {
-        'asOfDate': '2026-08-11',
-        'accountValues': {'checking': {'accountName': 'Checking', 'value': 1000}},
-    }
-    assert client.put('/api/v1/net-worth/snapshots/2026-08', json=payload).status_code == 401
-    authenticate(client)
-    assert client.put('/api/v1/net-worth/snapshots/2026-07', json=payload).status_code == 422
-    assert client.put('/api/v1/net-worth/snapshots/2026-02', json={**payload, 'asOfDate': '2026-02-31'}).status_code == 422
-    assert client.put('/api/v1/net-worth/snapshots/2026-08', json={
-        **payload,
-        'accountValues': {'checking': {'accountName': 'Checking', 'value': 'NaN'}},
-    }).status_code == 422

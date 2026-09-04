@@ -17,11 +17,8 @@ export const createNetWorthApiRepository = (client: HttpClient): NetWorthReposit
     }
   },
   put: (beginningNetWorth) => client.put<NetWorth>('/net-worth', { beginningNetWorth }),
-  putInvestmentSnapshots: (investmentSnapshots) => client.put<NetWorth>(
-    '/net-worth/investment-snapshots', { investmentSnapshots },
-  ),
-  putMonthlySnapshot: (month, snapshot) => client.put<NetWorth>(
-    `/net-worth/snapshots/${month}`, snapshot,
+  putMonthlyAccountValues: (monthlyAccountValues) => client.put<NetWorth>(
+    '/net-worth/monthly-account-values', { monthlyAccountValues },
   ),
   putConfiguration: (trackMortgageInNetWorth) => client.put<NetWorth>('/net-worth/configuration', { trackMortgageInNetWorth }),
   putMortgageSchedule: (mortgageSchedule) => client.put<NetWorth>('/net-worth/mortgage-schedule', mortgageSchedule),

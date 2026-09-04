@@ -12,9 +12,8 @@ import type { Holding } from '../domain/holding';
 import type { HoldingRepository } from '../domain/holdingRepository';
 import type { IncomeSource } from '../domain/incomeSource';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
-import type { InvestmentSnapshots, MonthlyNetWorthSnapshots, MortgageSchedule } from '../domain/netWorth';
+import type { MonthlyAccountValues, MortgageSchedule } from '../domain/netWorth';
 import { MortgageSchedulePanel } from './MortgageSchedulePanel';
-import { NetWorthSnapshotPanel } from './NetWorthSnapshotPanel';
 import type { NetWorthRepository } from '../domain/netWorthRepository';
 
 type NetWorthPageProps = {
@@ -207,8 +206,7 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [incomeSources, setIncomeSources] = useState<IncomeSource[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [investmentSnapshots, setInvestmentSnapshots] = useState<InvestmentSnapshots>({});
-  const [monthlySnapshots, setMonthlySnapshots] = useState<MonthlyNetWorthSnapshots>({});
+  const [monthlyAccountValues, setMonthlyAccountValues] = useState<MonthlyAccountValues>({});
   const [beginningNetWorth, setBeginningNetWorth] = useState(0);
   const [trackMortgage, setTrackMortgage] = useState(false);
   const [mortgageSchedule, setMortgageSchedule] = useState<MortgageSchedule | null>(null);
@@ -216,8 +214,9 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [hasDirtySnapshots, setHasDirtySnapshots] = useState(false);
-  const [isSavingSnapshots, setIsSavingSnapshots] = useState(false);
+  const [hasDirtyValues, setHasDirtyValues] = useState(false);
+  const [isSavingValues, setIsSavingValues] = useState(false);
+  const [snapshotStatus, setSnapshotStatus] = useState('');
 
   useEffect(() => {
     let isCurrent = true;
@@ -229,10 +228,7 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
       setAccounts(nextAccounts);
       setIncomeSources(nextIncomeSources);
       setHoldings(nextHoldings);
-      const snapshots = netWorth?.investmentSnapshots ?? {};
-
-      setInvestmentSnapshots(snapshots);
-      setMonthlySnapshots(netWorth?.monthlySnapshots ?? {});
+      setMonthlyAccountValues(netWorth?.monthlyAccountValues ?? {});
       setBeginningNetWorth(netWorth?.beginningNetWorth ?? 0);
       setTrackMortgage(mortgageTrackingOverride ?? netWorth?.trackMortgageInNetWorth ?? true);
       setMortgageSchedule(netWorth?.mortgageSchedule ?? null);
@@ -257,66 +253,99 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
     .filter((account) => account.type !== 'Investment')
     .map((account) => [account.id, computeBankingValues(account, incomeSources, months)])), [accounts, incomeSources, months]);
 
+  const now = new Date();
+  const currentMonth = months.find((month) => month.dateCode === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)?.name ?? months[0]?.name ?? '';
+  const currentSourceValues = useMemo(() => {
+    const values = new Map<string, number>();
+    for (const account of accounts) {
+      let value: number | undefined;
+      if (account.type !== 'Investment') {
+        value = bankingValues.get(account.id)?.find((item) => item.month === currentMonth)?.value;
+      } else if (account.investmentAccountType === 'Pension') {
+        value = pensionValues.get(account.id)?.find((item) => item.month === currentMonth)?.value;
+      } else {
+        const hasPositions = holdings.some((holding) => holding.accountPositions.some((position) => position.accountId === account.id));
+        if (hasPositions) value = sumHoldingValuesForAccount(account.id, holdings);
+      }
+      if (value !== undefined && Number.isFinite(value)) values.set(account.id, value);
+    }
+    return values;
+  }, [accounts, bankingValues, currentMonth, holdings, pensionValues]);
+
   const rows = useMemo<MonthlyNetWorthRow[]>(() => months.map((month) => {
     const valuesByAccountId = new Map<string, number>();
     for (const account of accounts) {
-      const value = account.investmentAccountType === 'Pension'
+      const calculatedValue = account.investmentAccountType === 'Pension'
         ? pensionValues.get(account.id)?.find((item) => item.month === month.name)?.value ?? 0
         : account.type === 'Investment'
-          ? investmentSnapshots[account.id]?.[month.name] ?? (sumHoldingValuesForAccount(account.id, holdings) || account.startingBalance)
+          ? holdings.some((holding) => holding.accountPositions.some((position) => position.accountId === account.id))
+            ? sumHoldingValuesForAccount(account.id, holdings)
+            : account.startingBalance
           : bankingValues.get(account.id)?.find((item) => item.month === month.name)?.value ?? 0;
+      const storedValue = monthlyAccountValues[account.id]?.[month.name];
+      const value = storedValue !== undefined && Number.isFinite(storedValue) ? storedValue : calculatedValue;
       valuesByAccountId.set(account.id, value);
     }
     const accountsTotal = [...valuesByAccountId.values()].reduce((sum, value) => sum + value, 0);
     const homeValue = mortgageEquityForMonth(mortgageSchedule, month.dateCode);
     return { month: month.name, valuesByAccountId, homeValue, total: accountsTotal + homeValue };
-  }), [accounts, bankingValues, holdings, investmentSnapshots, months, mortgageSchedule, pensionValues]);
+  }), [accounts, bankingValues, holdings, monthlyAccountValues, months, mortgageSchedule, pensionValues]);
 
-  const now = new Date();
-  const currentMonth = months.find((month) => month.dateCode === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)?.name ?? months[0]?.name ?? '';
   const currentRow = rows.find((row) => row.month === currentMonth) ?? rows[rows.length - 1];
-  const snapshotValues = useMemo(() => {
-    const values = new Map(currentRow?.valuesByAccountId ?? []);
-    for (const account of accounts) {
-      if (account.type === 'Investment' && account.investmentAccountType !== 'Pension') {
-        const hasPositions = holdings.some((holding) => holding.accountPositions.some((position) => position.accountId === account.id));
-        values.set(account.id, hasPositions ? sumHoldingValuesForAccount(account.id, holdings) : account.startingBalance);
-      }
-    }
-    return values;
-  }, [accounts, currentRow, holdings]);
   const currentNetWorth = currentRow?.total ?? 0;
   const varianceAmount = currentNetWorth - beginningNetWorth;
   const variancePercent = beginningNetWorth === 0 ? 0 : varianceAmount / beginningNetWorth * 100;
 
-  const parseSnapshot = (rawValue: string) => {
+  const parseValue = (rawValue: string) => {
     const parsed = rawValue.trim() === '' ? 0 : Number(rawValue.replace(/[$,()]/g, ''));
     return Number.isFinite(parsed) ? parsed : undefined;
   };
 
-  const updateSnapshotLocally = (accountId: string, month: string, rawValue: string) => {
-    const parsed = parseSnapshot(rawValue);
+  const updateValueLocally = (accountId: string, month: string, rawValue: string) => {
+    const parsed = parseValue(rawValue);
     if (parsed === undefined) return;
-    setInvestmentSnapshots((current) => ({
+    setMonthlyAccountValues((current) => ({
       ...current,
       [accountId]: { ...current[accountId], [month]: parsed },
     }));
-    setHasDirtySnapshots(true);
+    setHasDirtyValues(true);
+    setSnapshotStatus('');
     setSaveError(null);
   };
 
-  const saveSnapshots = async () => {
-    if (!hasDirtySnapshots || isSavingSnapshots) return;
-    setIsSavingSnapshots(true);
+  const takeSnapshot = () => {
+    setMonthlyAccountValues((current) => {
+      const next = { ...current };
+      for (const account of accounts) {
+        const sourceValue = currentSourceValues.get(account.id);
+        const existingValue = current[account.id]?.[currentMonth];
+        const value = sourceValue !== undefined && Number.isFinite(sourceValue)
+          ? sourceValue
+          : existingValue !== undefined && Number.isFinite(existingValue)
+            ? existingValue
+            : 0;
+        next[account.id] = { ...current[account.id], [currentMonth]: value };
+      }
+      return next;
+    });
+    setHasDirtyValues(true);
+    setSaveError(null);
+    setSnapshotStatus(`${currentMonth} values updated from Banking and Investing. Save changes to persist them.`);
+  };
+
+  const saveValues = async () => {
+    if (!hasDirtyValues || isSavingValues) return;
+    setIsSavingValues(true);
     setSaveError(null);
     try {
-      const saved = await netWorthRepository.putInvestmentSnapshots(investmentSnapshots);
-      setInvestmentSnapshots(saved.investmentSnapshots ?? {});
-      setHasDirtySnapshots(false);
+      const saved = await netWorthRepository.putMonthlyAccountValues(monthlyAccountValues);
+      setMonthlyAccountValues(saved.monthlyAccountValues ?? {});
+      setHasDirtyValues(false);
+      setSnapshotStatus('Net worth table values saved.');
     } catch {
-      setSaveError('Unable to save snapshot changes. Your edits are still here; try again.');
+      setSaveError('Unable to save net worth table changes. Your edits are still here; try again.');
     } finally {
-      setIsSavingSnapshots(false);
+      setIsSavingValues(false);
     }
   };
   if (isLoading) return <p className="status-copy">Loading net worth...</p>;
@@ -342,24 +371,16 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
           { label: 'Variance %', value: formatPercent(variancePercent) },
         ].map((item) => <div key={item.label} style={{ border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: 16, background: 'var(--md-sys-color-surface)', padding: 16 }}><p style={{ fontSize: '.78rem', textTransform: 'uppercase', letterSpacing: '.08em' }}>{item.label}</p><strong style={{ display: 'block', marginTop: 6, fontSize: '1.15rem' }}>{item.value}</strong></div>)}
       </section>
-      {currentRow ? <NetWorthSnapshotPanel
-        accounts={accounts}
-        currentValues={snapshotValues}
-        homeEquity={currentRow.homeValue}
-        includeHomeEquity={trackMortgage}
-        monthlySnapshots={monthlySnapshots}
-        formatMoney={formatMoney}
-        onSave={async (month, snapshot) => {
-          const saved = await netWorthRepository.putMonthlySnapshot(month, snapshot);
-          setMonthlySnapshots(saved.monthlySnapshots ?? {});
-          return saved;
-        }}
-      /> : null}
       {saveError ? <p role="alert" style={{ color: 'var(--md-sys-color-error)', marginBottom: 12 }}>{saveError}</p> : null}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <button className="primary-action" type="button" disabled={!hasDirtySnapshots || isSavingSnapshots} onClick={() => void saveSnapshots()}>
+      <p aria-live="polite" style={{ margin: snapshotStatus ? '0 0 12px' : 0 }}>{snapshotStatus}</p>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
+        <button className="secondary-action" type="button" disabled={!currentRow || accounts.length === 0 || isSavingValues} onClick={takeSnapshot}>
+          <span className="material-symbols-outlined" aria-hidden="true">photo_camera</span>
+          Snapshot
+        </button>
+        <button className="primary-action" type="button" disabled={!hasDirtyValues || isSavingValues} onClick={() => void saveValues()}>
           <span className="material-symbols-outlined" aria-hidden="true">save</span>
-          {isSavingSnapshots ? 'Saving...' : 'Save changes'}
+          {isSavingValues ? 'Saving...' : 'Save changes'}
         </button>
       </div>      <FinanceTable aria-label="Net worth table" className="net-worth-table" wrapperClassName="excel-table-fullwidth" style={{ width: '100%' }}>
         <thead><tr><FinanceTableHeaderCell rowSpan={2}>Month</FinanceTableHeaderCell>{groups.map((group) => <FinanceTableHeaderCell key={group.id} colSpan={group.accounts.length}>{group.label}</FinanceTableHeaderCell>)}{trackMortgage ? <FinanceTableHeaderCell rowSpan={2}>Home Value</FinanceTableHeaderCell> : null}<FinanceTableHeaderCell rowSpan={2}>Total</FinanceTableHeaderCell></tr>
@@ -367,7 +388,7 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
         <tbody>{rows.map((row) => <tr key={row.month} className={row.month === currentMonth ? 'excel-row-current' : undefined}>
           <td className="excel-bold-col">{row.month}</td>
           {groups.flatMap((group) => group.accounts.map((account) => <td key={`${row.month}-${account.id}`}>{account.type === 'Investment' && account.investmentAccountType !== 'Pension'
-            ? <FinanceMoneyCellInput aria-label={`${account.name} ${row.month} snapshot`} value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} onValueChange={(value) => updateSnapshotLocally(account.id, row.month, value)} />
+            ? <FinanceMoneyCellInput aria-label={`${account.name} ${row.month} value`} value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} onValueChange={(value) => updateValueLocally(account.id, row.month, value)} />
             : <FinanceMoneyCellValue value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} />}</td>))}
           {trackMortgage ? <td className="excel-bold-col"><FinanceMoneyCellValue value={row.homeValue} formatValue={formatMoney} /></td> : null}<td className="excel-bold-col"><FinanceMoneyCellValue value={row.total} formatValue={formatMoney} /></td>
         </tr>)}</tbody>

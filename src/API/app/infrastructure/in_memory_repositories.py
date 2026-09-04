@@ -236,11 +236,10 @@ class InMemoryDataStore:
         self.net_worth = {
             user_id: NetWorth(
                 beginning_net_worth=_optional_float(item.get("beginningNetWorth")),
-                investment_snapshots=deepcopy(item.get("investmentSnapshots", {})),
+                monthly_account_values=deepcopy(item.get("monthlyAccountValues", item.get("investmentSnapshots", {}))),
                 updated_at=item["updatedAt"],
                 track_mortgage_in_net_worth=bool(item.get("trackMortgageInNetWorth", False)),
                 mortgage_schedule=deepcopy(item.get("mortgageSchedule")),
-                monthly_snapshots=deepcopy(item.get("monthlySnapshots", {})),
             )
             for user_id, item in data["net_worth"].items()
         }

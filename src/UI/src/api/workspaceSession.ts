@@ -269,8 +269,7 @@ export function createWorkspaceSession(
   const netWorthRepository: NetWorthRepository = {
     get: readNetWorth,
     put: async (value) => reconcileNetWorth(await netWorthApi.put(value)),
-    putInvestmentSnapshots: async (value) => reconcileNetWorth(await netWorthApi.putInvestmentSnapshots(value)),
-    putMonthlySnapshot: async (month, value) => reconcileNetWorth(await netWorthApi.putMonthlySnapshot(month, value)),
+    putMonthlyAccountValues: async (value) => reconcileNetWorth(await netWorthApi.putMonthlyAccountValues(value)),
     putConfiguration: async (value) => reconcileNetWorth(await netWorthApi.putConfiguration!(value)),
     putMortgageSchedule: async (value) => reconcileNetWorth(await netWorthApi.putMortgageSchedule!(value)),
     deleteMortgageSchedule: async () => reconcileNetWorth(await netWorthApi.deleteMortgageSchedule!()),

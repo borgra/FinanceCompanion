@@ -350,10 +350,9 @@ class NetWorthPayload(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     beginning_net_worth: float | None = Field(alias="beginningNetWorth")
-    investment_snapshots: dict[str, dict[str, float]] = Field(default_factory=dict, alias="investmentSnapshots")
+    monthly_account_values: dict[str, dict[str, float]] = Field(default_factory=dict, alias="monthlyAccountValues")
     track_mortgage_in_net_worth: bool = Field(default=False, alias="trackMortgageInNetWorth")
     mortgage_schedule: dict[str, Any] | None = Field(default=None, alias="mortgageSchedule")
-    monthly_snapshots: dict[str, dict[str, Any]] = Field(default_factory=dict, alias="monthlySnapshots")
     updated_at: str = Field(alias="updatedAt")
 
 
@@ -380,28 +379,7 @@ class NetWorthPutRequest(BaseModel):
     beginning_net_worth: float = Field(alias="beginningNetWorth", allow_inf_nan=False)
 
 
-class InvestmentSnapshotPutRequest(BaseModel):
+class MonthlyAccountValuesPutRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    value: float = Field(allow_inf_nan=False)
-
-
-class InvestmentSnapshotsPutRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    investment_snapshots: dict[str, dict[str, float]] = Field(alias="investmentSnapshots")
-
-
-class SnapshotAccountValuePayload(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    account_name: str = Field(alias="accountName", min_length=1)
-    value: float = Field(allow_inf_nan=False)
-
-
-class MonthlyNetWorthSnapshotPutRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    as_of_date: str = Field(alias="asOfDate", pattern=r"^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$")
-    account_values: dict[str, SnapshotAccountValuePayload] = Field(alias="accountValues")
-    home_equity: float | None = Field(default=None, alias="homeEquity", allow_inf_nan=False)
+    monthly_account_values: dict[str, dict[str, FiniteFloat]] = Field(alias="monthlyAccountValues")

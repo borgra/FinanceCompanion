@@ -6,7 +6,7 @@ from dataclasses import asdict, replace
 from datetime import UTC, datetime
 
 from azure.core.exceptions import ResourceNotFoundError
-from azure.data.tables import TableClient
+from azure.data.tables import TableClient, UpdateMode
 
 from app.domain.exceptions import NotFoundError
 from app.domain.models import (
@@ -761,11 +761,10 @@ class CosmosNetWorthRepository:
             return None
         return NetWorth(
             beginning_net_worth=(float(entity["beginningNetWorth"]) if entity.get("beginningNetWorth") is not None else None),
-            investment_snapshots=json.loads(entity.get("investmentSnapshotsJson", "{}")),
+            monthly_account_values=json.loads(entity.get("monthlyAccountValuesJson") or entity.get("investmentSnapshotsJson", "{}")),
             updated_at=entity["updatedAt"],
             track_mortgage_in_net_worth=bool(entity.get("trackMortgageInNetWorth", False)),
             mortgage_schedule=json.loads(entity["mortgageScheduleJson"]) if entity.get("mortgageScheduleJson") else None,
-            monthly_snapshots=json.loads(entity.get("monthlySnapshotsJson", "{}")),
         )
 
     def put_for_user(self, user_id: str, net_worth: NetWorth) -> NetWorth:
@@ -773,12 +772,11 @@ class CosmosNetWorthRepository:
             "PartitionKey": user_id,
             "RowKey": "net_worth",
             "beginningNetWorth": net_worth.beginning_net_worth,
-            "investmentSnapshotsJson": json.dumps(net_worth.investment_snapshots),
+            "monthlyAccountValuesJson": json.dumps(net_worth.monthly_account_values),
             "trackMortgageInNetWorth": net_worth.track_mortgage_in_net_worth,
             "mortgageScheduleJson": json.dumps(net_worth.mortgage_schedule) if net_worth.mortgage_schedule is not None else None,
-            "monthlySnapshotsJson": json.dumps(net_worth.monthly_snapshots),
             "updatedAt": net_worth.updated_at,
-        })
+        }, mode=UpdateMode.REPLACE)
         return deepcopy(net_worth)
 
 

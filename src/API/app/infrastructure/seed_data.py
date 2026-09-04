@@ -695,7 +695,7 @@ SEED_HOLDINGS = {
 SEED_NET_WORTH = {
     "user-steve": {
         "beginningNetWorth": 250000,
-        "investmentSnapshots": {},
+        "monthlyAccountValues": {},
         "trackMortgageInNetWorth": False,
         "mortgageSchedule": None,
         "updatedAt": SEED_TIMESTAMP,

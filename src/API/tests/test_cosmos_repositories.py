@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from azure.core.exceptions import ResourceNotFoundError
+from azure.data.tables import UpdateMode
 
 from app.domain.models import (
     Account,
@@ -13,6 +14,7 @@ from app.domain.models import (
     IncomePeriod,
     IncomeSource,
     MonthlyRecord,
+    NetWorth,
     SecurityMetadata,
     SecurityPayoutDetails,
 )
@@ -21,6 +23,7 @@ from app.infrastructure.cosmos_repositories import (
     CosmosBudgetRepository,
     CosmosHoldingRepository,
     CosmosIncomeSourceRepository,
+    CosmosNetWorthRepository,
     CosmosUserRepository,
 )
 
@@ -28,6 +31,34 @@ from app.infrastructure.cosmos_repositories import (
 @pytest.fixture
 def mock_table_client():
     return MagicMock()
+
+
+def test_net_worth_migrates_legacy_grid_values_and_replaces_obsolete_snapshot_properties(mock_table_client):
+    repo = CosmosNetWorthRepository(mock_table_client)
+    mock_table_client.get_entity.return_value = {
+        "PartitionKey": "user-123",
+        "RowKey": "net_worth",
+        "beginningNetWorth": 100000,
+        "investmentSnapshotsJson": '{"taxable":{"Jan-26":5000}}',
+        "monthlySnapshotsJson": '{"2026-01":{"asOfDate":"2026-01-31"}}',
+        "updatedAt": "2026-01-31T00:00:00Z",
+    }
+
+    loaded = repo.get_for_user("user-123")
+    assert loaded is not None
+    assert loaded.monthly_account_values == {"taxable": {"Jan-26": 5000}}
+
+    repo.put_for_user("user-123", NetWorth(
+        beginning_net_worth=100000,
+        monthly_account_values=loaded.monthly_account_values,
+        updated_at="2026-02-01T00:00:00Z",
+    ))
+
+    entity = mock_table_client.upsert_entity.call_args.args[0]
+    assert entity["monthlyAccountValuesJson"] == '{"taxable": {"Jan-26": 5000}}'
+    assert "investmentSnapshotsJson" not in entity
+    assert "monthlySnapshotsJson" not in entity
+    assert mock_table_client.upsert_entity.call_args.kwargs["mode"] is UpdateMode.REPLACE
 
 
 # --- UserRepository Tests ---

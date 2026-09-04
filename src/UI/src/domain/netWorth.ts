@@ -1,16 +1,4 @@
-export type InvestmentSnapshots = Record<string, Record<string, number>>;
-export type SnapshotAccountValue = {
-  accountName: string;
-  value: number;
-};
-
-export type MonthlyNetWorthSnapshot = {
-  asOfDate: string;
-  accountValues: Record<string, SnapshotAccountValue>;
-  homeEquity?: number;
-};
-
-export type MonthlyNetWorthSnapshots = Record<string, MonthlyNetWorthSnapshot>;
+export type MonthlyAccountValues = Record<string, Record<string, number>>;
 
 export type MortgageSchedule = {
   houseValue: number;
@@ -25,10 +13,9 @@ export type MortgageSchedule = {
 
 export type NetWorth = {
   beginningNetWorth: number | null;
-  investmentSnapshots?: InvestmentSnapshots;
+  monthlyAccountValues?: MonthlyAccountValues;
   trackMortgageInNetWorth?: boolean;
   mortgageSchedule?: MortgageSchedule | null;
-  monthlySnapshots?: MonthlyNetWorthSnapshots;
   updatedAt: string;
 };
 

@@ -33,8 +33,7 @@ const account = { id: 'account-1' } as Account;
 const holding = { id: 'holding-1' } as Holding;
 const netWorth = {
   beginningNetWorth: 100,
-  investmentSnapshots: {},
-  monthlySnapshots: {},
+  monthlyAccountValues: {},
   trackMortgageInNetWorth: false,
   mortgageSchedule: null,
   updatedAt: '2026-01-01',

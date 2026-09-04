@@ -15,7 +15,7 @@ describe('workspace API', () => {
       budgetCategories: [],
       accounts: [],
       holdings: [],
-      netWorth: { beginningNetWorth: 100, investmentSnapshots: {}, updatedAt: '2026-01-01' },
+      netWorth: { beginningNetWorth: 100, monthlyAccountValues: {}, updatedAt: '2026-01-01' },
       retirementPlan: {
         id: 'base-plan',
         name: 'Base Plan',
@@ -62,8 +62,7 @@ describe('workspace API', () => {
     });
     const saved = {
       beginningNetWorth: 123456,
-      investmentSnapshots: {},
-      monthlySnapshots: {},
+      monthlyAccountValues: {},
       trackMortgageInNetWorth: false,
       mortgageSchedule: null,
       updatedAt: '2026-09-03T00:00:00Z',

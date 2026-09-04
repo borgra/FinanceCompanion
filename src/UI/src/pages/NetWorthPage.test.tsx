@@ -5,7 +5,6 @@ import { defaultMonthlyRecords, type Account } from '../domain/account';
 import { createMockAccountRepository } from '../domain/accountRepository';
 import { createMockHoldingRepository } from '../domain/holdingRepository';
 import { createMockIncomeSourceRepository } from '../domain/incomeSourceRepository';
-import type { MonthlyNetWorthSnapshot } from '../domain/netWorth';
 import { createMockNetWorthRepository } from '../domain/netWorthRepository';
 import { NetWorthPage } from './NetWorthPage';
 
@@ -27,11 +26,11 @@ const account = (overrides: Partial<Account>): Account => ({
 describe('NetWorthPage', () => {
   afterEach(() => vi.useRealTimers());
 
-  it('groups accounts, edits investment snapshots, and charts variance from the configured baseline', async () => {
+  it('groups accounts, edits monthly account values, and charts variance from the configured baseline', async () => {
     vi.setSystemTime(new Date(2026, 6, 1, 12));
     const user = userEvent.setup();
     const netWorthRepository = createMockNetWorthRepository(15000);
-    const saveSnapshot = vi.spyOn(netWorthRepository, 'putInvestmentSnapshots');
+    const saveValues = vi.spyOn(netWorthRepository, 'putMonthlyAccountValues');
     render(
       <NetWorthPage
         accountRepository={createMockAccountRepository({
@@ -102,28 +101,28 @@ describe('NetWorthPage', () => {
     const saveChanges = screen.getByRole('button', { name: 'Save changes' });
     expect(saveChanges).toBeDisabled();
 
-    const taxableSnapshot = screen.getByRole('textbox', { name: 'Fidelity Taxable Jul-26 snapshot' });
-    const retirementSnapshot = screen.getByRole('textbox', { name: 'Fidelity 401k Jul-26 snapshot' });
-    const hsaSnapshot = screen.getByRole('textbox', { name: 'Fidelity HSA Jul-26 snapshot' });
+    const taxableValue = screen.getByRole('textbox', { name: 'Fidelity Taxable Jul-26 value' });
+    const retirementValue = screen.getByRole('textbox', { name: 'Fidelity 401k Jul-26 value' });
+    const hsaValue = screen.getByRole('textbox', { name: 'Fidelity HSA Jul-26 value' });
 
-    await user.clear(taxableSnapshot);
-    await user.type(taxableSnapshot, '5000');
-    expect(saveSnapshot).not.toHaveBeenCalled();
+    await user.clear(taxableValue);
+    await user.type(taxableValue, '5000');
+    expect(saveValues).not.toHaveBeenCalled();
     expect(within(summary).getByText('$16,400.00')).toBeInTheDocument();
     await user.tab();
-    expect(saveSnapshot).not.toHaveBeenCalled();
+    expect(saveValues).not.toHaveBeenCalled();
 
-    await user.clear(retirementSnapshot);
-    await user.type(retirementSnapshot, '7100{Enter}');
-    expect(saveSnapshot).not.toHaveBeenCalled();
+    await user.clear(retirementValue);
+    await user.type(retirementValue, '7100{Enter}');
+    expect(saveValues).not.toHaveBeenCalled();
 
-    await user.clear(hsaSnapshot);
-    await user.type(hsaSnapshot, '1000');
+    await user.clear(hsaValue);
+    await user.type(hsaValue, '1000');
     expect(within(summary).getByText('$16,600.00')).toBeInTheDocument();
     await user.tab();
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
-    await waitFor(() => expect(saveSnapshot).toHaveBeenCalledTimes(1));
-    expect(saveSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(saveValues).toHaveBeenCalledTimes(1));
+    expect(saveValues).toHaveBeenCalledWith(expect.objectContaining({
       taxable: expect.objectContaining({ 'Jul-26': 5000 }),
       retirement: expect.objectContaining({ 'Jul-26': 7100 }),
       hsa: expect.objectContaining({ 'Jul-26': 1000 }),
@@ -131,25 +130,24 @@ describe('NetWorthPage', () => {
 
     expect(within(summary).getByText('$1,600.00')).toBeInTheDocument();
     expect(within(summary).getByText('+10.7%')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Take July 2026 snapshot' }));
-    expect(screen.getByRole('textbox', { name: 'Fidelity Taxable snapshot value' })).toHaveValue('$4,000.00');
+    await user.click(screen.getByRole('button', { name: 'Snapshot' }));
+    expect(screen.getByText(/Jul-26 values updated from Banking and Investing/)).toBeInTheDocument();
   });
 
-  it('retains dirty snapshot drafts when the batch save fails so it can be retried', async () => {
+  it('retains dirty table values when the batch save fails so it can be retried', async () => {
     const user = userEvent.setup();
-    const putInvestmentSnapshots = vi.fn().mockRejectedValueOnce(new Error('save failed')).mockResolvedValueOnce({
+    const putMonthlyAccountValues = vi.fn().mockRejectedValueOnce(new Error('save failed')).mockResolvedValueOnce({
       beginningNetWorth: 100000,
-      investmentSnapshots: { taxable: { 'Jul-26': 6000 } },
+      monthlyAccountValues: { taxable: { 'Jul-26': 6000 } },
       updatedAt: '2026-01-01T00:00:00Z',
     });
     const netWorthRepository = {
-      get: async () => ({ beginningNetWorth: 100000, investmentSnapshots: {}, updatedAt: '2026-01-01T00:00:00Z' }),
-      put: async (beginningNetWorth: number) => ({ beginningNetWorth, investmentSnapshots: {}, updatedAt: '2026-01-01T00:00:00Z' }),
-      putInvestmentSnapshots,
-      putMonthlySnapshot: async (_month: string, snapshot: MonthlyNetWorthSnapshot) => ({ beginningNetWorth: 100000, investmentSnapshots: {}, monthlySnapshots: { '2026-07': snapshot }, updatedAt: '2026-01-01T00:00:00Z' }),
+      get: async () => ({ beginningNetWorth: 100000, monthlyAccountValues: {}, updatedAt: '2026-01-01T00:00:00Z' }),
+      put: async (beginningNetWorth: number) => ({ beginningNetWorth, monthlyAccountValues: {}, updatedAt: '2026-01-01T00:00:00Z' }),
+      putMonthlyAccountValues,
     };
     render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [account({ id: 'taxable', name: 'Fidelity Taxable', type: 'Investment', startingBalance: 4000, investmentAccountType: 'Taxable', manageHoldings: true, yearlyContribution: 0 })] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={netWorthRepository} />);
-    const snapshot = await screen.findByRole('textbox', { name: 'Fidelity Taxable Jul-26 snapshot' });
+    const snapshot = await screen.findByRole('textbox', { name: 'Fidelity Taxable Jul-26 value' });
     await user.clear(snapshot);
     await user.type(snapshot, '6000');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
@@ -158,10 +156,10 @@ describe('NetWorthPage', () => {
     const retry = screen.getByRole('button', { name: 'Save changes' });
     expect(retry).toBeEnabled();
     await user.click(retry);
-    await waitFor(() => expect(putInvestmentSnapshots).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(putMonthlyAccountValues).toHaveBeenCalledTimes(2));
     expect(retry).toBeDisabled();
   });
-  it('renders pensions after HSA from compounded account projections and ignores snapshots and holdings', async () => {
+  it('renders saved pension grid values after HSA without making pension cells editable', async () => {
     const pension = account({
       id: 'pension',
       name: 'City Pension',
@@ -176,7 +174,7 @@ describe('NetWorthPage', () => {
     const netWorthRepository = createMockNetWorthRepository(0);
     vi.spyOn(netWorthRepository, 'get').mockResolvedValue({
       beginningNetWorth: 0,
-      investmentSnapshots: { pension: { 'Jan-26': 999999 } },
+      monthlyAccountValues: { pension: { 'Jan-26': 999999 } },
       trackMortgageInNetWorth: false,
       mortgageSchedule: null,
       updatedAt: '2026-01-01T00:00:00Z',
@@ -193,8 +191,8 @@ describe('NetWorthPage', () => {
     render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [pension] })} incomeRepository={createMockIncomeSourceRepository({ initialSources: [] })} holdingRepository={holdingRepository} netWorthRepository={netWorthRepository} />);
 
     expect(await screen.findByRole('columnheader', { name: 'Pension' })).toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: /City Pension.*snapshot/i })).not.toBeInTheDocument();
-    expect(within(screen.getByRole('row', { name: /Jan-26/ })).getAllByText('$10,200.00')[0]).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /City Pension.*value/i })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('row', { name: /Jan-26/ })).getAllByText('$999,999.00')).toHaveLength(2);
     expect(within(screen.getByRole('row', { name: /Feb-26/ })).getAllByText('$10,302.00')[0]).toBeInTheDocument();
   });
   it('uses the current local year and month when calculating captured banking values', async () => {
@@ -206,8 +204,8 @@ describe('NetWorthPage', () => {
 
     const summary = await screen.findByLabelText('Net worth summary');
     expect(within(summary).getByText('Current Net Worth (Aug-27)')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Take August 2027 snapshot' }));
-    expect(screen.getByRole('textbox', { name: 'Checking snapshot value' })).toHaveValue('$900.00');
+    await user.click(screen.getByRole('button', { name: 'Snapshot' }));
+    expect(within(screen.getByRole('row', { name: /Aug-27/ })).getAllByText('$900.00')).toHaveLength(2);
   });
   it('captures a legitimate zero holdings value instead of the investment starting balance', async () => {
     vi.setSystemTime(new Date(2026, 7, 15, 12));
@@ -223,8 +221,49 @@ describe('NetWorthPage', () => {
     }]);
     render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [investment] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={holdingRepository} netWorthRepository={createMockNetWorthRepository(0)} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Take August 2026 snapshot' }));
-    expect(screen.getByRole('textbox', { name: 'Taxable snapshot value' })).toHaveValue('$0.00');
+    await user.click(await screen.findByRole('button', { name: 'Snapshot' }));
+    expect(within(screen.getByRole('row', { name: /Aug-26/ })).getAllByText('$0.00').length).toBeGreaterThan(0);
+  });
+
+  it('snapshots current source values into only the current grid month and preserves missing sources', async () => {
+    vi.setSystemTime(new Date(2026, 7, 15, 12));
+    const user = userEvent.setup();
+    const checking = account({ id: 'checking', name: 'Checking', startingBalance: 1000 });
+    checking.monthlyRecords[7].outflows = { rent: 100 };
+    const taxable = account({ id: 'taxable', name: 'Taxable', type: 'Investment', investmentAccountType: 'Taxable', startingBalance: 5000, manageHoldings: true });
+    const preserved = account({ id: 'preserved', name: 'Preserved', type: 'Investment', investmentAccountType: 'IRA', startingBalance: 3000, manageHoldings: true });
+    const missing = account({ id: 'missing', name: 'Missing', type: 'Investment', investmentAccountType: 'HSA', startingBalance: 2000, manageHoldings: true });
+    const netWorthRepository = createMockNetWorthRepository(0);
+    vi.spyOn(netWorthRepository, 'get').mockResolvedValue({
+      beginningNetWorth: 0,
+      monthlyAccountValues: {
+        preserved: { 'Jan-26': 600, 'Aug-26': 777 },
+        taxable: { 'Jul-26': 150 },
+      },
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    const save = vi.spyOn(netWorthRepository, 'putMonthlyAccountValues');
+    const holdingRepository = createMockHoldingRepository();
+    vi.spyOn(holdingRepository, 'listHoldings').mockResolvedValue([{
+      id: 'taxable-position',
+      security: { symbol: 'TAX', name: 'Taxable holding', exchange: 'NYSE', assetType: 'ETF', currency: 'USD', price: 100 },
+      accountPositions: [{ accountId: 'taxable', quantity: 2, costBasis: null }],
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-08-15T00:00:00Z',
+    }]);
+
+    render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [checking, taxable, preserved, missing] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={holdingRepository} netWorthRepository={netWorthRepository} />);
+    await user.click(await screen.findByRole('button', { name: 'Snapshot' }));
+    expect(screen.getByText(/Aug-26 values updated from Banking and Investing/)).toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledWith({
+      checking: { 'Aug-26': 900 },
+      taxable: { 'Jul-26': 150, 'Aug-26': 200 },
+      preserved: { 'Jan-26': 600, 'Aug-26': 777 },
+      missing: { 'Aug-26': 0 },
+    }));
   });
 });
 
