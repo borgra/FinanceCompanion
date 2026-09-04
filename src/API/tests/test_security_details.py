@@ -215,3 +215,21 @@ def test_refresh_preserves_a_manually_saved_price_when_the_provider_returns_null
 
     assert refreshed.security.price == 325.25
     assert refreshed.security.details_updated_at is None
+
+
+def test_cash_security_refreshes_return_unchanged_without_provider_calls():
+    cash = holding("cash", "CASH")
+    cash.security.asset_type = "Cash"
+    cash.security.name = "Legacy cash"
+    cash.security.exchange = "Legacy"
+    cash.security.currency = "EUR"
+    cash.security.price = 99
+    repository = FakeHoldingRepository([cash, holding("security")])
+    provider = FakeSecurityDetailsProvider()
+
+    individual = RefreshHoldingSecurityDetails(repository, provider).execute("user-123", "cash")
+    bulk = RefreshHeldSecurityDetails(repository, provider).execute("user-123")
+
+    assert individual == cash
+    assert bulk.holdings[0] == cash
+    assert provider.requested_symbols == ["VTI"]

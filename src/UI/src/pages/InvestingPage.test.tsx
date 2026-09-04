@@ -139,6 +139,53 @@ describe('InvestingPage', () => {
     expect(updateManualPayoutDetails).toHaveBeenCalledTimes(1);
   });
 
+  it('adds Cash explicitly and keeps its row fixed and action-free', async () => {
+    const holdingRepository = createMockHoldingRepository();
+    const searchSecurities = vi.spyOn(holdingRepository, 'searchSecurities');
+    const createHolding = vi.spyOn(holdingRepository, 'createHolding');
+    const refreshHoldingSecurityDetails = vi.spyOn(holdingRepository, 'refreshHoldingSecurityDetails');
+    const refreshHoldingDividends = vi.spyOn(holdingRepository, 'refreshHoldingDividends');
+
+    render(
+      <InvestingPage
+        accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
+        holdingRepository={holdingRepository}
+        incomeRepository={createMockIncomeSourceRepository()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cash' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
+
+    expect(searchSecurities).not.toHaveBeenCalled();
+    expect(createHolding).toHaveBeenCalledWith({
+      security: {
+        symbol: 'CASH', name: 'Cash', exchange: 'Cash', assetType: 'Cash', currency: 'USD', price: 1,
+      },
+      accountPositions: [{ accountId: 'acc-taxable-brokerage', quantity: 0, costBasis: null }],
+    });
+    expect(await screen.findByRole('cell', { name: /^Cash/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'View CASH security details' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit CASH payments' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Update CASH dividends' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Update CASH holding' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('CASH quantity for Fidelity Taxable Brokerage')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove CASH holding' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: '$1.00' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('CASH price')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Update all holdings' }));
+    expect(refreshHoldingSecurityDetails).not.toHaveBeenCalled();
+    expect(refreshHoldingDividends).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add Security' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cash' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add Row' }));
+    expect(screen.getAllByRole('cell', { name: 'CASH' })).toHaveLength(1);
+  });
+
   it('allows a positive manual price in the holdings table and saves it', async () => {
     const holdingRepository = createMockHoldingRepository();
     const updateHoldingsBatch = vi.spyOn(holdingRepository, 'updateHoldingsBatch');
@@ -245,6 +292,15 @@ describe('InvestingPage', () => {
 
   it('updates all holdings manually with a three second throttle', async () => {
     const holdings: Holding[] = [
+      {
+        id: 'holding-cash',
+        security: {
+          symbol: 'CASH', name: 'Cash', exchange: 'Cash', assetType: 'Cash', currency: 'USD', price: 1,
+        },
+        accountPositions: [{ accountId: 'acc-taxable-brokerage', quantity: 500, costBasis: null }],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
       {
         id: 'holding-vti',
         security: {

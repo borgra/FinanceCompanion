@@ -42,6 +42,7 @@ const mergeRefreshedSecurity = (
 });
 
 const nowIso = () => new Date().toISOString();
+const isCashSecurity = (security: SecurityMetadata) => security.assetType === 'Cash';
 
 const mergeDividendPayouts = (
   source: SecurityPayoutDetails[],
@@ -327,6 +328,9 @@ export function createMockHoldingRepository(): HoldingRepository {
       if (!existing) {
         throw new Error('Holding not found.');
       }
+      if (isCashSecurity(existing.security)) {
+        return { ...existing, security: { ...existing.security }, accountPositions: existing.accountPositions.map((position) => ({ ...position })) };
+      }
       const catalogSecurity = securityCatalog.find(
         (item) => item.symbol === existing.security.symbol,
       );
@@ -352,6 +356,9 @@ export function createMockHoldingRepository(): HoldingRepository {
     refreshHoldingDividends: async (id) => {
       const existing = holdings.find((holding) => holding.id === id);
       if (!existing) throw new Error('Holding not found.');
+      if (isCashSecurity(existing.security)) {
+        return { ...existing, security: { ...existing.security }, accountPositions: existing.accountPositions.map((position) => ({ ...position })) };
+      }
       const today = new Date();
       const year = today.getFullYear();
       const sourceUrl = 'https://example.test/finance-companion/stub-dividends';
@@ -395,6 +402,9 @@ export function createMockHoldingRepository(): HoldingRepository {
     refreshHeldSecurityDetails: async () => {
       const refreshed = await Promise.all(
         holdings.map((holding) => {
+          if (isCashSecurity(holding.security)) {
+            return holding;
+          }
           if (!needsSecurityRefresh(holding.security.detailsUpdatedAt)) {
             return holding;
           }
@@ -430,6 +440,9 @@ export function createMockHoldingRepository(): HoldingRepository {
       const existing = holdings.find((holding) => holding.id === id);
       if (!existing) {
         throw new Error('Holding not found.');
+      }
+      if (isCashSecurity(existing.security)) {
+        throw new Error('Cash holdings do not support payment data.');
       }
       const updated: Holding = {
         ...existing,

@@ -37,6 +37,7 @@ const parsePrice = (value: string) => Number(value.replace(/[$,\s]/g, ''));
 
 const securitySymbolFromInput = (value: string) => value.trim().toUpperCase();
 const isValidSecuritySymbol = (value: string) => /^[A-Z0-9.-]+$/.test(value);
+const isCashSecurity = (security: SecurityMetadata) => security.assetType === 'Cash';
 
 const refreshThrottleMs = 3000;
 const refreshAllMaximumAgeMs = 48 * 60 * 60 * 1000;
@@ -521,7 +522,9 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const refreshAllHoldingDetails = async () => {
-    const holdingsToRefresh = holdings.filter((holding) => needsRefresh(holding.security.detailsUpdatedAt));
+    const holdingsToRefresh = holdings.filter((holding) =>
+      !isCashSecurity(holding.security) && needsRefresh(holding.security.detailsUpdatedAt),
+    );
     if (holdingsToRefresh.length === 0) {
       return;
     }
@@ -836,12 +839,16 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   (total, account) => total + getQuantity(holding, account.id),
                   0,
                 );
-                const price = holding.security.price ?? 0;
+                const price = isCashSecurity(holding.security) ? 1 : holding.security.price ?? 0;
 
                 return (
                   <tr key={holding.id} className={selectedHoldingId === holding.id ? 'holdings-row-selected' : undefined} onClick={() => setSelectedHoldingId(holding.id)}>
                     <td className="holdings-security-cell">
-                      <button className="link-button holdings-security-link" type="button" onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
+                      {isCashSecurity(holding.security) ? (
+                        <span className="excel-cell-val">{holding.security.name}</span>
+                      ) : (
+                        <button className="link-button holdings-security-link" type="button" onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
+                      )}
                       <small>{formatLastUpdated(holding.security.detailsUpdatedAt)}</small>
                       {holding.security.dividendResearchRetrievedAt ? <small>{holding.security.dividendResearchProvider === 'stub' ? 'Stub data' : 'Dividend data'} · {formatLastUpdated(holding.security.dividendResearchRetrievedAt)}</small> : null}
                     </td>
@@ -855,14 +862,14 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                       />
                     </td>
                     <td>
-                      <FinanceMoneyCellInput
+                      {isCashSecurity(holding.security) ? <FinanceMoneyCellValue value={1} formatValue={(value) => currencyFormatter.format(value)} /> : <FinanceMoneyCellInput
                           value={price}
                           formatValue={formatMoney}
                           onValueChange={(value) => updatePrice(holding.id, value)}
                           focusId={`holding-${holding.id}-price`}
                           onFocus={() => setSelectedHoldingId(holding.id)}
                           aria-label={`${holding.security.symbol} price`}
-                        />
+                        />}
                     </td>
                     <td>
                       <FinanceMoneyCellValue
@@ -884,6 +891,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                     ))}
                     <td>
                       <div className="holdings-row-actions">
+                        {!isCashSecurity(holding.security) ? <>
                         <button
                           className="link-button holdings-refresh-action"
                           type="button"
@@ -922,6 +930,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                             sync
                           </span>
                         </button>
+                        </> : null}
                         <button
                           className="link-button link-button-danger holdings-remove-action"
                           type="button"
@@ -970,6 +979,27 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   }}
                 />
               </label>
+              <button
+                className="security-result cash-security-choice"
+                type="button"
+                aria-label="Cash"
+                onClick={() => {
+                  setSelectedSecurity({
+                    symbol: 'CASH',
+                    name: 'Cash',
+                    exchange: 'Cash',
+                    assetType: 'Cash',
+                    currency: 'USD',
+                    price: 1,
+                  });
+                  setQuery('CASH - Cash');
+                  setSearchError(null);
+                  setSuccessMessage(null);
+                }}
+              >
+                <strong>Cash</strong>
+                <span>Track cash at a fixed $1.00 price</span>
+              </button>
               <div className="security-search-results" aria-live="polite">
                 {selectedSecurity ? (
                   <div className="security-result selected-security">

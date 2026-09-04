@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+
+
+CASH_ASSET_TYPE = "Cash"
+
+
+def is_cash_asset_type(asset_type: str) -> bool:
+    """Return true only for the canonical Cash asset type."""
+    return asset_type == CASH_ASSET_TYPE
 
 
 @dataclass(slots=True)
@@ -60,3 +68,21 @@ class SecurityMetadata:
     dividend_research_schema_version: int | None = None
     dividend_research_adjustment_basis: str | None = None
     dividend_research_warnings: list[str] = field(default_factory=list)
+
+
+def is_cash_security(security: SecurityMetadata) -> bool:
+    return is_cash_asset_type(security.asset_type)
+
+
+def normalize_security_metadata(security: SecurityMetadata) -> SecurityMetadata:
+    """Normalize Cash's identity and unit price while preserving other metadata."""
+    if not is_cash_security(security):
+        return security
+    return replace(
+        security,
+        symbol="CASH",
+        name="Cash",
+        exchange="Cash",
+        currency="USD",
+        price=1,
+    )

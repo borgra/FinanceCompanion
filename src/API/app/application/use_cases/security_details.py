@@ -7,6 +7,7 @@ from typing import Protocol
 
 from app.domain.exceptions import NotFoundError
 from app.domain.models import Holding, SecurityMetadata
+from app.domain.models.security_metadata import is_cash_security
 from app.domain.protocols import HoldingRepository
 from app.infrastructure.in_memory_repositories import now_iso
 
@@ -110,6 +111,8 @@ class RefreshHoldingSecurityDetails:
         holding = next((item for item in holdings if item.id == holding_id), None)
         if holding is None:
             raise NotFoundError("Holding not found.")
+        if is_cash_security(holding.security):
+            return holding
 
         details = self._provider.get_details(holding.security)
         timestamp = now_iso()
@@ -144,6 +147,8 @@ class RefreshHeldSecurityDetails:
         failed_symbols: list[str] = []
 
         for holding in holdings:
+            if is_cash_security(holding.security):
+                continue
             symbol = holding.security.symbol
             if not should_refresh_security_details(holding.security):
                 continue

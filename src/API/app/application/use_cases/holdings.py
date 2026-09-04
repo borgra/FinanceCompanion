@@ -1,8 +1,9 @@
 from dataclasses import replace
 
 from app.application.dividend_payouts import merge_dividend_payouts
-from app.domain.exceptions import NotFoundError
+from app.domain.exceptions import NotFoundError, ValidationError
 from app.domain.models import Holding, HoldingAccountPosition, SecurityPayoutDetails
+from app.domain.models.security_metadata import is_cash_security, normalize_security_metadata
 from app.domain.protocols import HoldingRepository
 from app.infrastructure.in_memory_repositories import now_iso
 
@@ -20,6 +21,7 @@ class CreateHolding:
         self._repository = repository
 
     def execute(self, user_id: str, holding: Holding) -> Holding:
+        holding = replace(holding, security=normalize_security_metadata(holding.security))
         existing = next(
             (
                 item
@@ -53,6 +55,7 @@ class UpdateHolding:
         self._repository = repository
 
     def execute(self, user_id: str, holding_id: str, holding: Holding) -> Holding:
+        holding = replace(holding, security=normalize_security_metadata(holding.security))
         return self._repository.update_for_user(user_id, holding_id, holding)
 
 
@@ -61,6 +64,10 @@ class UpdateHoldingsBatch:
         self._repository = repository
 
     def execute(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
+        holdings = [
+            replace(holding, security=normalize_security_metadata(holding.security))
+            for holding in holdings
+        ]
         if len(holdings) > 100:
             raise ValueError("A maximum of 100 holdings can be saved at once.")
         existing_ids = {item.id for item in self._repository.list_for_user(user_id)}
@@ -110,6 +117,16 @@ class ImportHoldingDetails:
                 for position in account_positions
                 if position.account_id not in existing_account_ids
             )
+            if is_cash_security(holding.security):
+                if holding.account_positions == merged_positions:
+                    updated.append(holding)
+                    continue
+                updated.append(self._repository.update_for_user(
+                    user_id,
+                    holding.id,
+                    replace(holding, account_positions=merged_positions),
+                ))
+                continue
             if (
                 holding.security.name == name
                 and holding.security.price == price
@@ -151,6 +168,8 @@ class UpdateManualPayoutDetails:
         )
         if holding is None:
             raise NotFoundError("Holding not found.")
+        if is_cash_security(holding.security):
+            raise ValidationError("Cash holdings do not support payment data.")
 
         manual_payouts = [
             replace(payout, mode="manual")
@@ -177,6 +196,10 @@ class ImportManualPayoutDetails:
 
     def execute(self, user_id: str, payouts_by_symbol: dict[str, list[SecurityPayoutDetails]]) -> tuple[list[Holding], list[str]]:
         holdings_by_symbol = {holding.security.symbol.casefold(): holding for holding in self._repository.list_for_user(user_id)}
+        for symbol in payouts_by_symbol:
+            holding = holdings_by_symbol.get(symbol.casefold())
+            if holding is not None and is_cash_security(holding.security):
+                raise ValidationError("Cash holdings do not support payment data.")
         timestamp = now_iso()
         updated: list[Holding] = []
         unmatched: list[str] = []
@@ -209,6 +232,9 @@ class PurgeHoldingPaymentData:
         timestamp = now_iso()
         updated: list[Holding] = []
         for holding in self._repository.list_for_user(user_id):
+            if is_cash_security(holding.security):
+                updated.append(holding)
+                continue
             refreshed = replace(
                 holding,
                 security=replace(

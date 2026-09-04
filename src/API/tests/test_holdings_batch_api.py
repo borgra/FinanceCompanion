@@ -40,3 +40,56 @@ def test_holdings_batch_updates_all_items_in_one_request_and_is_atomic_on_valida
     assert persisted[first["id"]]["accountPositions"][0]["quantity"] == 5
     assert persisted[second["id"]]["accountPositions"][0]["quantity"] == 7
 
+
+def test_cash_is_canonical_across_create_update_batch_and_import_and_rejects_payments():
+    client = build_test_client()
+    authenticate(client)
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    security.update({
+        "symbol": "legacy-cash",
+        "name": "Checking balance",
+        "exchange": "Legacy",
+        "assetType": "Cash",
+        "currency": "EUR",
+        "price": 99,
+    })
+    created = client.post("/api/v1/holdings", json={
+        "security": security,
+        "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 4, "costBasis": None}],
+    })
+    assert created.status_code == 201
+    cash = created.json()
+    assert {key: cash["security"][key] for key in ("symbol", "name", "exchange", "assetType", "currency", "price")} == {
+        "symbol": "CASH", "name": "Cash", "exchange": "Cash", "assetType": "Cash", "currency": "USD", "price": 1,
+    }
+
+    changed = {**cash["security"], "symbol": "other", "name": "Wrong", "exchange": "Other", "currency": "CAD", "price": 8}
+    updated = client.put(f"/api/v1/holdings/{cash['id']}", json={
+        "security": changed,
+        "accountPositions": cash["accountPositions"],
+    })
+    assert updated.status_code == 200
+    assert updated.json()["security"]["symbol"] == "CASH"
+    assert updated.json()["security"]["price"] == 1
+
+    batched_security = {**updated.json()["security"], "name": "Batch wrong", "price": 17}
+    batched = client.put("/api/v1/holdings/batch", json={"holdings": [{
+        "id": cash["id"], "security": batched_security, "accountPositions": cash["accountPositions"],
+    }]})
+    assert batched.status_code == 200
+    assert batched.json()[0]["security"]["name"] == "Cash"
+    imported = client.put("/api/v1/holdings/import", json={"rows": [{
+        "symbol": "CASH", "name": "Imported wrong", "price": 22,
+        "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 5}],
+    }]})
+    assert imported.status_code == 200
+    assert imported.json()["holdings"][0]["security"]["price"] == 1
+    assert imported.json()["holdings"][0]["security"]["name"] == "Cash"
+
+    payment = client.put(f"/api/v1/holdings/{cash['id']}/manual-payouts", json={"manualPayoutDetails": []})
+    assert payment.status_code == 400
+    payment_import = client.put("/api/v1/holdings/manual-payouts/import", json={"rows": [{
+        "symbol": "CASH", "payout": {"exDividendDate": "2026-01-01", "amount": 1},
+    }]})
+    assert payment_import.status_code == 400
+

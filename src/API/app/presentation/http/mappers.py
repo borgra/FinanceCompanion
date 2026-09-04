@@ -34,6 +34,7 @@ from app.presentation.http.schemas import (
     SecurityDetailsRefreshResultPayload,
     UserResponse,
 )
+from app.domain.models.security_metadata import normalize_security_metadata
 
 
 def to_user_response(user: User) -> UserResponse:
@@ -259,7 +260,7 @@ def to_corporate_action_payload(item: CorporateAction) -> CorporateActionPayload
     )
 
 def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
-    return SecurityMetadata(
+    return normalize_security_metadata(SecurityMetadata(
         symbol=payload.symbol.strip().upper(),
         name=payload.name,
         exchange=payload.exchange,
@@ -305,7 +306,7 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
             to_corporate_action(item)
             for item in payload.corporate_actions
         ],
-    )
+    ))
 
 
 def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayload:

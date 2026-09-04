@@ -27,4 +27,22 @@ describe('mock holding repository dividend overrides', () => {
       ['2026-03-08', 2],
     ]);
   });
+
+  it('leaves Cash untouched for direct security, dividend, and bulk refreshes', async () => {
+    const repository = createMockHoldingRepository();
+    const cash = await repository.createHolding({
+      security: {
+        symbol: 'CASH', name: 'Cash', exchange: 'Cash', assetType: 'Cash', currency: 'USD', price: 1,
+        detailsUpdatedAt: '2020-01-01T00:00:00Z',
+      },
+      accountPositions: [{ accountId: 'brokerage', quantity: 50 }],
+    });
+
+    await expect(repository.refreshHoldingSecurityDetails(cash.id)).resolves.toEqual(cash);
+    await expect(repository.refreshHoldingDividends(cash.id)).resolves.toEqual(cash);
+    await expect(repository.refreshHeldSecurityDetails()).resolves.toEqual({
+      holdings: [cash],
+      failedSymbols: [],
+    });
+  });
 });

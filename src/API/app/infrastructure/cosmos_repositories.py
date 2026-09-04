@@ -29,6 +29,7 @@ from app.domain.models import (
     SecurityPayoutDetails,
     User,
 )
+from app.domain.models.security_metadata import normalize_security_metadata
 
 
 def now_iso() -> str:
@@ -267,7 +268,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         replace(_security_payout_details_from_dict(item), mode="manual")
         for item in manual_payouts_data
     ]
-    return SecurityMetadata(
+    return normalize_security_metadata(SecurityMetadata(
         symbol=data["symbol"],
         name=data["name"],
         exchange=data["exchange"],
@@ -326,7 +327,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
             CorporateAction(id=item["id"], effective_date=item["effectiveDate"], type=item["type"], old_shares=float(item["oldShares"]), new_shares=float(item["newShares"]))
             for item in corporate_actions_data
         ],
-    )
+    ))
 
 
 def _security_payout_details_from_dict(data: dict) -> SecurityPayoutDetails:
@@ -516,6 +517,7 @@ def _holding_from_entity(entity: dict) -> Holding:
 
 
 def _holding_to_entity(user_id: str, holding: Holding) -> dict:
+    holding = replace(holding, security=normalize_security_metadata(holding.security))
     entity = {
         "PartitionKey": user_id,
         "RowKey": f"holding:{holding.id}",
@@ -861,6 +863,7 @@ class CosmosHoldingRepository:
         ]
 
     def create_for_user(self, user_id: str, holding: Holding) -> Holding:
+        holding = replace(holding, security=normalize_security_metadata(holding.security))
         entity = _holding_to_entity(user_id, holding)
         self._client.create_entity(entity)
         return deepcopy(holding)
@@ -870,11 +873,16 @@ class CosmosHoldingRepository:
             self._client.get_entity(user_id, f"holding:{holding_id}")
         except ResourceNotFoundError as exc:
             raise NotFoundError("Holding not found.") from exc
+        holding = replace(holding, security=normalize_security_metadata(holding.security))
         entity = _holding_to_entity(user_id, holding)
         self._client.upsert_entity(entity)
         return deepcopy(holding)
 
     def update_batch_for_user(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
+        holdings = [
+            replace(holding, security=normalize_security_metadata(holding.security))
+            for holding in holdings
+        ]
         if len(holdings) > 100:
             raise ValueError("A maximum of 100 holdings can be saved at once.")
         existing_ids = {item.id for item in self.list_for_user(user_id)}

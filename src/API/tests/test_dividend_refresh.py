@@ -156,3 +156,21 @@ def test_merge_preserves_distinct_same_ex_date_source_facts():
         ("2026-03-07", 9.99),
         ("2026-03-08", 2),
     }
+
+
+def test_cash_dividend_refresh_returns_unchanged_without_provider_call():
+    cash = holding("cash", "CASH")
+    cash.security.asset_type = "Cash"
+    cash.security.price = 99
+
+    class FailingProvider:
+        def research(self, _request):
+            raise AssertionError("Cash must not call the dividend provider")
+
+    repository = InMemoryHoldingRepository(InMemoryDataStore())
+    repository._store.holdings["user"] = [cash]
+
+    refreshed = RefreshHoldingDividends(repository, FailingProvider()).execute("user", "cash")
+
+    assert refreshed == cash
+    assert repository.list_for_user("user") == [cash]

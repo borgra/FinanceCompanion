@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from app.domain.exceptions import NotFoundError
@@ -21,6 +22,7 @@ from app.domain.models import (
     SecurityPayoutDetails,
     User,
 )
+from app.domain.models.security_metadata import normalize_security_metadata
 from app.infrastructure.seed_data import clone_seed_data
 
 
@@ -136,7 +138,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         _security_payout_details_from_dict(item)
         for item in data.get("manualPayoutDetails", [])
     ]
-    return SecurityMetadata(
+    return normalize_security_metadata(SecurityMetadata(
         symbol=data["symbol"],
         name=data["name"],
         exchange=data["exchange"],
@@ -173,7 +175,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
             CorporateAction(id=item["id"], effective_date=item["effectiveDate"], type=item["type"], old_shares=float(item["oldShares"]), new_shares=float(item["newShares"]))
             for item in data.get("corporateActions", [])
         ],
-    )
+    ))
 
 
 def _security_payout_details_from_dict(data: dict) -> SecurityPayoutDetails:
@@ -440,19 +442,27 @@ class InMemoryHoldingRepository:
         return deepcopy(self._store.holdings.get(user_id, []))
 
     def create_for_user(self, user_id: str, holding: Holding) -> Holding:
+        holding = deepcopy(holding)
+        holding.security = normalize_security_metadata(holding.security)
         items = self._store.holdings.setdefault(user_id, [])
-        items.append(deepcopy(holding))
+        items.append(holding)
         return deepcopy(holding)
 
     def update_for_user(self, user_id: str, holding_id: str, holding: Holding) -> Holding:
+        holding = deepcopy(holding)
+        holding.security = normalize_security_metadata(holding.security)
         items = self._store.holdings.setdefault(user_id, [])
         for index, item in enumerate(items):
             if item.id == holding_id:
-                items[index] = deepcopy(holding)
+                items[index] = holding
                 return deepcopy(holding)
         raise NotFoundError("Holding not found.")
 
     def update_batch_for_user(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
+        holdings = [
+            replace(holding, security=normalize_security_metadata(holding.security))
+            for holding in holdings
+        ]
         items = self._store.holdings.setdefault(user_id, [])
         existing_ids = {item.id for item in items}
         if any(holding.id not in existing_ids for holding in holdings):

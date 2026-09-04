@@ -7,6 +7,7 @@ from app.application.dividend_payouts import merge_dividend_payouts
 from app.domain.dividend_research import DividendResearchRequest, validate_dividend_research_result
 from app.domain.exceptions import NotFoundError
 from app.domain.models import CorporateAction, Holding, SecurityPayoutDetails
+from app.domain.models.security_metadata import is_cash_security
 from app.domain.protocols import DividendResearchProvider, HoldingRepository
 from app.infrastructure.in_memory_repositories import now_iso
 
@@ -21,6 +22,8 @@ class RefreshHoldingDividends:
         holding = next((item for item in holdings if item.id == holding_id), None)
         if holding is None:
             raise NotFoundError("Holding not found.")
+        if is_cash_security(holding.security):
+            return holding
         today = date.today()
         request = DividendResearchRequest(
             symbol=holding.security.symbol, exchange=holding.security.exchange,
