@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Account } from '../domain/account';
 import type { Holding } from '../domain/holding';
 import { createMockAccountRepository } from '../domain/accountRepository';
@@ -10,6 +10,10 @@ import { createMockIncomeSourceRepository } from '../domain/incomeSourceReposito
 import { InvestingPage } from './InvestingPage';
 
 describe('InvestingPage', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const investmentAccounts: Account[] = [
     {
       id: 'acc-taxable-brokerage',
@@ -317,20 +321,31 @@ describe('InvestingPage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
     expect(await screen.findByRole('cell', { name: 'VTI' })).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Update all holdings' }));
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Update all holdings' }));
+        await Promise.resolve();
+      });
 
-    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
-    expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(1, 'holding-vti');
-    expect(confirm).not.toHaveBeenCalled();
+      expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
+      expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(1, 'holding-vti');
+      expect(confirm).not.toHaveBeenCalled();
 
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, 2900);
-    });
-    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2999);
+      });
+      expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
 
-    expect(await screen.findByText('Holdings were updated.', {}, { timeout: 2000 })).toBeInTheDocument();
-    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(2);
-    expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(2, 'holding-schd');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(screen.getByText('Holdings were updated.')).toBeInTheDocument();
+      expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(2);
+      expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(2, 'holding-schd');
+    } finally {
+      vi.useRealTimers();
+    }
   }, 10000);
 
   it('summarizes investment values, sorts holdings by asset type then name, and supports quantity-grid navigation', async () => {
@@ -597,9 +612,5 @@ describe('InvestingPage', () => {
     /* eslint-enable @typescript-eslint/no-explicit-any */
   });
 });
-
-
-
-
 
 
