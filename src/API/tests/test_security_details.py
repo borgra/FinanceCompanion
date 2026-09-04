@@ -2,7 +2,13 @@ from app.application.use_cases.security_details import (
     RefreshHeldSecurityDetails,
     RefreshHoldingSecurityDetails,
 )
-from app.domain.models import Holding, HoldingAccountPosition, SecurityMetadata, SecurityPayoutDetails
+from app.domain.models import (
+    CorporateAction,
+    Holding,
+    HoldingAccountPosition,
+    SecurityMetadata,
+    SecurityPayoutDetails,
+)
 from app.infrastructure.in_memory_repositories import now_iso
 
 
@@ -78,6 +84,20 @@ def holding(
             manual_payout_details=[SecurityPayoutDetails(
                 ex_dividend_date="2026-07-01", payment_date="2026-07-05", amount=0.31, source="user", mode="manual",
             )],
+            corporate_actions=[CorporateAction(
+                id="split-1",
+                effective_date="2024-06-01",
+                type="stock_split",
+                old_shares=1,
+                new_shares=2,
+            )],
+            dividend_research_retrieved_at="2026-09-04T00:00:00Z",
+            dividend_research_provider="stub",
+            dividend_research_source_url="https://example.test/stub",
+            dividend_research_authoritative=False,
+            dividend_research_schema_version=1,
+            dividend_research_adjustment_basis="current_share_basis",
+            dividend_research_warnings=["Non-authoritative stub data."],
             asset_type="ETF",
             currency="USD",
             price=315.12,
@@ -112,6 +132,14 @@ def test_refresh_holding_security_details_persists_merged_details():
     assert refreshed.security.source_payout_details[0].amount == 0.21
     assert refreshed.security.manual_payout_details[0].amount == 0.31
     assert refreshed.security.payout_details[0].mode == "manual"
+    assert refreshed.security.corporate_actions[0].id == "split-1"
+    assert refreshed.security.dividend_research_retrieved_at == "2026-09-04T00:00:00Z"
+    assert refreshed.security.dividend_research_provider == "stub"
+    assert refreshed.security.dividend_research_source_url == "https://example.test/stub"
+    assert refreshed.security.dividend_research_authoritative is False
+    assert refreshed.security.dividend_research_schema_version == 1
+    assert refreshed.security.dividend_research_adjustment_basis == "current_share_basis"
+    assert refreshed.security.dividend_research_warnings == ["Non-authoritative stub data."]
     assert refreshed.security.sma20 == 318.2
     assert refreshed.security.details_status == "fresh"
     assert refreshed.security.details_updated_at is not None

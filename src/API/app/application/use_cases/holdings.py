@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+from app.application.dividend_payouts import merge_dividend_payouts
 from app.domain.exceptions import NotFoundError
 from app.domain.models import Holding, HoldingAccountPosition, SecurityPayoutDetails
 from app.domain.protocols import HoldingRepository
@@ -160,7 +161,10 @@ class UpdateManualPayoutDetails:
             holding,
             security=replace(
                 holding.security,
-                payout_details=manual_payouts or holding.security.source_payout_details,
+                payout_details=merge_dividend_payouts(
+                    holding.security.source_payout_details,
+                    manual_payouts,
+                ),
                 manual_payout_details=manual_payouts,
             ),
             updated_at=timestamp,
@@ -184,7 +188,14 @@ class ImportManualPayoutDetails:
             manual_payouts = [replace(payout, mode="manual") for payout in payouts]
             refreshed = replace(
                 holding,
-                security=replace(holding.security, payout_details=manual_payouts, manual_payout_details=manual_payouts),
+                security=replace(
+                    holding.security,
+                    payout_details=merge_dividend_payouts(
+                        holding.security.source_payout_details,
+                        manual_payouts,
+                    ),
+                    manual_payout_details=manual_payouts,
+                ),
                 updated_at=timestamp,
             )
             updated.append(self._repository.update_for_user(user_id, holding.id, refreshed))

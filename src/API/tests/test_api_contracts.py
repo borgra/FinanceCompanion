@@ -9,8 +9,22 @@ from app.domain.models import SecurityMetadata, SecurityPayoutDetails, VerifiedI
 from app.infrastructure.settings import Settings
 from app.main import create_app
 from app.presentation.http.container import build_container
+from app.presentation.http.schemas import SecurityMetadataPayload
 
 TEST_SESSION_SECRET = "test-secret-123456789012345678901234567890"
+
+
+def test_security_response_schema_allows_legacy_invalid_growth_for_ui_warning():
+    payload = SecurityMetadataPayload(
+        symbol="LEGACY",
+        name="Legacy Holding",
+        exchange="NYSE",
+        asset_type="ETF",
+        currency="USD",
+        dividend_growth_rate=-1.01,
+    )
+
+    assert payload.dividend_growth_rate == -1.01
 
 
 class FakeVerifier:
@@ -649,7 +663,7 @@ def test_holding_import_updates_only_listed_account_positions():
     ]
 
 
-def test_manual_payout_import_replaces_the_schedule_for_each_imported_ticker():
+def test_manual_payout_import_merges_overrides_with_source_schedule_for_each_ticker():
     client = build_test_client()
     authenticate(client)
 
@@ -688,7 +702,9 @@ def test_manual_payout_import_replaces_the_schedule_for_each_imported_ticker():
     payload = response.json()
     assert payload["unmatchedSymbols"] == ["MISSING"]
     assert [item["amount"] for item in payload["holdings"][0]["security"]["manualPayoutDetails"]] == [0.63658, 0.64]
-    assert all(item["mode"] == "manual" for item in payload["holdings"][0]["security"]["payoutDetails"])
+    effective = payload["holdings"][0]["security"]["payoutDetails"]
+    assert any(item["mode"] == "manual" for item in effective)
+    assert any(item["mode"] == "source" for item in effective)
 
 def test_purge_holding_payment_data_clears_dividend_details_for_every_user_holding():
     client = build_test_client()
@@ -782,7 +798,7 @@ def test_holding_corporate_actions_round_trip_through_api():
     assert updated.status_code == 200
     assert updated.json()["security"]["corporateActions"] == holding["security"]["corporateActions"]
 
-def test_corporate_actions_are_validated_on_every_write_path_and_imported_atomically():
+def test_corporate_action_import_is_removed_and_generic_writes_remain_validated():
     client = build_test_client()
     authenticate(client)
     security = client.get("/api/v1/securities/search?q=vti").json()[0]
@@ -796,7 +812,7 @@ def test_corporate_actions_are_validated_on_every_write_path_and_imported_atomic
     assert created.status_code == 201
     holding = created.json()
 
-    imported = client.put(
+    removed = client.put(
         "/api/v1/holdings/corporate-actions/import",
         json={"rows": [{
             "symbol": "VTI",
@@ -806,33 +822,7 @@ def test_corporate_actions_are_validated_on_every_write_path_and_imported_atomic
             "newShares": 4,
         }]},
     )
-    assert imported.status_code == 200
-    assert imported.json()["holdings"][0]["security"]["corporateActions"][0]["effectiveDate"] == "2024-06-15"
-
-    duplicate_import = client.put(
-        "/api/v1/holdings/corporate-actions/import",
-        json={"rows": [{
-            "symbol": "VTI",
-            "effectiveDate": "2024-06-15",
-            "type": "stock_split",
-            "oldShares": 1,
-            "newShares": 4,
-        }]},
-    )
-    assert duplicate_import.status_code == 200
-    assert duplicate_import.json()["holdings"] == []
-
-    invalid_date = client.put(
-        "/api/v1/holdings/corporate-actions/import",
-        json={"rows": [{
-            "symbol": "VTI",
-            "effectiveDate": "0000-99-99",
-            "type": "stock_split",
-            "oldShares": 1,
-            "newShares": 4,
-        }]},
-    )
-    assert invalid_date.status_code == 422
+    assert removed.status_code == 404
 
     holding["security"]["corporateActions"] = [{
         "id": "invalid-split",
@@ -846,3 +836,64 @@ def test_corporate_actions_are_validated_on_every_write_path_and_imported_atomic
         json={"security": holding["security"], "accountPositions": holding["accountPositions"]},
     )
     assert bypass_attempt.status_code == 422
+
+
+def test_dividend_refresh_requires_auth_and_persists_stub_data_without_overwriting_manual_values():
+    client = build_test_client()
+    assert client.post("/api/v1/holdings/missing/dividends/refresh").status_code == 401
+    authenticate(client)
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    security["dividendGrowthRate"] = 0.075
+    manual = {
+        "exDividendDate": "2026-03-01",
+        "paymentDate": "2026-03-07",
+        "amount": 9.99,
+        "source": "user",
+        "mode": "manual",
+    }
+    security["payoutDetails"] = [manual]
+    security["manualPayoutDetails"] = [manual]
+    created = client.post("/api/v1/holdings", json={
+        "security": security,
+        "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 10, "costBasis": None}],
+    })
+    assert created.status_code == 201
+
+    response = client.post(f"/api/v1/holdings/{created.json()['id']}/dividends/refresh")
+
+    assert response.status_code == 200
+    refreshed = response.json()["security"]
+    assert refreshed["dividendResearchProvider"] == "stub"
+    assert refreshed["dividendResearchAuthoritative"] is False
+    assert refreshed["dividendResearchAdjustmentBasis"] == "current_share_basis"
+    assert refreshed["dividendGrowthRate"] == 0.075
+    assert len(refreshed["payoutDetails"]) == 13
+    assert any(item["amount"] == 9.99 for item in refreshed["payoutDetails"])
+    assert any(item.get("source") == "stub" for item in refreshed["payoutDetails"])
+    assert len(refreshed["sourcePayoutDetails"]) == 12
+    assert {item["status"] for item in refreshed["sourcePayoutDetails"]} == {"completed", "announced"}
+    assert refreshed["corporateActions"]
+
+    manually_saved = client.put(
+        f"/api/v1/holdings/{created.json()['id']}/manual-payouts",
+        json={"manualPayoutDetails": [manual]},
+    )
+    assert manually_saved.status_code == 200
+    saved_security = manually_saved.json()["security"]
+    assert len(saved_security["payoutDetails"]) == 13
+    assert any(item.get("source") == "stub" for item in saved_security["payoutDetails"])
+    assert any(item["amount"] == 9.99 for item in saved_security["payoutDetails"])
+
+
+def test_holding_writes_reject_growth_rates_below_negative_one():
+    client = build_test_client()
+    authenticate(client)
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    security["dividendGrowthRate"] = -1.01
+
+    response = client.post("/api/v1/holdings", json={
+        "security": security,
+        "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 10, "costBasis": None}],
+    })
+
+    assert response.status_code == 422

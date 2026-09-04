@@ -6,11 +6,6 @@ export type CorporateAction = {
   newShares: number;
 };
 
-export type CorporateActionImportRow = {
-  symbol: string;
-  action: Omit<CorporateAction, 'id'>;
-};
-
 export type SecurityPayoutDetails = {
   exDividendDate: string;
   amount: number;
@@ -18,6 +13,8 @@ export type SecurityPayoutDetails = {
   recordDate?: string | null;
   paymentDate?: string | null;
   source?: string | null;
+  sourceUrl?: string | null;
+  status?: 'completed' | 'announced';
   mode?: 'source' | 'manual';
 };
 
@@ -47,6 +44,13 @@ export type SecurityMetadata = {
   payoutDetails?: SecurityPayoutDetails[];
   sourcePayoutDetails?: SecurityPayoutDetails[];
   manualPayoutDetails?: SecurityPayoutDetails[];
+  dividendResearchRetrievedAt?: string | null;
+  dividendResearchProvider?: string | null;
+  dividendResearchSourceUrl?: string | null;
+  dividendResearchAuthoritative?: boolean | null;
+  dividendResearchSchemaVersion?: number | null;
+  dividendResearchAdjustmentBasis?: 'raw' | 'current_share_basis' | null;
+  dividendResearchWarnings?: string[];
   corporateActions?: CorporateAction[];
 };
 

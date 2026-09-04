@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,6 +40,7 @@ class Settings(BaseSettings):
             "ALPHA_VANTAGE_API_KEY",
         ),
     )
+    dividend_research_provider: Literal["stub"] | None = None
     entra_client_id: str | None = None
     entra_tenant_id: str | None = None
     session_secret: str = Field(default="local-dev-session-secret-change-me", min_length=16)
@@ -54,6 +56,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def adjust_production_cookie_settings(self) -> 'Settings':
+        if self.environment == "development" and self.dividend_research_provider is None:
+            self.dividend_research_provider = "stub"
         if self.environment != "development":
             self.session_cookie_secure = True
             self.session_cookie_samesite = "none"
@@ -65,6 +69,11 @@ class Settings(BaseSettings):
 
         if self.environment != "development" and self.session_secret == "local-dev-session-secret-change-me":
             raise ValueError("A real session secret must be configured outside local development.")
+
+        if self.environment != "development" and self.dividend_research_provider is None:
+            raise ValueError(
+                "FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER must explicitly opt in to stub mode outside development."
+            )
 
         if len(self.session_secret) < 32:
             raise ValueError("The session secret must be at least 32 characters long.")

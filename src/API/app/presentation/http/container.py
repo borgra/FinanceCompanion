@@ -13,6 +13,7 @@ from app.application.use_cases.budgets import (
     UpdateBudgetSubCategory,
 )
 from app.application.use_cases.net_worth import GetNetWorth, PutNetWorth
+from app.application.use_cases.dividend_refresh import RefreshHoldingDividends
 from app.application.use_cases.retirement_plan import GetRetirementPlan, PutRetirementPlan
 from app.application.use_cases.income_sources import (
     CreateIncomeSource,
@@ -52,6 +53,7 @@ from app.infrastructure.alpha_vantage_security_details import AlphaVantageSecuri
 from app.infrastructure.alpha_vantage_security_search import AlphaVantageSecuritySearchProvider
 from app.infrastructure.security import JwtSessionTokenService
 from app.infrastructure.settings import Settings
+from app.infrastructure.stub_dividend_research import StubDividendResearchProvider
 
 
 @dataclass(slots=True)
@@ -92,6 +94,7 @@ class Container:
     search_securities: SearchSecurities
     refresh_holding_security_details: RefreshHoldingSecurityDetails
     refresh_held_security_details: RefreshHeldSecurityDetails
+    refresh_holding_dividends: RefreshHoldingDividends
     session_tokens: JwtSessionTokenService
 
 
@@ -147,6 +150,9 @@ def build_container(
         audience=settings.session_audience,
     )
     security_details = AlphaVantageSecurityDetailsProvider(settings.alpha_vantage_api_key)
+    if settings.dividend_research_provider != "stub":
+        raise ValueError("A dividend research provider must be configured.")
+    dividend_research = StubDividendResearchProvider()
 
     return Container(
         settings=settings,
@@ -198,8 +204,7 @@ def build_container(
             holdings,
             security_details,
         ),
+        refresh_holding_dividends=RefreshHoldingDividends(holdings, dividend_research),
         session_tokens=session_tokens,
     )
-
-
 

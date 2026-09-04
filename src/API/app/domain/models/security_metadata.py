@@ -11,6 +11,8 @@ class SecurityPayoutDetails:
     record_date: str | None = None
     payment_date: str | None = None
     source: str | None = None
+    source_url: str | None = None
+    status: str = "completed"
     mode: str = "source"
 
 
@@ -51,3 +53,10 @@ class SecurityMetadata:
     source_payout_details: list[SecurityPayoutDetails] = field(default_factory=list)
     manual_payout_details: list[SecurityPayoutDetails] = field(default_factory=list)
     corporate_actions: list[CorporateAction] = field(default_factory=list)
+    dividend_research_retrieved_at: str | None = None
+    dividend_research_provider: str | None = None
+    dividend_research_source_url: str | None = None
+    dividend_research_authoritative: bool | None = None
+    dividend_research_schema_version: int | None = None
+    dividend_research_adjustment_basis: str | None = None
+    dividend_research_warnings: list[str] = field(default_factory=list)

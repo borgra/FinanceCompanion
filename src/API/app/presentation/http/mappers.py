@@ -44,7 +44,6 @@ def to_user_response(user: User) -> UserResponse:
         picture_url=user.picture_url,
     )
 
-
 def to_income_period(payload: IncomePeriodPayload) -> IncomePeriod:
     return IncomePeriod(
         id=payload.id,
@@ -220,6 +219,8 @@ def to_security_payout_details(payload: SecurityPayoutDetailsPayload) -> Securit
         record_date=payload.record_date,
         payment_date=payload.payment_date,
         source=payload.source,
+        source_url=payload.source_url,
+        status=payload.status,
         mode=payload.mode,
     )
 
@@ -232,6 +233,8 @@ def to_security_payout_details_payload(item: SecurityPayoutDetails) -> SecurityP
         record_date=item.record_date,
         payment_date=item.payment_date,
         source=item.source,
+        source_url=item.source_url,
+        status=item.status,
         mode=item.mode,
     )
 
@@ -274,6 +277,13 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
         dividend_growth_rate=payload.dividend_growth_rate,
         estimated_future_payout=payload.estimated_future_payout,
         dividend_status=payload.dividend_status,
+        dividend_research_retrieved_at=payload.dividend_research_retrieved_at,
+        dividend_research_provider=payload.dividend_research_provider,
+        dividend_research_source_url=payload.dividend_research_source_url,
+        dividend_research_authoritative=payload.dividend_research_authoritative,
+        dividend_research_schema_version=payload.dividend_research_schema_version,
+        dividend_research_adjustment_basis=payload.dividend_research_adjustment_basis,
+        dividend_research_warnings=payload.dividend_research_warnings,
         sma20=payload.sma20,
         sma50=payload.sma50,
         sma200=payload.sma200,
@@ -317,6 +327,13 @@ def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayl
         dividend_growth_rate=item.dividend_growth_rate,
         estimated_future_payout=item.estimated_future_payout,
         dividend_status=item.dividend_status,
+        dividend_research_retrieved_at=item.dividend_research_retrieved_at,
+        dividend_research_provider=item.dividend_research_provider,
+        dividend_research_source_url=item.dividend_research_source_url,
+        dividend_research_authoritative=item.dividend_research_authoritative,
+        dividend_research_schema_version=item.dividend_research_schema_version,
+        dividend_research_adjustment_basis=item.dividend_research_adjustment_basis,
+        dividend_research_warnings=item.dividend_research_warnings,
         sma20=item.sma20,
         sma50=item.sma50,
         sma200=item.sma200,

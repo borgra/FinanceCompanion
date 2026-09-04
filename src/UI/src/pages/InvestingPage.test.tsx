@@ -306,6 +306,7 @@ describe('InvestingPage', () => {
       updateHoldingsBatch: vi.fn(),
       deleteHolding: vi.fn(),
       refreshHoldingSecurityDetails,
+      refreshHoldingDividends: vi.fn(),
       refreshHeldSecurityDetails: vi.fn(),
       updateManualPayoutDetails: vi.fn(),
     };
@@ -379,7 +380,7 @@ describe('InvestingPage', () => {
     const holdingRepository: HoldingRepository = {
       searchSecurities: vi.fn(), listHoldings: vi.fn(async () => holdings), createHolding: vi.fn(),
       updateHolding: vi.fn(), updateHoldingsBatch: vi.fn(), deleteHolding: vi.fn(), refreshHoldingSecurityDetails: vi.fn(),
-      refreshHeldSecurityDetails: vi.fn(), updateManualPayoutDetails: vi.fn(),
+      refreshHoldingDividends: vi.fn(), refreshHeldSecurityDetails: vi.fn(), updateManualPayoutDetails: vi.fn(),
     };
 
     render(<InvestingPage accountRepository={createMockAccountRepository({ initialAccounts: accounts })} holdingRepository={holdingRepository} incomeRepository={createMockIncomeSourceRepository()} />);
@@ -457,6 +458,7 @@ describe('InvestingPage', () => {
     const confirm = vi.spyOn(window, 'confirm');
     confirm.mockClear();
     const refreshHoldingSecurityDetails = vi.spyOn(holdingRepository, 'refreshHoldingSecurityDetails');
+    const refreshHoldingDividends = vi.spyOn(holdingRepository, 'refreshHoldingDividends');
     const currentYear = new Date().getFullYear();
     render(
       <InvestingPage
@@ -472,12 +474,19 @@ describe('InvestingPage', () => {
     expect(confirm).not.toHaveBeenCalled();
     expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
     expect(refreshHoldingSecurityDetails.mock.calls[0]).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Corporate Actions' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Update VTI dividends' }));
+    expect(await screen.findByText('VTI dividends were updated with stub data.')).toBeInTheDocument();
+    expect(refreshHoldingDividends).toHaveBeenCalledWith(expect.any(String));
+    expect(screen.getByText(/Stub data · Last updated/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Passive Income' }));
 
     expect(await screen.findByRole('heading', { name: 'Passive Income' })).toBeInTheDocument();
     expect(screen.getByText(String(currentYear))).toBeInTheDocument();
-    expect(screen.getByText('Dividend income')).toBeInTheDocument();
+    expect(screen.getByText('Annual Dividend Income')).toBeInTheDocument();
+    expect(screen.getByText('Average Monthly Dividend Income')).toBeInTheDocument();
     expect(screen.getAllByText('$5.63').length).toBeGreaterThan(0);
 
     const decemberEstimate = screen.getByRole('button', { name: /Dec, 1 payment, \$5\.24/i });
@@ -500,7 +509,7 @@ describe('InvestingPage', () => {
 
     expect(screen.getByText(String(currentYear + 1))).toBeInTheDocument();
     expect(screen.getByText('Next year estimate')).toBeInTheDocument();
-    expect(screen.getByText('Estimated income')).toBeInTheDocument();
+    expect(screen.getByText('Annual Dividend Income')).toBeInTheDocument();
     expect(screen.getAllByText('$5.89').length).toBeGreaterThan(0);
 
     const nextYearJulyEstimate = screen.getByRole('button', { name: /Jul, 1 payment, \$5\.89/i });
@@ -615,4 +624,3 @@ describe('InvestingPage', () => {
     /* eslint-enable @typescript-eslint/no-explicit-any */
   });
 });
-

@@ -8,7 +8,7 @@ import {
 } from '../components/FinanceTable';
 import type { Account } from '../domain/account';
 import type { AccountRepository } from '../domain/accountRepository';
-import type { CorporateAction, CorporateActionImportRow, Holding, HoldingImportRow, PassiveIncomeImportRow, SecurityMetadata, SecurityPayoutDetails } from '../domain/holding';
+import type { CorporateAction, Holding, HoldingImportRow, PassiveIncomeImportRow, SecurityMetadata, SecurityPayoutDetails } from '../domain/holding';
 import type { HoldingRepository } from '../domain/holdingRepository';
 
 type HoldingsPageProps = {
@@ -42,8 +42,6 @@ const refreshThrottleMs = 3000;
 const refreshAllMaximumAgeMs = 48 * 60 * 60 * 1000;
 const HOLDINGS_IMPORT_MAX_BYTES = 1024 * 1024;
 const HOLDINGS_IMPORT_MAX_ROWS = 500;
-const CORPORATE_ACTION_IMPORT_MAX_BYTES = 1024 * 1024;
-const CORPORATE_ACTION_IMPORT_MAX_ROWS = 500;
 const PAYMENT_IMPORT_MAX_BYTES = 1024 * 1024;
 const PAYMENT_IMPORT_MAX_ROWS = 500;
 
@@ -149,27 +147,6 @@ export const parseHoldingImport = (csv: string, investmentAccounts: Account[]): 
     return row;
   });
 };
-export const parseCorporateActionImport = (csv: string): CorporateActionImportRow[] => {
-  const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
-  if (lines.length < 2 || lines.length > CORPORATE_ACTION_IMPORT_MAX_ROWS + 1) throw new Error('The file must contain 1 to 500 corporate action rows.');
-  const headers = lines[0].split(',').map((header) => header.trim());
-  const requiredHeaders = ['Ticker', 'Effective Date', 'Action', 'Old Shares', 'New Shares'];
-  if (headers.length !== requiredHeaders.length || requiredHeaders.some((header, index) => headers[index] !== header)) throw new Error('Use the corporate actions template with Ticker, Effective Date, Action, Old Shares, and New Shares columns.');
-  const identities = new Set<string>();
-  const todayKey = new Date().toISOString().slice(0, 10);
-  return lines.slice(1).map((line, index) => {
-    const [rawSymbol, effectiveDate, rawType, rawOldShares, rawNewShares, ...extra] = line.split(',').map((value) => value.trim());
-    const symbol = rawSymbol.toUpperCase();
-    const oldShares = Number(rawOldShares);
-    const newShares = Number(rawNewShares);
-    const type = rawType === 'Stock Split' ? 'stock_split' : rawType === 'Reverse Stock Split' ? 'reverse_stock_split' : null;
-    if (extra.length || !/^[A-Z0-9.-]{1,20}$/.test(symbol) || !isIsoDate(effectiveDate) || effectiveDate > todayKey || !type || !Number.isFinite(oldShares) || !Number.isFinite(newShares) || oldShares <= 0 || newShares <= 0 || oldShares === newShares || (type === 'stock_split' && newShares <= oldShares) || (type === 'reverse_stock_split' && newShares >= oldShares)) throw new Error(`Corporate action row ${index + 2} is invalid.`);
-    const identity = `${symbol}-${effectiveDate}-${type}-${oldShares}-${newShares}`;
-    if (identities.has(identity)) throw new Error(`Corporate action row ${index + 2} duplicates an earlier row.`);
-    identities.add(identity);
-    return { symbol, action: { effectiveDate, type, oldShares, newShares } };
-  });
-};
 export const parsePassiveIncomeImport = (csv: string): PassiveIncomeImportRow[] => {
   const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
   if (lines.length < 2 || lines.length > PAYMENT_IMPORT_MAX_ROWS + 1) throw new Error('The file must contain 1 to 500 payment rows.');
@@ -226,13 +203,12 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [isImportingActions, setIsImportingActions] = useState(false);
   const [isImportingPayments, setIsImportingPayments] = useState(false);
   const [selectedHoldingId, setSelectedHoldingId] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
-  const corporateActionInputRef = useRef<HTMLInputElement>(null);
   const paymentInputRef = useRef<HTMLInputElement>(null);
   const [refreshingHoldingIds, setRefreshingHoldingIds] = useState<Set<string>>(() => new Set());
+  const [refreshingDividendHoldingIds, setRefreshingDividendHoldingIds] = useState<Set<string>>(() => new Set());
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingPayoutHolding, setEditingPayoutHolding] = useState<Holding | null>(null);
@@ -470,32 +446,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
       setError(importError instanceof Error ? importError.message : 'Unable to import payments.');
     } finally { setIsImportingPayments(false); }
   };
-  const downloadCorporateActionTemplate = () => {
-    const template = ['Ticker,Effective Date,Action,Old Shares,New Shares', ''].join('\r\n');
-    const url = URL.createObjectURL(new Blob([template], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'corporate-actions-import-template.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importCorporateActions = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    if ((file.type && file.type !== 'text/csv') || !file.name.toLowerCase().endsWith('.csv')) { setError('Upload a CSV file created from the corporate actions template.'); return; }
-    if (file.size === 0 || file.size > CORPORATE_ACTION_IMPORT_MAX_BYTES) { setError('The import file must be between 1 byte and 1 MB.'); return; }
-    if (!holdingRepository.importCorporateActions) { setError('Corporate action import is unavailable.'); return; }
-    setIsImportingActions(true); setError(null); setSuccessMessage(null);
-    try {
-      const result = await holdingRepository.importCorporateActions(parseCorporateActionImport(await file.text()));
-      setHoldings((current) => mergeRefreshedSecurityDetails(current, result.holdings));
-      setSuccessMessage(result.unmatchedSymbols.length ? `Corporate actions imported. No matching holding for ${result.unmatchedSymbols.join(', ')}.` : 'Corporate actions imported.');
-    } catch (importError) {
-      setError(importError instanceof Error ? importError.message : 'Unable to import corporate actions.');
-    } finally { setIsImportingActions(false); }
-  };
   const saveCorporateActions = async (actions: CorporateAction[]) => {
     if (!securityDetailsHolding) return;
     const updated = await holdingRepository.updateHolding(securityDetailsHolding.id, {
@@ -546,6 +496,25 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
       setRefreshingHoldingIds((current) => {
         const next = new Set(current);
         next.delete(holdingId);
+        return next;
+      });
+    }
+  };
+
+  const refreshHoldingDividends = async (holding: Holding) => {
+    setRefreshingDividendHoldingIds((current) => new Set(current).add(holding.id));
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const refreshed = await holdingRepository.refreshHoldingDividends(holding.id);
+      setHoldings((current) => current.map((item) => item.id === refreshed.id ? refreshed : item));
+      setSuccessMessage(`${refreshed.security.symbol} dividends were updated${refreshed.security.dividendResearchProvider === 'stub' ? ' with stub data' : ''}.`);
+    } catch {
+      setError(`Unable to update ${holding.security.symbol} dividends. Saved dividend data was kept; try again.`);
+    } finally {
+      setRefreshingDividendHoldingIds((current) => {
+        const next = new Set(current);
+        next.delete(holding.id);
         return next;
       });
     }
@@ -792,13 +761,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         </div>
         <div className="funding-section-actions">
           <input ref={importInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => void importHoldingDetails(event)} />
-          <input ref={corporateActionInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => void importCorporateActions(event)} />
           <input ref={paymentInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => void importPayments(event)} />
           <details className="csv-action-menu">
             <summary className="secondary-action compact-add-action">Download</summary>
             <div className="csv-action-menu-items">
               <button type="button" onClick={downloadImportTemplate}>Holdings</button>
-              <button type="button" onClick={downloadCorporateActionTemplate}>Corporate Actions</button>
               <button type="button" onClick={downloadPaymentTemplate}>Payments</button>
             </div>
           </details>
@@ -806,7 +773,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
             <summary className="secondary-action compact-add-action">Import</summary>
             <div className="csv-action-menu-items">
               <button type="button" onClick={() => importInputRef.current?.click()} disabled={isImporting || isSaving}>{isImporting ? 'Holdings…' : 'Holdings'}</button>
-              <button type="button" onClick={() => corporateActionInputRef.current?.click()} disabled={isImportingActions || holdings.length === 0}>{isImportingActions ? 'Corporate Actions…' : 'Corporate Actions'}</button>
               <button type="button" onClick={() => paymentInputRef.current?.click()} disabled={isImportingPayments || holdings.length === 0}>{isImportingPayments ? 'Payments…' : 'Payments'}</button>
             </div>
           </details>
@@ -877,6 +843,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                     <td className="holdings-security-cell">
                       <button className="link-button holdings-security-link" type="button" onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
                       <small>{formatLastUpdated(holding.security.detailsUpdatedAt)}</small>
+                      {holding.security.dividendResearchRetrievedAt ? <small>{holding.security.dividendResearchProvider === 'stub' ? 'Stub data' : 'Dividend data'} · {formatLastUpdated(holding.security.dividendResearchRetrievedAt)}</small> : null}
                     </td>
                     <td>
                       <span className="excel-cell-val">{holding.security.symbol}</span>
@@ -921,7 +888,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                           className="link-button holdings-refresh-action"
                           type="button"
                           onClick={() => openPayoutEditor(holding)}
-                          disabled={isSaving || refreshingHoldingIds.has(holding.id)}
+                          disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
                           aria-label={`Edit ${holding.security.symbol} payments`}
                           title={`Edit ${holding.security.symbol} payments`}
                         >
@@ -930,8 +897,19 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                         <button
                           className="link-button holdings-refresh-action"
                           type="button"
+                          onClick={() => void refreshHoldingDividends(holding)}
+                          disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
+                          aria-label={`Update ${holding.security.symbol} dividends`}
+                          aria-busy={refreshingDividendHoldingIds.has(holding.id)}
+                          title={`Update ${holding.security.symbol} dividends`}
+                        >
+                          <span className={`material-symbols-outlined ${refreshingDividendHoldingIds.has(holding.id) ? 'holdings-spin' : ''}`} aria-hidden="true">currency_exchange</span>
+                        </button>
+                        <button
+                          className="link-button holdings-refresh-action"
+                          type="button"
                           onClick={() => void refreshHoldingDetails(holding.id)}
-                          disabled={isSaving || refreshingHoldingIds.has(holding.id)}
+                          disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
                           aria-label={`Update ${holding.security.symbol} holding`}
                           title={`Update ${holding.security.symbol}`}
                         >
@@ -948,7 +926,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                           className="link-button link-button-danger holdings-remove-action"
                           type="button"
                           onClick={() => void removeHolding(holding)}
-                          disabled={isSaving || refreshingHoldingIds.has(holding.id)}
+                          disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
                           aria-label={`Remove ${holding.security.symbol} holding`}
                         >
                           <span className="material-symbols-outlined" aria-hidden="true">delete</span>

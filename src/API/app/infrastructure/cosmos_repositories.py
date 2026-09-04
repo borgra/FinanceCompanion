@@ -307,6 +307,13 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
             )
         ),
         dividend_status=dividends.get("status") or data.get("dividendStatus"),
+        dividend_research_retrieved_at=dividends.get("retrievedAt"),
+        dividend_research_provider=dividends.get("provider"),
+        dividend_research_source_url=dividends.get("sourceUrl"),
+        dividend_research_authoritative=dividends.get("authoritative"),
+        dividend_research_schema_version=dividends.get("schemaVersion"),
+        dividend_research_adjustment_basis=dividends.get("adjustmentBasis"),
+        dividend_research_warnings=list(dividends.get("warnings", [])),
         sma20=_optional_float(data.get("sma20")),
         sma50=_optional_float(data.get("sma50")),
         sma200=_optional_float(data.get("sma200")),
@@ -330,11 +337,13 @@ def _security_payout_details_from_dict(data: dict) -> SecurityPayoutDetails:
         record_date=data.get("recordDate"),
         payment_date=data.get("paymentDate"),
         source=data.get("source"),
+        source_url=data.get("sourceUrl"),
+        status=data.get("status", "completed"),
     )
 
 
 def _security_payout_details_to_dict(payout: SecurityPayoutDetails) -> dict:
-    return {
+    data = {
         "exDividendDate": payout.ex_dividend_date,
         "amount": payout.amount,
         "declarationDate": payout.declaration_date,
@@ -343,6 +352,11 @@ def _security_payout_details_to_dict(payout: SecurityPayoutDetails) -> dict:
         "source": payout.source,
         "mode": payout.mode,
     }
+    if payout.source_url is not None:
+        data["sourceUrl"] = payout.source_url
+    if payout.status != "completed":
+        data["status"] = payout.status
+    return data
 
 
 def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
@@ -395,16 +409,32 @@ def _security_dividends_to_dict(security: SecurityMetadata) -> dict | None:
             security.dividend_current_year,
             security.dividend_growth_rate,
             security.estimated_future_payout,
+            security.dividend_research_retrieved_at,
+            security.dividend_research_provider,
+            security.dividend_research_source_url,
+            security.dividend_research_schema_version,
+            security.dividend_research_adjustment_basis,
         ]
-    ):
+    ) and security.dividend_research_authoritative is None and not security.dividend_research_warnings:
         return None
 
-    data = {
+    data: dict = {
         "status": status or "recent",
         "sourcePayouts": source_payouts,
         "manualPayouts": manual_payouts,
         "corporateActions": corporate_actions,
     }
+    research_values = {
+        "retrievedAt": security.dividend_research_retrieved_at,
+        "provider": security.dividend_research_provider,
+        "sourceUrl": security.dividend_research_source_url,
+        "authoritative": security.dividend_research_authoritative,
+        "schemaVersion": security.dividend_research_schema_version,
+        "adjustmentBasis": security.dividend_research_adjustment_basis,
+    }
+    data.update({key: value for key, value in research_values.items() if value is not None})
+    if security.dividend_research_warnings:
+        data["warnings"] = security.dividend_research_warnings
     optional_values = {
         "previousYear": security.dividend_previous_year,
         "currentYear": security.dividend_current_year,
@@ -840,7 +870,6 @@ class CosmosHoldingRepository:
             self._client.get_entity(user_id, f"holding:{holding_id}")
         except ResourceNotFoundError as exc:
             raise NotFoundError("Holding not found.") from exc
-
         entity = _holding_to_entity(user_id, holding)
         self._client.upsert_entity(entity)
         return deepcopy(holding)

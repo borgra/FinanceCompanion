@@ -81,6 +81,14 @@ def merge_security_details(
         payout_details=current.payout_details,
         source_payout_details=current.source_payout_details,
         manual_payout_details=current.manual_payout_details,
+        corporate_actions=current.corporate_actions,
+        dividend_research_retrieved_at=current.dividend_research_retrieved_at,
+        dividend_research_provider=current.dividend_research_provider,
+        dividend_research_source_url=current.dividend_research_source_url,
+        dividend_research_authoritative=current.dividend_research_authoritative,
+        dividend_research_schema_version=current.dividend_research_schema_version,
+        dividend_research_adjustment_basis=current.dividend_research_adjustment_basis,
+        dividend_research_warnings=current.dividend_research_warnings,
     )
 
 

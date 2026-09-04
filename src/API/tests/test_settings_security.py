@@ -40,3 +40,24 @@ def test_alpha_vantage_key_can_use_github_secret_name(monkeypatch):
     settings = Settings()
 
     assert settings.alpha_vantage_api_key == "test-alpha-key"
+
+
+def test_development_defaults_to_stub_dividend_research():
+    assert Settings().dividend_research_provider == "stub"
+
+
+def test_deployed_environment_requires_explicit_stub_opt_in():
+    settings = Settings(
+        environment="production",
+        session_secret="a-real-production-session-secret-123456",
+    )
+
+    with pytest.raises(ValueError, match="explicitly opt in"):
+        settings.validate_security()
+
+    opted_in = Settings(
+        environment="production",
+        session_secret="a-real-production-session-secret-123456",
+        dividend_research_provider="stub",
+    )
+    opted_in.validate_security()

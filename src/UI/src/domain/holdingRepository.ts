@@ -1,6 +1,5 @@
 import type {
   Holding,
-  CorporateActionImportRow,
   HoldingDraft,
   HoldingImportResult,
   HoldingImportRow,
@@ -18,10 +17,10 @@ export type HoldingRepository = {
   updateHoldingsBatch: (changes: Array<{ id: string; draft: HoldingDraft }>) => Promise<Holding[]>;
   importHoldingDetails?: (rows: HoldingImportRow[]) => Promise<HoldingImportResult>;
   importManualPayoutDetails?: (rows: PassiveIncomeImportRow[]) => Promise<HoldingImportResult>;
-  importCorporateActions?: (rows: CorporateActionImportRow[]) => Promise<HoldingImportResult>;
   purgePaymentData?: () => Promise<Holding[]>;
   deleteHolding: (id: string) => Promise<void>;
   refreshHoldingSecurityDetails: (id: string) => Promise<Holding>;
+  refreshHoldingDividends: (id: string) => Promise<Holding>;
   refreshHeldSecurityDetails: () => Promise<SecurityDetailsRefreshResult>;
   updateManualPayoutDetails: (id: string, payouts: SecurityPayoutDetails[]) => Promise<Holding>;
 };
@@ -43,6 +42,27 @@ const mergeRefreshedSecurity = (
 });
 
 const nowIso = () => new Date().toISOString();
+
+const mergeDividendPayouts = (
+  source: SecurityPayoutDetails[],
+  manual: SecurityPayoutDetails[],
+) => {
+  const merged = [...source];
+  manual.forEach((payout) => {
+    let matchIndex = merged.findIndex((candidate) =>
+      candidate.mode !== 'manual'
+      && candidate.exDividendDate === payout.exDividendDate
+      && candidate.paymentDate === payout.paymentDate);
+    if (matchIndex < 0) {
+      matchIndex = merged.findIndex((candidate) =>
+        candidate.mode !== 'manual' && candidate.exDividendDate === payout.exDividendDate);
+    }
+    if (matchIndex < 0) merged.push(payout);
+    else merged[matchIndex] = payout;
+  });
+  return merged.sort((left, right) =>
+    (left.paymentDate || left.exDividendDate).localeCompare(right.paymentDate || right.exDividendDate));
+};
 
 const needsSecurityRefresh = (updatedAt?: string | null) => {
   if (!updatedAt) {
@@ -249,44 +269,11 @@ export function createMockHoldingRepository(): HoldingRepository {
         const payouts = rowsBySymbol.get(holding.security.symbol.toLowerCase());
         if (!payouts) return holding;
         updatedIds.add(holding.id);
-        return { ...holding, security: { ...holding.security, payoutDetails: payouts, manualPayoutDetails: payouts }, updatedAt: nowIso() };
+        return { ...holding, security: { ...holding.security, payoutDetails: mergeDividendPayouts(holding.security.sourcePayoutDetails ?? [], payouts), manualPayoutDetails: payouts }, updatedAt: nowIso() };
       });
       return {
         holdings: holdings.filter((holding) => updatedIds.has(holding.id)).map((holding) => ({ ...holding, security: { ...holding.security } })),
         unmatchedSymbols: [...rowsBySymbol.keys()].filter((symbol) => !matchedSymbols.has(symbol)).map((symbol) => symbol.toUpperCase()),
-      };
-    },
-    importCorporateActions: async (rows) => {
-      const actionsBySymbol = new Map<string, CorporateActionImportRow[]>();
-      for (const row of rows) {
-        const symbol = row.symbol.toLowerCase();
-        actionsBySymbol.set(symbol, [...(actionsBySymbol.get(symbol) ?? []), row]);
-      }
-      const updatedIds = new Set<string>();
-      const matchedSymbols = new Set(holdings.map((holding) => holding.security.symbol.toLowerCase()));
-      holdings = holdings.map((holding) => {
-        const rowsForHolding = actionsBySymbol.get(holding.security.symbol.toLowerCase());
-        if (!rowsForHolding) return holding;
-        updatedIds.add(holding.id);
-        const existingActions = holding.security.corporateActions ?? [];
-        return {
-          ...holding,
-          security: {
-            ...holding.security,
-            corporateActions: [
-              ...existingActions,
-              ...rowsForHolding.map((row) => ({
-                id: `${holding.security.symbol}-${row.action.effectiveDate}-${row.action.type}-${row.action.oldShares}-${row.action.newShares}`,
-                ...row.action,
-              })),
-            ],
-          },
-          updatedAt: nowIso(),
-        };
-      });
-      return {
-        holdings: holdings.filter((holding) => updatedIds.has(holding.id)).map((holding) => ({ ...holding, security: { ...holding.security } })),
-        unmatchedSymbols: [...actionsBySymbol.keys()].filter((symbol) => !matchedSymbols.has(symbol)).map((symbol) => symbol.toUpperCase()),
       };
     },
     purgePaymentData: async () => {
@@ -295,6 +282,7 @@ export function createMockHoldingRepository(): HoldingRepository {
         security: {
           ...holding.security,
           payoutDetails: [],
+          sourcePayoutDetails: [],
           manualPayoutDetails: [],
         },
         updatedAt: nowIso(),
@@ -361,6 +349,49 @@ export function createMockHoldingRepository(): HoldingRepository {
         accountPositions: updated.accountPositions.map((position) => ({ ...position })),
       };
     },
+    refreshHoldingDividends: async (id) => {
+      const existing = holdings.find((holding) => holding.id === id);
+      if (!existing) throw new Error('Holding not found.');
+      const today = new Date();
+      const year = today.getFullYear();
+      const sourceUrl = 'https://example.test/finance-companion/stub-dividends';
+      const sourcePayoutDetails: SecurityPayoutDetails[] = [];
+      for (const [targetYear, amount] of [[year - 2, 0.35], [year - 1, 0.38], [year, 0.415]] as const) {
+        for (const month of [2, 5, 8, 11]) {
+          const date = `${targetYear}-${String(month).padStart(2, '0')}-15`;
+          sourcePayoutDetails.push({
+            exDividendDate: date,
+            paymentDate: `${targetYear}-${String(month).padStart(2, '0')}-22`,
+            amount,
+            mode: 'source',
+            source: 'stub',
+            sourceUrl,
+            status: targetYear === year && month > today.getMonth() + 1 ? 'announced' : 'completed',
+          });
+        }
+      }
+      const manual = existing.security.manualPayoutDetails ?? [];
+      const updated: Holding = {
+        ...existing,
+        security: {
+          ...existing.security,
+          payoutDetails: mergeDividendPayouts(sourcePayoutDetails, manual),
+          sourcePayoutDetails,
+          corporateActions: [{ id: `research-action-1-${year - 2}-06-01`, effectiveDate: `${year - 2}-06-01`, type: 'stock_split', oldShares: 1, newShares: 2 }],
+          dividendStatus: 'stub',
+          dividendResearchRetrievedAt: `${today.toISOString().slice(0, 10)}T00:00:00Z`,
+          dividendResearchProvider: 'stub',
+          dividendResearchSourceUrl: sourceUrl,
+          dividendResearchAuthoritative: false,
+          dividendResearchSchemaVersion: 1,
+          dividendResearchAdjustmentBasis: 'current_share_basis',
+          dividendResearchWarnings: ['Stub data is deterministic and non-authoritative.'],
+        },
+        updatedAt: nowIso(),
+      };
+      holdings = holdings.map((holding) => holding.id === id ? updated : holding);
+      return { ...updated, security: { ...updated.security } };
+    },
     refreshHeldSecurityDetails: async () => {
       const refreshed = await Promise.all(
         holdings.map((holding) => {
@@ -404,7 +435,7 @@ export function createMockHoldingRepository(): HoldingRepository {
         ...existing,
         security: {
           ...existing.security,
-          payoutDetails: payouts,
+          payoutDetails: mergeDividendPayouts(existing.security.sourcePayoutDetails ?? [], payouts),
           manualPayoutDetails: payouts,
         },
         updatedAt: nowIso(),

@@ -5,6 +5,13 @@ from .budget_sub_category import BudgetSubCategory
 from .income_period import IncomePeriod
 from .income_source import IncomeSource
 from .holding import Holding, HoldingAccountPosition
+from app.domain.dividend_research import (
+    DividendResearchAction,
+    DividendResearchPayment,
+    DividendResearchProvenance,
+    DividendResearchRequest,
+    DividendResearchResult,
+)
 from .monthly_record import MonthlyRecord
 from .net_worth import NetWorth
 from .retirement_plan import ContributionPlan, ExpenseChange, RetirementPlan, SocialSecurityPlan
@@ -34,4 +41,9 @@ __all__ = [
     "SessionUser",
     "User",
     "VerifiedIdentity",
+    "DividendResearchAction",
+    "DividendResearchPayment",
+    "DividendResearchProvenance",
+    "DividendResearchRequest",
+    "DividendResearchResult",
 ]

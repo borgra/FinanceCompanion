@@ -1037,6 +1037,10 @@ p {
   align-items: center;
 }
 
+.passive-income-tabs {
+  align-self: flex-start;
+}
+
 .passive-income-year-control {
   display: flex;
   align-items: center;
@@ -1081,7 +1085,7 @@ p {
 
 .passive-income-summary-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
   gap: 12px;
 }
 
@@ -3197,6 +3201,128 @@ button.security-result:hover {
   white-space: nowrap;
 }
 
+.passive-income-quarters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.passive-income-quarter {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: var(--md-sys-color-surface-container-low);
+}
+
+.passive-income-quarter > h3 {
+  padding-top: 12px;
+  color: var(--md-sys-color-primary);
+  font-size: 0.78rem;
+}
+
+.passive-income-quarter-months {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.passive-income-quarter .passive-income-month-toggle {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  min-height: 70px;
+}
+
+.passive-income-quarter .passive-income-month-count {
+  grid-column: 1 / -1;
+}
+
+.passive-income-quarter .passive-income-month-panel {
+  padding: 0 8px 8px;
+  overflow-x: auto;
+}
+
+.passive-income-quarter .passive-income-payment-table {
+  min-width: 680px;
+}
+
+.future-dividend-forecast {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.future-dividend-forecast .field {
+  min-width: 180px;
+}
+
+.future-dividend-chart {
+  padding: 16px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  background-color: rgba(255, 255, 255, 0.014);
+}
+
+.future-dividend-chart svg {
+  display: block;
+  width: 100%;
+  min-height: 220px;
+}
+
+.future-dividend-chart line {
+  stroke: var(--md-sys-color-outline-variant);
+  stroke-width: 2;
+}
+
+.future-dividend-chart polyline {
+  stroke: var(--md-sys-color-primary);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.future-dividend-chart-labels {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 0.76rem;
+}
+
+.future-dividend-chart-labels strong {
+  color: var(--md-sys-color-on-surface);
+  font-family: Consolas, monospace;
+}
+
+.future-dividend-chart-labels span:last-child {
+  text-align: right;
+}
+
+.future-dividend-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.future-dividend-table caption {
+  padding-bottom: 8px;
+  text-align: left;
+  font-weight: 800;
+}
+
+.future-dividend-table th,
+.future-dividend-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  text-align: left;
+}
+
+.future-dividend-table td {
+  font-family: Consolas, monospace;
+}
+
 .keyboard-navigable-table tbody td:focus-visible,
 .keyboard-navigable-table tbody th:focus-visible {
   position: relative;
@@ -3510,6 +3636,23 @@ button.security-result:hover {
 
   .passive-income-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .passive-income-quarter {
+    grid-template-columns: 1fr;
+  }
+
+  .passive-income-quarter > h3 {
+    padding-top: 0;
+  }
+
+  .passive-income-quarter-months {
+    grid-template-columns: 1fr;
+  }
+
+  .passive-income-section-heading {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

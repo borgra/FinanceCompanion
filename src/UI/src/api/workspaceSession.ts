@@ -241,11 +241,6 @@ export function createWorkspaceSession(
       reconcileHoldings(result.holdings);
       return clone(result);
     },
-    importCorporateActions: async (rows) => {
-      const result = await holdingApi.importCorporateActions!(rows);
-      reconcileHoldings(result.holdings);
-      return clone(result);
-    },
     purgePaymentData: async () => {
       const holdings = await holdingApi.purgePaymentData!();
       state.holdings = clone(holdings);
@@ -256,6 +251,7 @@ export function createWorkspaceSession(
       state.holdings = (state.holdings ?? []).filter((holding) => holding.id !== id);
     },
     refreshHoldingSecurityDetails: async (id) => reconcileHolding(await holdingApi.refreshHoldingSecurityDetails(id)),
+    refreshHoldingDividends: async (id) => reconcileHolding(await holdingApi.refreshHoldingDividends(id)),
     refreshHeldSecurityDetails: async () => {
       const result = await holdingApi.refreshHeldSecurityDetails();
       reconcileHoldings(result.holdings);

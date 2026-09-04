@@ -154,6 +154,13 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         dividend_growth_rate=_optional_float(data.get("dividendGrowthRate")),
         estimated_future_payout=_optional_float(data.get("estimatedFuturePayout")),
         dividend_status=data.get("dividendStatus"),
+        dividend_research_retrieved_at=data.get("dividendResearchRetrievedAt"),
+        dividend_research_provider=data.get("dividendResearchProvider"),
+        dividend_research_source_url=data.get("dividendResearchSourceUrl"),
+        dividend_research_authoritative=data.get("dividendResearchAuthoritative"),
+        dividend_research_schema_version=data.get("dividendResearchSchemaVersion"),
+        dividend_research_adjustment_basis=data.get("dividendResearchAdjustmentBasis"),
+        dividend_research_warnings=list(data.get("dividendResearchWarnings", [])),
         sma20=_optional_float(data.get("sma20")),
         sma50=_optional_float(data.get("sma50")),
         sma200=_optional_float(data.get("sma200")),
@@ -177,6 +184,8 @@ def _security_payout_details_from_dict(data: dict) -> SecurityPayoutDetails:
         record_date=data.get("recordDate"),
         payment_date=data.get("paymentDate"),
         source=data.get("source"),
+        source_url=data.get("sourceUrl"),
+        status=data.get("status", "completed"),
         mode=data.get("mode", "source"),
     )
 

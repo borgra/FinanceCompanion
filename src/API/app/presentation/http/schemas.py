@@ -191,6 +191,8 @@ class SecurityPayoutDetailsPayload(CamelModel):
     record_date: str | None = Field(default=None, serialization_alias="recordDate")
     payment_date: str | None = Field(default=None, serialization_alias="paymentDate")
     source: str | None = None
+    source_url: str | None = Field(default=None, serialization_alias="sourceUrl")
+    status: Literal["completed", "announced"] = "completed"
     mode: str = "source"
 
 
@@ -253,6 +255,13 @@ class SecurityMetadataPayload(CamelModel):
         default_factory=list,
         serialization_alias="manualPayoutDetails",
     )
+    dividend_research_retrieved_at: str | None = Field(default=None, serialization_alias="dividendResearchRetrievedAt")
+    dividend_research_provider: str | None = Field(default=None, serialization_alias="dividendResearchProvider")
+    dividend_research_source_url: str | None = Field(default=None, serialization_alias="dividendResearchSourceUrl")
+    dividend_research_authoritative: bool | None = Field(default=None, serialization_alias="dividendResearchAuthoritative")
+    dividend_research_schema_version: int | None = Field(default=None, serialization_alias="dividendResearchSchemaVersion")
+    dividend_research_adjustment_basis: str | None = Field(default=None, serialization_alias="dividendResearchAdjustmentBasis")
+    dividend_research_warnings: list[str] = Field(default_factory=list, serialization_alias="dividendResearchWarnings")
     corporate_actions: list[CorporateActionPayload] = Field(
         default_factory=list,
         max_length=500,
@@ -288,8 +297,16 @@ class HoldingPayload(CamelModel):
     updated_at: str = Field(serialization_alias="updatedAt")
 
 
+class SecurityMetadataWritePayload(SecurityMetadataPayload):
+    dividend_growth_rate: float | None = Field(
+        default=None,
+        ge=-1,
+        serialization_alias="dividendGrowthRate",
+    )
+
+
 class HoldingCreateRequest(CamelModel):
-    security: SecurityMetadataPayload
+    security: SecurityMetadataWritePayload
     account_positions: list[HoldingAccountPositionPayload] = Field(serialization_alias="accountPositions")
 
 
@@ -325,13 +342,6 @@ class ManualPayoutImportRow(CamelModel):
 
 class ManualPayoutImportRequest(CamelModel):
     rows: list[ManualPayoutImportRow] = Field(min_length=1, max_length=500)
-
-class CorporateActionImportRow(CorporateActionFields):
-    symbol: str = Field(min_length=1, max_length=20, pattern=r"^[A-Za-z0-9.-]+$")
-
-
-class CorporateActionImportRequest(CamelModel):
-    rows: list[CorporateActionImportRow] = Field(min_length=1, max_length=500)
 
 class SecurityDetailsRefreshResultPayload(CamelModel):
     holdings: list[HoldingPayload]

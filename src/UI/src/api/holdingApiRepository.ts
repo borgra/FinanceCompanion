@@ -1,6 +1,5 @@
 import type {
   Holding,
-  CorporateActionImportRow,
   HoldingDraft,
   HoldingImportResult,
   HoldingImportRow,
@@ -23,18 +22,15 @@ export const createHoldingApiRepository = (client: HttpClient): HoldingRepositor
   }),  importHoldingDetails: (rows: HoldingImportRow[]) => client.put<HoldingImportResult>("/holdings/import", { rows }),
   importManualPayoutDetails: (rows: PassiveIncomeImportRow[]) =>
     client.put<HoldingImportResult>('/holdings/manual-payouts/import', { rows }),
-  importCorporateActions: (rows: CorporateActionImportRow[]) =>
-    client.put<HoldingImportResult>('/holdings/corporate-actions/import', {
-      rows: rows.map(({ symbol, action }) => ({ symbol, ...action })),
-    }),
   purgePaymentData: () => client.delete<Holding[]>('/holdings/payouts'),
   deleteHolding: (id: string) => client.delete(`/holdings/${id}`),
   refreshHoldingSecurityDetails: (id: string) =>
     client.post<Holding>(`/holdings/${id}/security-details/refresh`),
+  refreshHoldingDividends: (id: string) =>
+    client.post<Holding>(`/holdings/${id}/dividends/refresh`),
   refreshHeldSecurityDetails: () =>
     client.post<SecurityDetailsRefreshResult>('/holdings/security-details/refresh'),
   updateManualPayoutDetails: (id, payouts) =>
     client.put<Holding>(`/holdings/${id}/manual-payouts`, { manualPayoutDetails: payouts }),
 });
-
 

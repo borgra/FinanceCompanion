@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Account } from '../domain/account';
 import { createMockHoldingRepository } from '../domain/holdingRepository';
-import { createHoldingImportTemplate, isHoldingsEligibleAccount, parseCorporateActionImport, parseHoldingImport, parsePassiveIncomeImport } from './HoldingsPage';
+import { createHoldingImportTemplate, isHoldingsEligibleAccount, parseHoldingImport, parsePassiveIncomeImport } from './HoldingsPage';
 import { normalizePayoutAmount } from './PassiveIncomePage';
 
 const investmentAccounts: Account[] = [
@@ -144,7 +144,7 @@ describe('parsePassiveIncomeImport', () => {
     )).toThrow('Ticker VTI has more than one payment on 2026-07-02.');
   });
 });
-describe('corporate action imports and normalization', () => {
+describe('corporate action normalization', () => {
   it('normalizes a payout before a forward split to the current share basis', () => {
     expect(normalizePayoutAmount(
       { exDividendDate: '2024-02-15', amount: 0.80 },
@@ -158,14 +158,6 @@ describe('corporate action imports and normalization', () => {
     expect(normalizePayoutAmount({ exDividendDate: '2024-09-30', amount: 0.80 }, [action])).toBe(0.80);
   });
 
-  it('parses standard split and reverse-split action rows', () => {
-    expect(parseCorporateActionImport(
-      'Ticker,Effective Date,Action,Old Shares,New Shares\nMSFT,2024-06-15,Stock Split,1,4\nABC,2024-09-30,Reverse Stock Split,10,1',
-    )).toEqual([
-      { symbol: 'MSFT', action: { effectiveDate: '2024-06-15', type: 'stock_split', oldShares: 1, newShares: 4 } },
-      { symbol: 'ABC', action: { effectiveDate: '2024-09-30', type: 'reverse_stock_split', oldShares: 10, newShares: 1 } },
-    ]);
-  });
 });
 
 describe('holding security refresh', () => {

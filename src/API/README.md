@@ -27,6 +27,8 @@ To open the local app without signing in, set `FINANCE_COMPANION_DISABLE_AUTH_FO
 
 Security search and security detail refresh use Alpha Vantage. Set `FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY` in `.env.local` for local startup, or map the GitHub secret `ALPHA_VANTAGE_API_KEY` in deployment workflows.
 
+Dividend research uses the deterministic, non-authoritative Phase 1 stub during development. Non-development deployments must explicitly set `FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER=stub`; this guard prevents fixture data from being enabled accidentally. A later Azure Foundry provider will replace only this server-side provider composition.
+
 ## One-shot local startup
 
 From the repository root:

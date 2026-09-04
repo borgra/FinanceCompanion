@@ -1,5 +1,6 @@
 from .account_repository import AccountRepository
 from .budget_repository import BudgetRepository
+from .dividend_research_provider import DividendResearchProvider
 from .identity_token_verifier import IdentityTokenVerifier
 from .holding_repository import HoldingRepository
 from .income_source_repository import IncomeSourceRepository
@@ -18,4 +19,5 @@ __all__ = [
     "RetirementPlanRepository",
     "SessionTokenService",
     "UserRepository",
+    "DividendResearchProvider",
 ]
