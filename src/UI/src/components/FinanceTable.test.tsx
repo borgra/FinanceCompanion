@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { useState, type KeyboardEvent } from 'react';
+import { describe, expect, it, vi } from 'vitest';
 import { FinanceTable } from './FinanceTable';
 
 function TableFixture() {
@@ -8,33 +9,14 @@ function TableFixture() {
     <>
       <button type="button">Before table</button>
       <FinanceTable aria-label="Ledger">
-        <thead>
-          <tr>
-            <th><button type="button">Header action</button></th>
-            <th>Amount</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
+        <thead><tr><th><button type="button">Header action</button></th><th>Amount</th></tr></thead>
         <tbody>
           <tr>
             <td>Opening balance</td>
-            <td><input aria-label="Opening amount" defaultValue="123.45" /></td>
-            <td>
-              <button type="button">View details</button>
-              <button type="button">Secondary action</button>
-            </td>
+            <td><input aria-label="Opening amount" defaultValue="123.45" /><button type="button">Fill down</button></td>
             <td hidden>Hidden cell</td>
           </tr>
-          <tr>
-            <td>Closing balance</td>
-            <td>
-              <select aria-label="Closing status" defaultValue="balanced">
-                <option value="balanced">Balanced</option>
-                <option value="unbalanced">Unbalanced</option>
-              </select>
-            </td>
-            <td>Final cell</td>
-          </tr>
+          <tr><td>Closing balance</td><td><button type="button" disabled>Unavailable</button>Final cell</td></tr>
         </tbody>
       </FinanceTable>
       <button type="button">After table</button>
@@ -43,56 +25,108 @@ function TableFixture() {
 }
 
 describe('FinanceTable', () => {
-  it('tabs through visible body cells in DOM order, focusing editors and selecting text values', async () => {
+  it('uses exactly one Tab stop per visible body cell', async () => {
     const user = userEvent.setup();
     render(<TableFixture />);
+    const opening = screen.getByText('Opening balance').closest('td')!;
+    const amountCell = screen.getByRole('textbox', { name: 'Opening amount' }).closest('td')!;
+    const closing = screen.getByText('Closing balance').closest('td')!;
+    const final = screen.getByText('Final cell').closest('td')!;
 
-    const openingCell = screen.getByText('Opening balance').closest('td')!;
-    const openingAmount = screen.getByRole('textbox', { name: 'Opening amount' }) as HTMLInputElement;
-    const viewDetails = screen.getByRole('button', { name: 'View details' });
-    const secondaryAction = screen.getByRole('button', { name: 'Secondary action' });
-    const closingCell = screen.getByText('Closing balance').closest('td')!;
-    const closingStatus = screen.getByRole('combobox', { name: 'Closing status' });
-
-    openingCell.focus();
-    expect(openingCell).toHaveFocus();
-
+    opening.focus();
     await user.keyboard('{Tab}');
-    expect(openingAmount).toHaveFocus();
-    expect(openingAmount).toHaveSelection(openingAmount.value);
-
+    expect(amountCell).toHaveFocus();
     await user.keyboard('{Tab}');
-    expect(viewDetails).toHaveFocus();
-
+    expect(closing).toHaveFocus();
+    await user.keyboard('{Shift>}{Tab}{/Shift}');
+    expect(amountCell).toHaveFocus();
+    final.focus();
     await user.keyboard('{Tab}');
-    expect(secondaryAction).toHaveFocus();
-
-    await user.keyboard('{Tab}');
-    expect(closingCell).toHaveFocus();
-
-    await user.keyboard('{Tab}');
-    expect(closingStatus).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'After table' })).toHaveFocus();
   });
 
-  it('keeps header actions native and does not trap focus at the first or last body cell', async () => {
+  it('uses arrows to navigate the visual grid without wrapping', async () => {
+    const user = userEvent.setup();
+    render(
+      <FinanceTable aria-label="Spanning grid"><tbody>
+        <tr><td colSpan={2}>Wide</td><td>Top right</td></tr>
+        <tr><td>Bottom left</td><td>Bottom middle</td><td>Bottom right</td></tr>
+      </tbody></FinanceTable>,
+    );
+    const wide = screen.getByText('Wide').closest('td')!;
+    const topRight = screen.getByText('Top right').closest('td')!;
+    const bottomLeft = screen.getByText('Bottom left').closest('td')!;
+    const bottomMiddle = screen.getByText('Bottom middle').closest('td')!;
+
+    wide.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(topRight).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByText('Bottom right').closest('td')).toHaveFocus();
+    bottomMiddle.focus();
+    await user.keyboard('{ArrowUp}');
+    expect(wide).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(bottomLeft).toHaveFocus();
+    await user.keyboard('{ArrowLeft}');
+    expect(bottomLeft).toHaveFocus();
+  });
+
+  it('enters nested controls on Enter, supports their native edit mode, and exits with Escape', async () => {
     const user = userEvent.setup();
     render(<TableFixture />);
+    const input = screen.getByRole('textbox', { name: 'Opening amount' }) as HTMLInputElement;
+    const cell = input.closest('td')!;
+    cell.focus();
+    await user.keyboard('{Enter}');
+    expect(input).toHaveFocus();
+    expect(input).toHaveSelection(input.value);
+    await user.keyboard('{ArrowLeft}');
+    expect(input).toHaveFocus();
+    await user.keyboard('{Escape}');
+    expect(cell).toHaveFocus();
+  });
 
-    const headerAction = screen.getByRole('button', { name: 'Header action' });
-    const openingCell = screen.getByText('Opening balance').closest('td')!;
-    const finalCell = screen.getByText('Final cell').closest('td')!;
-    const afterTable = screen.getByRole('button', { name: 'After table' });
+  it('recomputes navigation after cells are dynamically revealed', async () => {
+    function DynamicTable() {
+      const [shown, setShown] = useState(false);
+      return <><button type="button" onClick={() => setShown((current) => !current)}>Toggle</button><FinanceTable><tbody><tr><td>One</td><td aria-hidden={!shown}>Two</td><td>Three</td></tr></tbody></FinanceTable></>;
+    }
+    const user = userEvent.setup();
+    render(<DynamicTable />);
+    const one = screen.getByText('One').closest('td')!;
+    one.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByText('Three').closest('td')).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Toggle' }));
+    await waitFor(() => expect(screen.getByText('Two').closest('td')).toHaveAttribute('tabindex', '0'));
+    one.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByText('Two').closest('td')).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Toggle' }));
+    await waitFor(() => expect(screen.getByText('Two').closest('td')).not.toHaveAttribute('tabindex'));
+  });
 
-    headerAction.focus();
-    await user.keyboard('{Tab}');
-    expect(openingCell).toHaveFocus();
+  it('does not consume Enter when a nested action button has focus', async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    render(<FinanceTable><tbody><tr><td>Label</td><td><button type="button" onClick={onAction}>Details</button></td></tr></tbody></FinanceTable>);
+    const actionCell = screen.getByRole('button', { name: 'Details' }).closest('td')!;
+    actionCell.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('button', { name: 'Details' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onAction).toHaveBeenCalledOnce();
+  });
 
-    openingCell.focus();
-    await user.keyboard('{Shift>}{Tab}{/Shift}');
-    expect(headerAction).toHaveFocus();
-
-    finalCell.focus();
-    await user.keyboard('{Tab}');
-    expect(afterTable).toHaveFocus();
+  it('composes caller capture handlers and respects prevented navigation', async () => {
+    const user = userEvent.setup();
+    const onKeyDownCapture = vi.fn((event: KeyboardEvent<HTMLTableElement>) => event.preventDefault());
+    render(<FinanceTable onKeyDownCapture={onKeyDownCapture}><tbody><tr><td>One</td><td>Two</td></tr></tbody></FinanceTable>);
+    const one = screen.getByText('One').closest('td')!;
+    one.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onKeyDownCapture).toHaveBeenCalled();
+    expect(one).toHaveFocus();
   });
 });

@@ -3197,6 +3197,14 @@ button.security-result:hover {
   white-space: nowrap;
 }
 
+.keyboard-navigable-table tbody td:focus-visible,
+.keyboard-navigable-table tbody th:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--md-sys-color-secondary);
+  outline-offset: -2px;
+}
+
 /* Header Styling */
 .excel-table th {
   background-color: var(--md-sys-color-surface-container-highest) !important;

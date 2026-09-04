@@ -400,11 +400,14 @@ describe('InvestingPage', () => {
     const alphaTaxable = screen.getByLabelText('ALPH quantity for Fidelity Taxable Brokerage');
     const alphaRetirement = screen.getByLabelText('ALPH quantity for Fidelity 401k');
     const zebraRetirement = screen.getByLabelText('ZBRA quantity for Fidelity 401k');
-    alphaTaxable.focus();
-    fireEvent.keyDown(alphaTaxable, { key: 'ArrowRight' });
-    await waitFor(() => expect(alphaRetirement).toHaveFocus());
-    fireEvent.keyDown(alphaRetirement, { key: 'ArrowUp' });
-    await waitFor(() => expect(zebraRetirement).toHaveFocus());
+    const alphaTaxableCell = alphaTaxable.closest('td')!;
+    const alphaRetirementCell = alphaRetirement.closest('td')!;
+    const zebraRetirementCell = zebraRetirement.closest('td')!;
+    alphaTaxableCell.focus();
+    fireEvent.keyDown(alphaTaxableCell, { key: 'ArrowRight' });
+    await waitFor(() => expect(alphaRetirementCell).toHaveFocus());
+    fireEvent.keyDown(alphaRetirementCell, { key: 'ArrowUp' });
+    await waitFor(() => expect(zebraRetirementCell).toHaveFocus());
   });
 
   it('filters holdings to a selected account and restores all holdings', async () => {
@@ -612,5 +615,4 @@ describe('InvestingPage', () => {
     /* eslint-enable @typescript-eslint/no-explicit-any */
   });
 });
-
 

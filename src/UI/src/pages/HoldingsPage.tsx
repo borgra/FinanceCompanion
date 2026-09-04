@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { SecurityDetailsDialog } from '../components/SecurityDetailsDialog';
 import {
   FinanceMoneyCellInput,
@@ -339,41 +339,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     }
     return values;
   }, [accounts, holdings]);
-
-  const focusHoldingCell = (holdingIndex: number, accountIndex: number) => {
-    const holding = orderedHoldings[holdingIndex];
-    const account = managedAccounts[accountIndex];
-    if (!holding || !account) return;
-    window.requestAnimationFrame(() => {
-      document.querySelector<HTMLInputElement>(
-        `[data-ledger-cell="holding-${holding.id}-${account.id}"]`,
-      )?.focus();
-    });
-  };
-
-  const handleHoldingCellKeyDown = (
-    event: KeyboardEvent<HTMLInputElement>,
-    holdingIndex: number,
-    accountIndex: number,
-  ) => {
-    const movement = {
-      Enter: [1, 0],
-      ArrowUp: [-1, 0],
-      ArrowDown: [1, 0],
-      ArrowLeft: [0, -1],
-      ArrowRight: [0, 1],
-    } as const;
-    const delta = movement[event.key as keyof typeof movement];
-    if (!delta) return;
-
-    const nextHoldingIndex = holdingIndex + delta[0];
-    const nextAccountIndex = accountIndex + delta[1];
-    if (!orderedHoldings[nextHoldingIndex] || !managedAccounts[nextAccountIndex]) return;
-
-    event.preventDefault();
-    setSelectedHoldingId(orderedHoldings[nextHoldingIndex].id);
-    focusHoldingCell(nextHoldingIndex, nextAccountIndex);
-  };
 
   const toggleSort = (key: 'name' | 'symbol') => {
     setSort((current) => current?.key === key
@@ -900,7 +865,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                 </td>
               </tr>
             ) : (
-              orderedHoldings.map((holding, holdingIndex) => {
+              orderedHoldings.map((holding) => {
                 const totalQuantity = managedAccounts.reduce(
                   (total, account) => total + getQuantity(holding, account.id),
                   0,
@@ -938,14 +903,13 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                         formatValue={formatMoney}
                       />
                     </td>
-                    {managedAccounts.map((account, accountIndex) => (
+                    {managedAccounts.map((account) => (
                       <td key={account.id} title={accountNameById.get(account.id)} className={selectedAccountFilterId === account.id ? 'holdings-account-column-highlight' : undefined}>
                         <FinanceMoneyCellInput
                           value={getQuantity(holding, account.id)}
                           formatValue={formatQuantity}
                           onValueChange={(value) => updateQuantity(holding.id, account.id, value)}
                           focusId={`holding-${holding.id}-${account.id}`}
-                          onKeyDown={(event) => handleHoldingCellKeyDown(event, holdingIndex, accountIndex)}
                           onFocus={() => setSelectedHoldingId(holding.id)}
                           aria-label={`${holding.security.symbol} quantity for ${account.name}`}
                         />

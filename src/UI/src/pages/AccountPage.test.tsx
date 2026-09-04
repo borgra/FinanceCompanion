@@ -319,7 +319,7 @@ describe('AccountPage', () => {
     await userEvent.click(firstInvestCell!);
     await userEvent.keyboard('{Enter}');
 
-    await waitFor(() => expect(document.activeElement).toBe(secondInvestCell));
+    await waitFor(() => expect(secondInvestCell?.closest('td')).toHaveFocus());
   });
 
   it('shows the starting balance as current balance when an account has no monthly rows', async () => {

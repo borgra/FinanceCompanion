@@ -2,13 +2,12 @@ import type {
   ChangeEvent,
   CSSProperties,
   InputHTMLAttributes,
-  KeyboardEvent,
   ReactNode,
   TableHTMLAttributes,
   ThHTMLAttributes,
 } from 'react';
 import { useEffect, useState } from 'react';
-import { useTableBodyCellTabNavigation } from './useTableBodyCellTabNavigation';
+import { KeyboardNavigableTable } from './KeyboardNavigableTable';
 
 type FinanceTableProps = TableHTMLAttributes<HTMLTableElement> & {
   children: ReactNode;
@@ -37,6 +36,7 @@ type FinanceMoneyCellInputProps = Omit<
   fillDownLabel?: string;
   focusId?: string;
   formatValue: (value: number) => string;
+  /** @deprecated Navigation is owned by KeyboardNavigableTable. */
   nextFocusId?: string;
   onFillDown?: (value: string) => void;
   onValueChange: (value: string) => void;
@@ -60,21 +60,15 @@ export function FinanceTable({
   onKeyDownCapture,
   ...tableProps
 }: FinanceTableProps) {
-  const tableNavigation = useTableBodyCellTabNavigation();
-
   return (
     <div className={joinClassNames('excel-wrapper', wrapperClassName)} style={wrapperStyle}>
-      <table
-        ref={tableNavigation.ref}
+      <KeyboardNavigableTable
         className={joinClassNames('excel-table', className)}
         {...tableProps}
-        onKeyDownCapture={(event) => {
-          onKeyDownCapture?.(event);
-          tableNavigation.onKeyDownCapture(event);
-        }}
+        onKeyDownCapture={onKeyDownCapture}
       >
         {children}
-      </table>
+      </KeyboardNavigableTable>
     </div>
   );
 }
@@ -192,7 +186,7 @@ export function FinanceMoneyCellInput({
   fillDownLabel,
   focusId,
   formatValue,
-  nextFocusId,
+  nextFocusId: _nextFocusId,
   onBlur,
   onFillDown,
   onFocus,
@@ -200,6 +194,7 @@ export function FinanceMoneyCellInput({
   value,
   ...inputProps
 }: FinanceMoneyCellInputProps) {
+  void _nextFocusId;
   const [isFocused, setIsFocused] = useState(false);
   const [draftValue, setDraftValue] = useState(value === 0 ? '' : String(value));
 
@@ -212,23 +207,6 @@ export function FinanceMoneyCellInput({
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     setDraftValue(event.target.value);
     onValueChange(event.target.value);
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    inputProps.onKeyDown?.(event);
-    if (event.defaultPrevented || event.key !== 'Enter') return;
-
-    event.preventDefault();
-    event.currentTarget.blur();
-
-    if (nextFocusId) {
-      window.requestAnimationFrame(() => {
-        const nextInput = document.querySelector<HTMLInputElement>(
-          `[data-ledger-cell="${nextFocusId}"]`,
-        );
-        nextInput?.focus();
-      });
-    }
   };
 
   return (
@@ -254,7 +232,6 @@ export function FinanceMoneyCellInput({
           setIsFocused(false);
           onBlur?.(event);
         }}
-        onKeyDown={handleKeyDown}
         style={isFocused && onFillDown ? { paddingLeft: '22px' } : undefined}
       />
       {isFocused && onFillDown ? (
