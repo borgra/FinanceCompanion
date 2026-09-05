@@ -36,7 +36,59 @@ describe('SettingsConfigurationPanel', () => {
     await user.click(checkbox);
     await user.click(screen.getByRole('button', { name: /save net worth configuration/i }));
     expect(putConfiguration).toHaveBeenCalledWith({ trackMortgageInNetWorth: true, netWorthGoal: 0 });
-    expect(await screen.findByText('Mortgage tracking configuration saved.')).toBeInTheDocument();
+    expect(await screen.findByText('Net worth configuration saved.')).toBeInTheDocument();
+  });
+
+  it('saves a goal without attempting to persist the mortgage schedule', async () => {
+    const user = userEvent.setup();
+    const putConfiguration = vi.fn().mockResolvedValue({ beginningNetWorth: 100000, trackMortgageInNetWorth: false, netWorthGoal: 2000000, updatedAt: '2026-01-01T00:00:00Z' });
+    const putMortgageSchedule = vi.fn().mockRejectedValue(new Error('schedule unavailable'));
+    render(<SettingsConfigurationPanel repository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={{ get: async () => ({ beginningNetWorth: 100000, trackMortgageInNetWorth: false, netWorthGoal: 0, updatedAt: '2026-01-01T00:00:00Z' }), put: async (value) => ({ beginningNetWorth: value, updatedAt: '2026-01-01T00:00:00Z' }), putConfiguration, putMortgageSchedule }} />);
+
+    const goal = await screen.findByRole('textbox', { name: 'Net Worth Goal' });
+    await user.type(goal, '2000000');
+    await user.click(screen.getByRole('button', { name: /save net worth configuration/i }));
+
+    expect(putConfiguration).toHaveBeenCalledWith({ trackMortgageInNetWorth: false, netWorthGoal: 2000000 });
+    expect(putMortgageSchedule).not.toHaveBeenCalled();
+    expect(goal).toHaveValue('2000000');
+    expect(await screen.findByText('Net worth configuration saved.')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('saves mortgage assumptions through the dedicated action', async () => {
+    const user = userEvent.setup();
+    const putMortgageSchedule = vi.fn().mockResolvedValue({
+      beginningNetWorth: 100000,
+      mortgageSchedule: {
+        houseValue: 900000,
+        startingOutstandingMortgage: 320000,
+        annualInterestRate: 0.05,
+        monthlyPrincipalPayment: 981.13,
+        monthlyAdditionalPrincipalPayment: 300,
+        scheduleStartMonth: '2025-03',
+      },
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    render(<SettingsConfigurationPanel repository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={{ get: async () => ({ beginningNetWorth: 100000, mortgageSchedule: { houseValue: 800000, startingOutstandingMortgage: 320000, annualInterestRate: 0.0375, monthlyPrincipalPayment: 981.13, monthlyAdditionalPrincipalPayment: 300, scheduleStartMonth: '2025-03' }, updatedAt: '2026-01-01T00:00:00Z' }), put: async (value) => ({ beginningNetWorth: value, updatedAt: '2026-01-01T00:00:00Z' }), putMortgageSchedule }} />);
+
+    const houseValue = await screen.findByDisplayValue('800000');
+    const annualInterestRate = screen.getByDisplayValue('0.0375');
+    await user.clear(houseValue);
+    await user.type(houseValue, '900000');
+    await user.clear(annualInterestRate);
+    await user.type(annualInterestRate, '0.05');
+    await user.click(screen.getByRole('button', { name: /save mortgage assumptions/i }));
+
+    expect(putMortgageSchedule).toHaveBeenCalledWith(expect.objectContaining({
+      houseValue: 900000,
+      annualInterestRate: 0.05,
+      startingOutstandingMortgage: 320000,
+      monthlyPrincipalPayment: 981.13,
+      monthlyAdditionalPrincipalPayment: 300,
+      scheduleStartMonth: '2025-03',
+    }));
+    expect(await screen.findByText('Mortgage assumptions saved.')).toBeInTheDocument();
   });
 
 describe('mortgage schedule deletion', () => {
