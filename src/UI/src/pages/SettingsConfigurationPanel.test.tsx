@@ -56,6 +56,33 @@ describe('SettingsConfigurationPanel', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('keeps a submitted goal when a partial successful response omits it', async () => {
+    const user = userEvent.setup();
+    const putConfiguration = vi.fn().mockResolvedValue({ beginningNetWorth: 100000, trackMortgageInNetWorth: false, updatedAt: '2026-01-01T00:00:00Z' });
+    render(<SettingsConfigurationPanel repository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={{ get: async () => ({ beginningNetWorth: 100000, trackMortgageInNetWorth: false, updatedAt: '2026-01-01T00:00:00Z' }), put: async (value) => ({ beginningNetWorth: value, updatedAt: '2026-01-01T00:00:00Z' }), putConfiguration }} />);
+
+    const goal = await screen.findByRole('textbox', { name: 'Net Worth Goal' });
+    await user.type(goal, '2000000');
+    await user.click(screen.getByRole('button', { name: /save net worth configuration/i }));
+
+    expect(goal).toHaveValue('2000000');
+    expect(await screen.findByText('Net worth configuration saved.')).toBeInTheDocument();
+  });
+
+  it('does not report success when the configuration response changes the submitted goal', async () => {
+    const user = userEvent.setup();
+    const putConfiguration = vi.fn().mockResolvedValue({ beginningNetWorth: 100000, trackMortgageInNetWorth: false, netWorthGoal: 0, updatedAt: '2026-01-01T00:00:00Z' });
+    render(<SettingsConfigurationPanel repository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={{ get: async () => ({ beginningNetWorth: 100000, trackMortgageInNetWorth: false, updatedAt: '2026-01-01T00:00:00Z' }), put: async (value) => ({ beginningNetWorth: value, updatedAt: '2026-01-01T00:00:00Z' }), putConfiguration }} />);
+
+    const goal = await screen.findByRole('textbox', { name: 'Net Worth Goal' });
+    await user.type(goal, '2000000');
+    await user.click(screen.getByRole('button', { name: /save net worth configuration/i }));
+
+    expect(goal).toHaveValue('2000000');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Net Worth Goal was not saved');
+    expect(screen.queryByText('Net worth configuration saved.')).not.toBeInTheDocument();
+  });
+
   it('saves mortgage assumptions through the dedicated action', async () => {
     const user = userEvent.setup();
     const putMortgageSchedule = vi.fn().mockResolvedValue({

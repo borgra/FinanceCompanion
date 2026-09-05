@@ -99,8 +99,9 @@ describe('NetWorthPage', () => {
     expect(screen.getByRole('heading', { name: 'Current Month by Account Type' })).toBeInTheDocument();
     const allocation = screen.getByRole('progressbar', { name: 'Current month net worth allocation' });
     expect(allocation).toHaveAttribute('aria-valuenow', '15400');
-    expect(allocation).toHaveAttribute('aria-valuemax', '154000');
-    expect(allocation.querySelector('.net-worth-allocation-fill')).toHaveStyle({ width: '10%' });
+    expect(allocation).toHaveAttribute('aria-valuemax', '15400');
+    expect(allocation).toHaveAttribute('aria-valuetext', '$15,400.00 current allocation');
+    expect(allocation.querySelector('.net-worth-allocation-fill')).toHaveStyle({ width: '100%' });
     expect(screen.getByText('Banking Checking')).toBeInTheDocument();
     expect(screen.getByText('Banking Savings')).toBeInTheDocument();
     expect(screen.getByText('Taxable Investing')).toBeInTheDocument();
@@ -113,6 +114,7 @@ describe('NetWorthPage', () => {
     const taxableValue = screen.getByRole('textbox', { name: 'Fidelity Taxable Jul-26 value' });
     const retirementValue = screen.getByRole('textbox', { name: 'Fidelity 401k Jul-26 value' });
     const hsaValue = screen.getByRole('textbox', { name: 'Fidelity HSA Jul-26 value' });
+    expect(taxableValue.closest('td')).not.toHaveClass('net-worth-account-cell');
 
     await user.clear(taxableValue);
     await user.type(taxableValue, '5000');

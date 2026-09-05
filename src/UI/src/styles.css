@@ -3652,17 +3652,11 @@ button.security-result:hover {
 .net-worth-variance-percent.is-negative { color: #d97706; }
 .net-worth-variance-percent.is-neutral { color: var(--md-sys-color-on-surface-variant); }
 
-.net-worth-account-header,
-.net-worth-account-cell {
-  box-shadow: inset 0 -3px 0 var(--net-worth-category-color, transparent);
-}
-
-.net-worth-account-cell {
-  border-left: 1px solid color-mix(in srgb, var(--net-worth-category-color, transparent) 42%, transparent);
-}
-
-.net-worth-group-header {
-  box-shadow: inset 0 -4px 0 color-mix(in srgb, var(--net-worth-category-color, var(--md-sys-color-primary)) 75%, transparent);
+.excel-table th.net-worth-account-header,
+.excel-table th.net-worth-group-header {
+  background-color: color-mix(in srgb, var(--net-worth-category-color, var(--md-sys-color-surface-container)) 16%, var(--md-sys-color-surface-container)) !important;
+  border-bottom-color: transparent !important;
+  box-shadow: none !important;
 }
 
 .net-worth-visual-grid {

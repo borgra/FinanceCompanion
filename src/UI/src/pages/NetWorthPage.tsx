@@ -223,12 +223,12 @@ function AccountTypeProgressBars({ row, accounts, goal }: { row: MonthlyNetWorth
       .reduce((sum, account) => sum + (row.valuesByAccountId.get(account.id) ?? 0), 0),
   }));
   const positiveTotal = values.reduce((sum, item) => sum + Math.max(0, item.value), 0);
-  const scale = goal > 0 ? goal : Math.max(positiveTotal * 10, 1);
-  const totalWidth = goal > 0 ? Math.round(Math.min(100, positiveTotal / goal * 100) * 10) / 10 : positiveTotal > 0 ? 10 : 0;
+  const scale = goal > 0 ? goal : Math.max(positiveTotal, 1);
+  const totalWidth = goal > 0 ? Math.round(Math.min(100, positiveTotal / goal * 100) * 10) / 10 : positiveTotal > 0 ? 100 : 0;
   const accessibleValue = goal > 0 ? Math.min(goal, positiveTotal) : positiveTotal;
   const accessibleText = goal > 0
     ? `${formatMoney(positiveTotal)} of ${formatMoney(goal)}${positiveTotal > goal ? ' (over goal)' : ''}`
-    : `${formatMoney(positiveTotal)} at a 10 percent display scale`;
+    : `${formatMoney(positiveTotal)} current allocation`;
   return (
     <section className="net-worth-visual-card" aria-labelledby="account-type-progress-title">
       <h2 id="account-type-progress-title" style={{ fontSize: '1.05rem', marginBottom: 8 }}>Current Month by Account Type</h2>
@@ -435,9 +435,9 @@ export function NetWorthPage({ accountRepository, incomeRepository, holdingRepos
           <tr>{groups.flatMap((group) => group.accounts.map((account) => { const category = getAccountCategory(account); return <FinanceTableHeaderCell className={category ? `net-worth-account-header net-worth-category-${category.id}` : undefined} style={category ? categoryStyle(category) : undefined} key={account.id} isEditable={account.type === 'Investment' && account.investmentAccountType !== 'Pension'}>{account.name}</FinanceTableHeaderCell>; }))}</tr></thead>
         <tbody>{rows.map((row) => <tr key={row.month} className={row.month === currentMonth ? 'excel-row-current' : undefined}>
           <td className="excel-bold-col">{row.month}</td>
-          {groups.flatMap((group) => group.accounts.map((account) => { const category = getAccountCategory(account); return <td className={category ? `net-worth-account-cell net-worth-category-${category.id}` : undefined} style={category ? categoryStyle(category) : undefined} key={`${row.month}-${account.id}`}>{account.type === 'Investment' && account.investmentAccountType !== 'Pension'
+          {groups.flatMap((group) => group.accounts.map((account) => <td key={`${row.month}-${account.id}`}>{account.type === 'Investment' && account.investmentAccountType !== 'Pension'
             ? row.isFuture ? <span aria-label={`${account.name} ${row.month} forecast hidden`}>—</span> : <FinanceMoneyCellInput aria-label={`${account.name} ${row.month} value`} value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} onValueChange={(value) => updateValueLocally(account.id, row.month, value)} />
-            : row.isFuture ? <span aria-label={`${account.name} ${row.month} forecast hidden`}>—</span> : <FinanceMoneyCellValue value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} />}</td>; }))}
+            : row.isFuture ? <span aria-label={`${account.name} ${row.month} forecast hidden`}>—</span> : <FinanceMoneyCellValue value={row.valuesByAccountId.get(account.id) ?? 0} formatValue={formatMoney} />}</td>))}
           {trackMortgage ? <td className="excel-bold-col">{row.isFuture ? <span>—</span> : <FinanceMoneyCellValue value={row.homeValue} formatValue={formatMoney} />}</td> : null}<td className="excel-bold-col">{row.isFuture ? <span>—</span> : <FinanceMoneyCellValue value={row.total} formatValue={formatMoney} />}</td>
         </tr>)}</tbody>
       </FinanceTable>
