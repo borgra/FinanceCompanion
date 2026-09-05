@@ -83,22 +83,28 @@ describe('NetWorthPage', () => {
     expect(screen.getByText('Fidelity Taxable')).toBeInTheDocument();
     expect(screen.getByText('Fidelity 401k')).toBeInTheDocument();
     expect(screen.getByText('Fidelity HSA')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Fidelity HSA' })).toHaveClass('net-worth-category-retirement');
 
     const summary = screen.getByLabelText('Net worth summary');
     expect(within(summary).getByText('$15,400.00')).toBeInTheDocument();
     expect(within(summary).getByText('$15,000.00')).toBeInTheDocument();
     expect(within(summary).getByText('$400.00')).toBeInTheDocument();
-    expect(within(summary).getByText('+2.7%')).toBeInTheDocument();
+    expect(summary.querySelector('.net-worth-variance-percent')).toHaveClass('is-positive');
+    expect(within(summary).getByText('$400.00').parentElement).toHaveTextContent('$400.00 (+2.7%)');
 
     const chart = screen.getByRole('img', { name: /net worth by month graph/i });
     expect(chart).toBeInTheDocument();
     expect(within(chart).getByText('$15,000.00 reference')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Net Worth by Month' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Current Month by Account Type' })).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Banking Checking' })).toHaveAttribute('aria-valuenow', '1000');
-    expect(screen.getByRole('progressbar', { name: 'Banking Savings' })).toHaveAttribute('aria-valuenow', '2500');
-    expect(screen.getByRole('progressbar', { name: 'Taxable Investing' })).toHaveAttribute('aria-valuenow', '4000');
-    expect(screen.getByRole('progressbar', { name: 'Retirement Investing' })).toHaveAttribute('aria-valuenow', '7900');
+    const allocation = screen.getByRole('progressbar', { name: 'Current month net worth allocation' });
+    expect(allocation).toHaveAttribute('aria-valuenow', '15400');
+    expect(allocation).toHaveAttribute('aria-valuemax', '154000');
+    expect(allocation.querySelector('.net-worth-allocation-fill')).toHaveStyle({ width: '10%' });
+    expect(screen.getByText('Banking Checking')).toBeInTheDocument();
+    expect(screen.getByText('Banking Savings')).toBeInTheDocument();
+    expect(screen.getByText('Taxable Investing')).toBeInTheDocument();
+    expect(screen.getByText('Retirement Investing')).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /Primary Checking.*snapshot/i })).not.toBeInTheDocument();
 
     const saveChanges = screen.getByRole('button', { name: 'Save changes' });
@@ -195,6 +201,7 @@ describe('NetWorthPage', () => {
 
     expect(await screen.findByRole('columnheader', { name: 'Pension' })).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /City Pension.*value/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'City Pension' })).toHaveClass('net-worth-category-retirement');
     expect(within(screen.getByRole('row', { name: /Jan-26/ })).getAllByText('$999,999.00')).toHaveLength(2);
     expect(within(screen.getByRole('row', { name: /Feb-26/ })).getAllByText('$10,302.00')[0]).toBeInTheDocument();
   });
@@ -247,6 +254,38 @@ describe('NetWorthPage', () => {
     expect(within(goal).getByText('$200.00')).toBeInTheDocument();
     expect(within(goal).getByText('$90.00')).toBeInTheDocument();
     expect(within(goal).getByText('55.0%')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Current month net worth allocation' }).querySelector('.net-worth-allocation-fill')).toHaveStyle({ width: '55%' });
+  });
+
+  it('caps over-goal progressbar semantics while retaining the true over-goal amount in accessible text', async () => {
+    vi.setSystemTime(new Date(2026, 6, 15, 12));
+    const netWorthRepository = createMockNetWorthRepository(0);
+    vi.spyOn(netWorthRepository, 'get').mockResolvedValue({
+      beginningNetWorth: 0,
+      monthlyAccountValues: {},
+      netWorthGoal: 100,
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [account({ id: 'taxable', name: 'Taxable', type: 'Investment', startingBalance: 250, investmentAccountType: 'Taxable', manageHoldings: true, yearlyContribution: 0 })] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={netWorthRepository} />);
+
+    const allocation = await screen.findByRole('progressbar', { name: 'Current month net worth allocation' });
+    expect(allocation).toHaveAttribute('aria-valuemax', '100');
+    expect(allocation).toHaveAttribute('aria-valuenow', '100');
+    expect(allocation).toHaveAttribute('aria-valuetext', '$250.00 of $100.00 (over goal)');
+    expect(allocation.querySelector('.net-worth-allocation-fill')).toHaveStyle({ width: '100%' });
+  });
+
+  it('renders the visual cards as a shared no-scroll layout contract', async () => {
+    vi.setSystemTime(new Date(2026, 6, 15, 12));
+    render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [account({ id: 'checking', name: 'Checking', startingBalance: 100 })] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={createMockNetWorthRepository(0)} />);
+
+    const visualGrid = await screen.findByRole('heading', { name: 'Net Worth by Month' });
+    const grid = visualGrid.parentElement?.parentElement;
+    expect(grid).toHaveClass('net-worth-visual-grid');
+    const bodies = Array.from(grid?.querySelectorAll('.net-worth-visual-card-body') ?? []);
+    expect(bodies).toHaveLength(2);
+    expect(bodies.every((body) => body.classList.contains('net-worth-visual-card-body'))).toBe(true);
+    expect(grid?.querySelector('svg')).not.toHaveStyle({ minWidth: '680px' });
   });
 
   it('snapshots current source values into only the current grid month and preserves missing sources', async () => {

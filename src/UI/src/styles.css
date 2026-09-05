@@ -3609,6 +3609,189 @@ button.security-result:hover {
   font-size: 0.78rem;
 }
 
+/* Net Worth visual system: the same category colors appear in the allocation bar and table. */
+.net-worth-category-checking { --net-worth-category-color: #4f8cff; }
+.net-worth-category-savings { --net-worth-category-color: #20b486; }
+.net-worth-category-taxable { --net-worth-category-color: #9b7aff; }
+.net-worth-category-retirement { --net-worth-category-color: #e98b49; }
+
+.net-worth-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+
+.net-worth-summary-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  background: var(--md-sys-color-surface);
+}
+
+.net-worth-summary-card p {
+  margin: 0;
+  font-size: .78rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.net-worth-summary-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.15rem;
+  white-space: nowrap;
+}
+
+.net-worth-variance-percent {
+  font-size: .95em;
+}
+
+.net-worth-variance-percent.is-positive { color: #188038; }
+.net-worth-variance-percent.is-negative { color: #d97706; }
+.net-worth-variance-percent.is-neutral { color: var(--md-sys-color-on-surface-variant); }
+
+.net-worth-account-header,
+.net-worth-account-cell {
+  box-shadow: inset 0 -3px 0 var(--net-worth-category-color, transparent);
+}
+
+.net-worth-account-cell {
+  border-left: 1px solid color-mix(in srgb, var(--net-worth-category-color, transparent) 42%, transparent);
+}
+
+.net-worth-group-header {
+  box-shadow: inset 0 -4px 0 color-mix(in srgb, var(--net-worth-category-color, var(--md-sys-color-primary)) 75%, transparent);
+}
+
+.net-worth-visual-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+  margin-top: 24px;
+}
+
+.net-worth-visual-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  margin-top: 0 !important;
+}
+
+.net-worth-visual-card h2 {
+  flex: 0 0 auto;
+}
+
+.net-worth-visual-card-body {
+  box-sizing: border-box;
+  min-height: 320px;
+  height: 320px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  background: var(--md-sys-color-surface);
+}
+
+.net-worth-chart-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.net-worth-chart-body svg {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.net-worth-chart-body p {
+  flex: 0 0 auto;
+  margin: 4px 0 0;
+  font-size: .75rem;
+}
+
+.net-worth-allocation-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+}
+
+.net-worth-allocation-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: .85rem;
+}
+
+.net-worth-allocation-heading strong {
+  color: var(--md-sys-color-on-surface);
+  font-size: .95rem;
+}
+
+.net-worth-allocation-track {
+  height: 44px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 75%, transparent);
+  border-radius: 999px;
+  background: var(--md-sys-color-surface-container-high);
+  box-shadow: inset 0 2px 5px rgba(15, 23, 42, .16), 0 5px 14px rgba(15, 23, 42, .12);
+}
+
+.net-worth-allocation-fill {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  transition: width 240ms ease;
+}
+
+.net-worth-allocation-segment {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  background: var(--net-worth-category-color);
+  box-shadow: inset -1px 0 rgba(255, 255, 255, .34);
+}
+
+.net-worth-allocation-segment:last-child { box-shadow: none; }
+
+.net-worth-allocation-legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+
+.net-worth-allocation-legend-item {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: .8rem;
+}
+
+.net-worth-allocation-legend-item strong {
+  color: var(--md-sys-color-on-surface);
+  font-size: .8rem;
+  white-space: nowrap;
+}
+
+.net-worth-allocation-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--net-worth-category-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--net-worth-category-color) 20%, transparent);
+}
+
 @media (max-width: 980px) {
   .accounts-top-container {
     grid-template-columns: 1fr;
@@ -3653,6 +3836,10 @@ button.security-result:hover {
   .passive-income-section-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .net-worth-visual-grid {
+    grid-template-columns: 1fr;
   }
 }
 
