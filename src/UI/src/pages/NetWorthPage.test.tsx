@@ -90,12 +90,15 @@ describe('NetWorthPage', () => {
     expect(within(summary).getByText('$400.00')).toBeInTheDocument();
     expect(within(summary).getByText('+2.7%')).toBeInTheDocument();
 
-    const chart = screen.getByRole('img', { name: /annual net worth graph/i });
+    const chart = screen.getByRole('img', { name: /net worth by month graph/i });
     expect(chart).toBeInTheDocument();
     expect(within(chart).getByText('$15,000.00 reference')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Current month by account type' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: /current month account-type net worth distribution/i })).toBeInTheDocument();
-    expect(screen.getByLabelText('Account type totals')).toHaveTextContent('Checking: $1,000.00');
+    expect(screen.getByRole('heading', { name: 'Net Worth by Month' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Current Month by Account Type' })).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Banking Checking' })).toHaveAttribute('aria-valuenow', '1000');
+    expect(screen.getByRole('progressbar', { name: 'Banking Savings' })).toHaveAttribute('aria-valuenow', '2500');
+    expect(screen.getByRole('progressbar', { name: 'Taxable Investing' })).toHaveAttribute('aria-valuenow', '4000');
+    expect(screen.getByRole('progressbar', { name: 'Retirement Investing' })).toHaveAttribute('aria-valuenow', '7900');
     expect(screen.queryByRole('textbox', { name: /Primary Checking.*snapshot/i })).not.toBeInTheDocument();
 
     const saveChanges = screen.getByRole('button', { name: 'Save changes' });
@@ -223,6 +226,27 @@ describe('NetWorthPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Snapshot' }));
     expect(within(screen.getByRole('row', { name: /Aug-26/ })).getAllByText('$0.00').length).toBeGreaterThan(0);
+  });
+
+  it('keeps future saved values out of the entry grid and uses an actual-to-forecast chart boundary', async () => {
+    vi.setSystemTime(new Date(2026, 6, 15, 12));
+    const netWorthRepository = createMockNetWorthRepository(100);
+    vi.spyOn(netWorthRepository, 'get').mockResolvedValue({
+      beginningNetWorth: 100,
+      monthlyAccountValues: { taxable: { 'Jul-26': 110, 'Aug-26': 9999 } },
+      netWorthGoal: 200,
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [account({ id: 'taxable', name: 'Taxable', type: 'Investment', startingBalance: 100, investmentAccountType: 'Taxable', manageHoldings: true, yearlyContribution: 0 })] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={netWorthRepository} />);
+
+    expect(await screen.findByRole('textbox', { name: 'Taxable Jul-26 value' })).toHaveValue('$110.00');
+    expect(screen.queryByRole('textbox', { name: 'Taxable Aug-26 value' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Taxable Aug-26 forecast hidden')).toHaveTextContent('—');
+    expect(screen.getByText(/Aug-26: .* Forecast/)).not.toHaveTextContent('$9,999.00');
+    const goal = screen.getByLabelText('Net worth goal');
+    expect(within(goal).getByText('$200.00')).toBeInTheDocument();
+    expect(within(goal).getByText('$90.00')).toBeInTheDocument();
+    expect(within(goal).getByText('55.0%')).toBeInTheDocument();
   });
 
   it('snapshots current source values into only the current grid month and preserves missing sources', async () => {

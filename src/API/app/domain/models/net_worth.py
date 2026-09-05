@@ -8,3 +8,4 @@ class NetWorth:
     updated_at: str
     track_mortgage_in_net_worth: bool = False
     mortgage_schedule: dict[str, float | str] | None = None
+    net_worth_goal: int = 0

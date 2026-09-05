@@ -48,6 +48,26 @@ def test_monthly_account_values_are_persisted_without_overwriting_the_baseline()
     assert fetched.json()['monthlyAccountValues'] == values.json()['monthlyAccountValues']
 
 
+def test_net_worth_goal_is_a_durable_nonnegative_whole_number_configuration():
+    client = build_test_client()
+    authenticate(client)
+
+    assert client.get('/api/v1/net-worth').json()['netWorthGoal'] == 0
+
+    configured = client.put('/api/v1/net-worth/configuration', json={'netWorthGoal': 2_000_000})
+    assert configured.status_code == 200
+    assert configured.json()['netWorthGoal'] == 2_000_000
+
+    mortgage_visibility = client.put('/api/v1/net-worth/configuration', json={'trackMortgageInNetWorth': True})
+    assert mortgage_visibility.status_code == 200
+    assert mortgage_visibility.json()['netWorthGoal'] == 2_000_000
+    assert mortgage_visibility.json()['trackMortgageInNetWorth'] is True
+
+    for value in (-1, 12.5, 'not-a-number'):
+        assert client.put('/api/v1/net-worth/configuration', json={'netWorthGoal': value}).status_code == 422
+    assert client.put('/api/v1/net-worth/configuration', json={}).status_code == 422
+
+
 def test_net_worth_rejects_non_finite_values_and_requires_authentication():
     client = build_test_client()
 

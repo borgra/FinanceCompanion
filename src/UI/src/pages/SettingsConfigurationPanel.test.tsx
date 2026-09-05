@@ -30,12 +30,12 @@ describe('SettingsConfigurationPanel', () => {
 
   it('explicitly saves mortgage-tab visibility', async () => {
     const user = userEvent.setup();
-    const putConfiguration = vi.fn().mockResolvedValue({ beginningNetWorth: 100000, trackMortgageInNetWorth: true, updatedAt: '2026-01-01T00:00:00Z' });
+    const putConfiguration = vi.fn().mockResolvedValue({ beginningNetWorth: 100000, trackMortgageInNetWorth: true, netWorthGoal: 0, updatedAt: '2026-01-01T00:00:00Z' });
     render(<SettingsConfigurationPanel repository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={{ get: async () => ({ beginningNetWorth: 100000, trackMortgageInNetWorth: false, updatedAt: '2026-01-01T00:00:00Z' }), put: async (value) => ({ beginningNetWorth: value, updatedAt: '2026-01-01T00:00:00Z' }), putConfiguration }} />);
     const checkbox = await screen.findByRole('checkbox', { name: /track mortgage/i });
     await user.click(checkbox);
     await user.click(screen.getByRole('button', { name: /save net worth configuration/i }));
-    expect(putConfiguration).toHaveBeenCalledWith(true);
+    expect(putConfiguration).toHaveBeenCalledWith({ trackMortgageInNetWorth: true, netWorthGoal: 0 });
     expect(await screen.findByText('Mortgage tracking configuration saved.')).toBeInTheDocument();
   });
 
@@ -48,5 +48,22 @@ describe('mortgage schedule deletion', () => {
     await user.click(await screen.findByRole('button', { name: /delete mortgage schedule/i }));
     expect(deleteMortgageSchedule).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Mortgage schedule cleared. Mortgage configuration was kept.')).toBeInTheDocument();
+  });
+
+  it('loads and saves a whole-number net worth goal, with blank resetting it to zero', async () => {
+    const user = userEvent.setup();
+    const putConfiguration = vi.fn().mockResolvedValue({ beginningNetWorth: 100000, trackMortgageInNetWorth: false, netWorthGoal: 2000000, updatedAt: '2026-01-01T00:00:00Z' });
+    render(<SettingsConfigurationPanel repository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={{ get: async () => ({ beginningNetWorth: 100000, trackMortgageInNetWorth: false, netWorthGoal: 1500000, updatedAt: '2026-01-01T00:00:00Z' }), put: async (value) => ({ beginningNetWorth: value, updatedAt: '2026-01-01T00:00:00Z' }), putConfiguration }} />);
+
+    const goal = await screen.findByRole('textbox', { name: 'Net Worth Goal' });
+    expect(goal).toHaveValue('1500000');
+    await user.clear(goal);
+    await user.type(goal, '2000000');
+    await user.click(screen.getByRole('button', { name: /save net worth configuration/i }));
+    expect(putConfiguration).toHaveBeenLastCalledWith({ trackMortgageInNetWorth: false, netWorthGoal: 2000000 });
+
+    await user.clear(goal);
+    await user.click(screen.getByRole('button', { name: /save net worth configuration/i }));
+    expect(putConfiguration).toHaveBeenLastCalledWith({ trackMortgageInNetWorth: false, netWorthGoal: 0 });
   });
 });

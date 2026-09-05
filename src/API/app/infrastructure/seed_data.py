@@ -697,6 +697,7 @@ SEED_NET_WORTH = {
         "beginningNetWorth": 250000,
         "monthlyAccountValues": {},
         "trackMortgageInNetWorth": False,
+        "netWorthGoal": 0,
         "mortgageSchedule": None,
         "updatedAt": SEED_TIMESTAMP,
     }

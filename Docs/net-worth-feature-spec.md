@@ -48,10 +48,21 @@ Snapshot changes only the current month, immediately recalculates the summary an
 
 ## Persistence API
 
-- `GET /api/v1/net-worth` returns `monthlyAccountValues` with baseline and mortgage configuration.
+- `GET /api/v1/net-worth` returns `monthlyAccountValues` with baseline, goal, and mortgage configuration.
 - `PUT /api/v1/net-worth/monthly-account-values` atomically replaces the table-value map.
+- `PUT /api/v1/net-worth/configuration` persists a nonnegative whole-number `netWorthGoal`; `0` disables the goal card.
 - The former investment-snapshot and monthly-snapshot endpoints are removed.
 - Values must be finite numbers and requests require authentication.
+
+## Current-Year Forecast and Visuals
+
+The table remains the source of truth for saved historical values. In the current local calendar year, months after the current month are display-only: their saved values remain in the data model and are retained when the table is saved, but users cannot edit or view them in the grid.
+
+The **Net Worth by Month** chart uses green points and a solid line for actual months through the current local month. Future months through December are orange, dashed forecasts only; they are not persisted. The forecast is recursive compounding from the latest actual total using the arithmetic average of the valid month-over-month percentage gains in the existing current-year actuals. Pairs whose prior total is zero or non-finite are skipped; with no valid pairs, the rate is `0%`.
+
+The current-month account-type visualization uses four reusable progress bars: Banking Checking, Banking Savings, Taxable Investing, and Retirement Investing (401k, IRA, HSA, and Pension). Empty categories remain visible as `$0`.
+
+Summary shows Beginning Net Worth, Current Net Worth, and a single Variance card containing both amount and percentage. When `netWorthGoal > 0`, a Goal card shows the goal, `goal - current net worth` difference, and percentage complete.
 
 ## Error Behavior
 
@@ -67,10 +78,11 @@ Snapshot changes only the current month, immediately recalculates the summary an
 - A missing source preserves the existing current-month value; no source and no saved value becomes `$0`.
 - A legitimate zero holdings total remains `$0` rather than falling back to starting balance.
 - Previous and future months are unchanged by Snapshot.
-- Summary cards, the annual chart, and current account-type chart immediately reflect the new current-month values.
+- Summary cards, the monthly actual/forecast chart, goal progress, and current account-type progress bars immediately reflect new current-month values.
 - Save changes persists manual edits and Snapshot replacements together; a failed save remains retryable.
 - There is no separate snapshot UI, history, domain type, API route, response field, or storage property.
 - Mortgage configuration, table keyboard navigation, and the Beginning Net Worth comparison continue to work.
+- Future-month table values remain durable but are not editable; forecast values never overwrite them.
 
 ## Non-Goals
 

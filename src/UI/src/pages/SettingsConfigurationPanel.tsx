@@ -14,6 +14,7 @@ export type SettingsConfigurationPanelProps = {
 export function SettingsConfigurationPanel({ repository, holdingRepository, netWorthRepository, onMortgageTrackingSaved }: SettingsConfigurationPanelProps) {
   const [beginningNetWorth, setBeginningNetWorth] = useState('');
   const [trackMortgage, setTrackMortgage] = useState(false);
+  const [netWorthGoal, setNetWorthGoal] = useState('');
   const [houseValue, setHouseValue] = useState('800000');
   const [annualInterestRate, setAnnualInterestRate] = useState('0.02875');
   const [isLoadingNetWorth, setIsLoadingNetWorth] = useState(true);
@@ -35,6 +36,7 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
       const value = await netWorthRepository.get();
       setBeginningNetWorth(value === undefined ? '' : String(value.beginningNetWorth ?? ''));
       setTrackMortgage(value?.trackMortgageInNetWorth ?? true);
+      setNetWorthGoal(value?.netWorthGoal == null || value.netWorthGoal === 0 ? '' : String(value.netWorthGoal));
       setHouseValue(String(value?.mortgageSchedule?.houseValue ?? 800000));
       setAnnualInterestRate(String(value?.mortgageSchedule?.annualInterestRate ?? 0.02875));
     } catch {
@@ -72,11 +74,18 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
       setMortgageVisibilityError('Mortgage tracking configuration is unavailable.');
       return;
     }
+    const trimmedGoal = netWorthGoal.trim();
+    const parsedGoal = trimmedGoal === '' ? 0 : Number(trimmedGoal);
+    if (!Number.isSafeInteger(parsedGoal) || parsedGoal < 0) {
+      setMortgageVisibilityError('Enter a nonnegative whole number for the net worth goal, or leave it blank.');
+      setMortgageVisibilityMessage(null);
+      return;
+    }
     setIsSavingMortgageVisibility(true);
     setMortgageVisibilityError(null);
     setMortgageVisibilityMessage(null);
     try {
-      const saved = await netWorthRepository.putConfiguration(trackMortgage);
+      const saved = await netWorthRepository.putConfiguration({ trackMortgageInNetWorth: trackMortgage, netWorthGoal: parsedGoal });
       if (netWorthRepository.putMortgageSchedule) {
         await netWorthRepository.putMortgageSchedule({
           houseValue: Number(houseValue), annualInterestRate: Number(annualInterestRate),
@@ -90,6 +99,7 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
       }
       const savedTrackingState = saved.trackMortgageInNetWorth ?? trackMortgage;
       setTrackMortgage(savedTrackingState);
+      setNetWorthGoal(saved.netWorthGoal == null || saved.netWorthGoal === 0 ? '' : String(saved.netWorthGoal));
       onMortgageTrackingSaved?.(savedTrackingState);
       setMortgageVisibilityMessage('Mortgage tracking configuration saved.');
     } catch {
@@ -136,7 +146,7 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
       </>}
     </section>
     <section aria-labelledby="mortgage-visibility-heading" style={{ border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: '16px', background: 'var(--md-sys-color-surface)', padding: '16px' }}>
-      <h2 id="mortgage-visibility-heading">Net Worth</h2><label><input type="checkbox" checked={trackMortgage} onChange={(event) => { setTrackMortgage(event.target.checked); setMortgageVisibilityError(null); setMortgageVisibilityMessage(null); }} /> Track Mortgage in Net Worth</label><p>Controls Mortgage Schedule visibility and its home-value assumptions.</p><div className="form-grid"><label className="field"><span>House Value</span><div className="input-wrapper"><span className="input-prefix">$</span><input data-has-prefix="true" inputMode="decimal" value={houseValue} onChange={(event) => setHouseValue(event.target.value)} /></div></label><label className="field"><span>Annual Interest Rate</span><input inputMode="decimal" value={annualInterestRate} onChange={(event) => setAnnualInterestRate(event.target.value)} /><small>Use decimal format: 0.02875 = 2.875%.</small></label></div>{mortgageVisibilityError ? <p className="form-error" role="alert">{mortgageVisibilityError}</p> : null}{mortgageVisibilityMessage ? <p className="form-success" role="status">{mortgageVisibilityMessage}</p> : null}<button className="primary-action" type="button" onClick={() => void saveMortgageVisibility()} disabled={isSavingMortgageVisibility}>{isSavingMortgageVisibility ? 'Saving...' : 'Save net worth configuration'}</button><button className="secondary-action" type="button" onClick={() => void deleteMortgageSchedule()} disabled={isDeletingMortgageSchedule}>{isDeletingMortgageSchedule ? 'Deleting mortgage schedule...' : 'Delete mortgage schedule'}</button>
+      <h2 id="mortgage-visibility-heading">Net Worth</h2><label><input type="checkbox" checked={trackMortgage} onChange={(event) => { setTrackMortgage(event.target.checked); setMortgageVisibilityError(null); setMortgageVisibilityMessage(null); }} /> Track Mortgage in Net Worth</label><p>Controls Mortgage Schedule visibility and its home-value assumptions.</p><label htmlFor="net-worth-goal-input" style={{ display: 'block', fontWeight: 600 }}>Net Worth Goal</label><input id="net-worth-goal-input" type="text" inputMode="numeric" value={netWorthGoal} aria-describedby="net-worth-goal-help" aria-invalid={mortgageVisibilityError ? true : undefined} onChange={(event) => { setNetWorthGoal(event.target.value); setMortgageVisibilityError(null); setMortgageVisibilityMessage(null); }} style={{ marginTop: 8, width: 'min(280px, 100%)', border: '1px solid var(--md-sys-color-outline)', borderRadius: '12px', padding: '10px 12px', background: 'var(--md-sys-color-surface-container)' }} /><p id="net-worth-goal-help">Optional nonnegative whole-number goal. Leave blank to hide the goal card.</p><div className="form-grid"><label className="field"><span>House Value</span><div className="input-wrapper"><span className="input-prefix">$</span><input data-has-prefix="true" inputMode="decimal" value={houseValue} onChange={(event) => setHouseValue(event.target.value)} /></div></label><label className="field"><span>Annual Interest Rate</span><input inputMode="decimal" value={annualInterestRate} onChange={(event) => setAnnualInterestRate(event.target.value)} /><small>Use decimal format: 0.02875 = 2.875%.</small></label></div>{mortgageVisibilityError ? <p className="form-error" role="alert">{mortgageVisibilityError}</p> : null}{mortgageVisibilityMessage ? <p className="form-success" role="status">{mortgageVisibilityMessage}</p> : null}<button className="primary-action" type="button" onClick={() => void saveMortgageVisibility()} disabled={isSavingMortgageVisibility}>{isSavingMortgageVisibility ? 'Saving...' : 'Save net worth configuration'}</button><button className="secondary-action" type="button" onClick={() => void deleteMortgageSchedule()} disabled={isDeletingMortgageSchedule}>{isDeletingMortgageSchedule ? 'Deleting mortgage schedule...' : 'Delete mortgage schedule'}</button>
     </section>    <section aria-labelledby="holding-payment-data-heading" style={{ border: '1px solid var(--md-sys-color-outline-variant)', borderRadius: '16px', background: 'var(--md-sys-color-surface)', padding: '16px' }}>
       <h2 id="holding-payment-data-heading" style={{ marginBottom: 4 }}>Holdings</h2><p style={{ marginBottom: 12 }}>Remove all saved source and manual payment data. Your holdings and share quantities are kept. Refreshing a holding can load source payments again.</p>
       {paymentDataError ? <p className="form-error" role="alert">{paymentDataError}</p> : null}{paymentDataMessage ? <p className="form-success" role="status">{paymentDataMessage}</p> : null}

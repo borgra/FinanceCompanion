@@ -363,12 +363,20 @@ class NetWorthPayload(BaseModel):
     monthly_account_values: dict[str, dict[str, float]] = Field(default_factory=dict, alias="monthlyAccountValues")
     track_mortgage_in_net_worth: bool = Field(default=False, alias="trackMortgageInNetWorth")
     mortgage_schedule: dict[str, Any] | None = Field(default=None, alias="mortgageSchedule")
+    net_worth_goal: int = Field(default=0, ge=0, alias="netWorthGoal")
     updated_at: str = Field(alias="updatedAt")
 
 
 class NetWorthConfigurationPutRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    track_mortgage_in_net_worth: bool = Field(alias="trackMortgageInNetWorth")
+    track_mortgage_in_net_worth: bool | None = Field(default=None, alias="trackMortgageInNetWorth")
+    net_worth_goal: int | None = Field(default=None, ge=0, alias="netWorthGoal")
+
+    @model_validator(mode="after")
+    def requires_configuration_value(self) -> "NetWorthConfigurationPutRequest":
+        if not self.model_fields_set:
+            raise ValueError("Supply trackMortgageInNetWorth or netWorthGoal.")
+        return self
 
 
 class MortgageSchedulePutRequest(BaseModel):

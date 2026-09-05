@@ -1,6 +1,6 @@
 import { ApiError, type HttpClient } from './httpClient';
 import type { NetWorth } from '../domain/netWorth';
-import type { NetWorthRepository } from '../domain/netWorthRepository';
+import type { NetWorthConfiguration, NetWorthRepository } from '../domain/netWorthRepository';
 import { readBeginningNetWorth, writeBeginningNetWorth } from '../domain/netWorthConfiguration';
 
 export const createNetWorthApiRepository = (client: HttpClient): NetWorthRepository => ({
@@ -20,7 +20,7 @@ export const createNetWorthApiRepository = (client: HttpClient): NetWorthReposit
   putMonthlyAccountValues: (monthlyAccountValues) => client.put<NetWorth>(
     '/net-worth/monthly-account-values', { monthlyAccountValues },
   ),
-  putConfiguration: (trackMortgageInNetWorth) => client.put<NetWorth>('/net-worth/configuration', { trackMortgageInNetWorth }),
+  putConfiguration: (configuration: NetWorthConfiguration | boolean) => client.put<NetWorth>('/net-worth/configuration', typeof configuration === 'boolean' ? { trackMortgageInNetWorth: configuration } : configuration),
   putMortgageSchedule: (mortgageSchedule) => client.put<NetWorth>('/net-worth/mortgage-schedule', mortgageSchedule),
   deleteMortgageSchedule: () => client.delete<NetWorth>('/net-worth/mortgage-schedule'),
 });

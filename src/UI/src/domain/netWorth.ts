@@ -16,6 +16,7 @@ export type NetWorth = {
   monthlyAccountValues?: MonthlyAccountValues;
   trackMortgageInNetWorth?: boolean;
   mortgageSchedule?: MortgageSchedule | null;
+  netWorthGoal?: number;
   updatedAt: string;
 };
 

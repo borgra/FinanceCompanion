@@ -194,7 +194,7 @@ def get_net_worth(user=Depends(require_session_user), container=Depends(get_cont
 
 
 def _to_net_worth_payload(value: NetWorth) -> NetWorthPayload:
-    return NetWorthPayload(beginningNetWorth=value.beginning_net_worth, monthlyAccountValues=value.monthly_account_values, trackMortgageInNetWorth=value.track_mortgage_in_net_worth, mortgageSchedule=value.mortgage_schedule, updatedAt=value.updated_at)
+    return NetWorthPayload(beginningNetWorth=value.beginning_net_worth, monthlyAccountValues=value.monthly_account_values, trackMortgageInNetWorth=value.track_mortgage_in_net_worth, mortgageSchedule=value.mortgage_schedule, netWorthGoal=value.net_worth_goal, updatedAt=value.updated_at)
 
 
 @router.put("/net-worth", response_model=NetWorthPayload)
@@ -213,7 +213,13 @@ def put_monthly_account_values(request: MonthlyAccountValuesPutRequest, user=Dep
 @router.put("/net-worth/configuration", response_model=NetWorthPayload)
 def put_net_worth_configuration(request: NetWorthConfigurationPutRequest, user=Depends(require_session_user), container=Depends(get_container)) -> NetWorthPayload:
     current = container.get_net_worth.execute(user.user_id) or NetWorth(beginning_net_worth=None, monthly_account_values={}, updated_at=now_iso())
-    value = container.put_net_worth.execute(user.user_id, replace(current, track_mortgage_in_net_worth=request.track_mortgage_in_net_worth, updated_at=now_iso()))
+    updates = request.model_dump(exclude_unset=True)
+    value = container.put_net_worth.execute(user.user_id, replace(
+        current,
+        track_mortgage_in_net_worth=(updates["track_mortgage_in_net_worth"] if "track_mortgage_in_net_worth" in updates else current.track_mortgage_in_net_worth),
+        net_worth_goal=(updates["net_worth_goal"] or 0 if "net_worth_goal" in updates else current.net_worth_goal),
+        updated_at=now_iso(),
+    ))
     return _to_net_worth_payload(value)
 
 
