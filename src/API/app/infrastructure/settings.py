@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     app_name: str = "Finance Companion API"
     api_prefix: str = "/api/v1"
     environment: str = "development"
+    data_backend: Literal["memory", "json"] = "memory"
+    local_json_path: str = ".local-data/finance.json"
     disable_auth_for_local_development: bool = False
     local_development_user_id: str = "user-steve"
     allowed_email: str = "steveborgra@gmail.com"
@@ -77,3 +79,8 @@ class Settings(BaseSettings):
 
         if len(self.session_secret) < 32:
             raise ValueError("The session secret must be at least 32 characters long.")
+
+        if self.data_backend == "json" and self.environment != "development":
+            raise ValueError("The local JSON data backend can only be used in the development environment.")
+        if self.data_backend == "json" and self.cosmos_table_connection_string:
+            raise ValueError("The local JSON data backend is mutually exclusive with Cosmos Table storage.")

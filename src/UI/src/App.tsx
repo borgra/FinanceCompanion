@@ -10,6 +10,7 @@ import { LandingPage } from './pages/LandingPage';
 import './styles.css';
 
 export function App() {
+  const isAuthFree = ((import.meta.env.VITE_AUTH_MODE as string | undefined) ?? 'entra') === 'local';
   const [session, setSession] = useState<AuthSession | undefined>();
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [workspace, setWorkspace] = useState<Workspace | undefined>();
@@ -90,7 +91,7 @@ export function App() {
     );
   }
 
-  if (!session) {
+  if (!session && !isAuthFree) {
     return (
       <AuthPage
         onAuthenticated={(nextSession) => {
@@ -138,6 +139,7 @@ export function App() {
         <button
           className="secondary-action"
           type="button"
+          hidden={isAuthFree}
           onClick={() => {
             void (async () => {
               try {

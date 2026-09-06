@@ -21,6 +21,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title=settings.app_name)
     app.state.container = build_container(settings)
 
+    @app.middleware("http")
+    async def persist_local_json(request, call_next):
+        response = await call_next(request)
+        store = getattr(app.state.container, "data_store", None)
+        if store is not None:
+            store.save()
+        return response
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

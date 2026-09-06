@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: ./src/API
+      dockerfile: Dockerfile
+    environment:
+      FINANCE_COMPANION_ENVIRONMENT: development
+      FINANCE_COMPANION_DATA_BACKEND: json
+      FINANCE_COMPANION_LOCAL_JSON_PATH: /data/finance.json
+      FINANCE_COMPANION_DISABLE_AUTH_FOR_LOCAL_DEVELOPMENT: "true"
+      FINANCE_COMPANION_ALLOWED_EMAIL: local@example.test
+      FINANCE_COMPANION_LOCAL_DEVELOPMENT_USER_ID: user-steve
+      FINANCE_COMPANION_CORS_ORIGINS: '["http://localhost:5173"]'
+    volumes:
+      - ./.local-data:/data
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  ui:
+    build:
+      context: ./src/UI
+      dockerfile: Dockerfile.local
+      args:
+        VITE_API_BASE_URL: /api/v1
+        VITE_AUTH_MODE: local
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "5173:5173"

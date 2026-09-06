@@ -29,3 +29,6 @@ dist/
 *.sln
 *.sw?
 
+
+.local-data/
+

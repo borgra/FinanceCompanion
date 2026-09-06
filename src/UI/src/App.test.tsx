@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadSessionUser } from './api/authApi';
 import { loadWorkspace } from './api/workspaceApi';
 import { App } from './App';
@@ -34,6 +34,7 @@ const workspace = {
 };
 
 describe('App workspace bootstrap', () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(loadSessionUser).mockResolvedValue({
@@ -50,6 +51,27 @@ describe('App workspace bootstrap', () => {
 
     expect(await screen.findByText('Workspace ready')).toBeInTheDocument();
     expect(loadWorkspace).toHaveBeenCalledOnce();
+  });
+
+  it('renders local auth-free mode without sign-in or sign-out controls', async () => {
+    vi.stubEnv('VITE_AUTH_MODE', 'local');
+    vi.mocked(loadWorkspace).mockResolvedValue(workspace);
+
+    render(<App />);
+
+    expect(await screen.findByText('Workspace ready')).toBeInTheDocument();
+    expect(screen.queryByText('Sign in')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
+  });
+  it('keeps workspace recovery available in local auth-free mode', async () => {
+    vi.stubEnv('VITE_AUTH_MODE', 'local');
+    vi.mocked(loadWorkspace).mockRejectedValueOnce(new Error('Temporary outage')).mockResolvedValueOnce(workspace);
+
+    render(<App />);
+
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Workspace ready')).toBeInTheDocument();
   });
 
   it('starts one additional workspace request when the user retries', async () => {

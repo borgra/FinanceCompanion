@@ -54,6 +54,8 @@ from app.infrastructure.alpha_vantage_security_search import AlphaVantageSecurit
 from app.infrastructure.security import JwtSessionTokenService
 from app.infrastructure.settings import Settings
 from app.infrastructure.stub_dividend_research import StubDividendResearchProvider
+from app.infrastructure.local_json_store import LocalJsonDataStore
+from app.infrastructure.stub_security import StubSecurityDetailsProvider, StubSecuritySearchProvider
 
 
 @dataclass(slots=True)
@@ -96,13 +98,26 @@ class Container:
     refresh_held_security_details: RefreshHeldSecurityDetails
     refresh_holding_dividends: RefreshHoldingDividends
     session_tokens: JwtSessionTokenService
+    data_store: InMemoryDataStore | None = None
 
 
 def build_container(
     settings: Settings,
     verifier: IdentityTokenVerifier | None = None,
 ) -> Container:
-    if settings.cosmos_table_connection_string:
+    data_store = None
+    if settings.data_backend == "json":
+        from pathlib import Path
+        data_store = LocalJsonDataStore(settings.allowed_email, Path(settings.local_json_path))
+        store = data_store
+        users = InMemoryUserRepository(store)
+        income_sources = InMemoryIncomeSourceRepository(store)
+        budgets = InMemoryBudgetRepository(store)
+        accounts = InMemoryAccountRepository(store)
+        holdings = InMemoryHoldingRepository(store)
+        net_worth = InMemoryNetWorthRepository(store)
+        retirement_plans = InMemoryRetirementPlanRepository(store)
+    elif settings.cosmos_table_connection_string:
         from azure.core.exceptions import ResourceExistsError
         from azure.data.tables import TableClient
 
@@ -149,7 +164,7 @@ def build_container(
         issuer=settings.session_issuer,
         audience=settings.session_audience,
     )
-    security_details = AlphaVantageSecurityDetailsProvider(settings.alpha_vantage_api_key)
+    security_details = StubSecurityDetailsProvider() if settings.data_backend == "json" else AlphaVantageSecurityDetailsProvider(settings.alpha_vantage_api_key)
     if settings.dividend_research_provider != "stub":
         raise ValueError("A dividend research provider must be configured.")
     dividend_research = StubDividendResearchProvider()
@@ -194,7 +209,7 @@ def build_container(
         delete_holding=DeleteHolding(holdings),
         update_manual_payout_details=UpdateManualPayoutDetails(holdings),
         search_securities=SearchSecurities(
-            AlphaVantageSecuritySearchProvider(settings.alpha_vantage_api_key)
+            StubSecuritySearchProvider() if settings.data_backend == "json" else AlphaVantageSecuritySearchProvider(settings.alpha_vantage_api_key)
         ),
         refresh_holding_security_details=RefreshHoldingSecurityDetails(
             holdings,
@@ -206,5 +221,6 @@ def build_container(
         ),
         refresh_holding_dividends=RefreshHoldingDividends(holdings, dividend_research),
         session_tokens=session_tokens,
+        data_store=data_store,
     )
 
