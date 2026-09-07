@@ -135,6 +135,11 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: environment
             }
             {
+              // The API requires an explicit provider outside development.
+              name: 'FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER'
+              value: 'stub'
+            }
+            {
               name: 'FINANCE_COMPANION_ALLOWED_EMAIL'
               value: allowedEmail
             }

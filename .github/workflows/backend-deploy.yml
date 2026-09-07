@@ -164,5 +164,6 @@ jobs:
                 FINANCE_COMPANION_ENTRA_TENANT_ID="${{ vars.ENV_PROD_ENTRA_TENANT_ID }}" \
                 FINANCE_COMPANION_ALLOWED_EMAIL="${{ vars.ENV_PROD_ALLOWED_EMAIL }}" \
                 FINANCE_COMPANION_ENVIRONMENT="production" \
+                FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER="stub" \
                 FINANCE_COMPANION_CORS_ORIGINS='${{ env.CORS_ORIGINS }}' \
               --only-show-errors
