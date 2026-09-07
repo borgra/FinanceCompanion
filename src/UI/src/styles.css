@@ -3396,11 +3396,13 @@ button.security-result:hover {
 }
 
 /* Soft highlight for the current month */
-.excel-table tr.excel-row-current {
+.excel-table tr.excel-row-current,
+.excel-table tr[aria-current='date'] {
   background-color: rgba(0, 230, 118, 0.09) !important;
 }
 
-.excel-table tr.excel-row-current td {
+.excel-table tr.excel-row-current td,
+.excel-table tr[aria-current='date'] td {
   border-color: rgba(0, 230, 118, 0.38) !important;
   color: var(--md-sys-color-on-surface) !important;
   font-weight: 700;
@@ -5270,4 +5272,9 @@ button.security-result:hover {
     animation: none;
     transition: none;
   }
+}
+
+.mortgage-start-row[aria-current='date'] > td {
+  background: rgba(0, 230, 118, 0.09);
+  border-color: rgba(0, 230, 118, 0.38);
 }

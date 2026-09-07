@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MortgageSchedule } from '../domain/netWorth';
 import { MortgageSchedulePanel } from './MortgageSchedulePanel';
 
@@ -14,8 +14,14 @@ const initial: MortgageSchedule = {
 };
 
 describe('MortgageSchedulePanel', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-01-15T12:00:00'));
+  });
+
+  afterEach(() => vi.useRealTimers());
   it('uses shared money cells to fill principal and extra-principal overrides down the schedule', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const putMortgageSchedule = vi.fn().mockResolvedValue({ mortgageSchedule: initial });
 
     render(<MortgageSchedulePanel initial={initial} repository={{ putMortgageSchedule }} onSaved={vi.fn()} />);
@@ -36,7 +42,7 @@ describe('MortgageSchedulePanel', () => {
     expect(screen.getByLabelText('Extra principal Feb 2026')).toHaveValue('$25.00');
     await user.click(screen.getByRole('button', { name: /save mortgage schedule/i }));
 
-    await waitFor(() => expect(putMortgageSchedule).toHaveBeenCalledTimes(1));
+    expect(putMortgageSchedule).toHaveBeenCalledTimes(1);
     expect(putMortgageSchedule).toHaveBeenCalledWith(expect.objectContaining({
       principalOverrides: { '2026-01:1': 140 },
       extraPrincipalOverrides: { '2026-01:0': 25 },
@@ -59,4 +65,27 @@ describe('MortgageSchedulePanel', () => {
 
     expect(screen.getByLabelText('Principal Jan 2026')).toHaveValue('$500.00');
     expect(screen.getByLabelText('Principal Feb 2026')).toHaveValue('$502.50');
-  });});
+  });
+
+  it('shows the current month and six calendar months on either side when payments are compacted', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = render(
+      <MortgageSchedulePanel
+        initial={{ ...initial, scheduleStartMonth: '2025-03' }}
+        repository={{ putMortgageSchedule: vi.fn() }}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(13);
+    expect(screen.getByLabelText('Principal Jul 2025')).toBeInTheDocument();
+    expect(screen.getByLabelText('Principal Jul 2026')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Principal Jun 2025')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Principal Aug 2026')).not.toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /Jan 2026/ })).toHaveAttribute('aria-current', 'date');
+
+    await user.click(screen.getByRole('checkbox', { name: /show all payments/i }));
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(50);
+    expect(screen.getByLabelText('Principal Mar 2025')).toBeInTheDocument();
+  });
+});
