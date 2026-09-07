@@ -104,9 +104,18 @@ describe('NetWorthPage', () => {
     expect(summary.querySelector('.net-worth-variance-percent')).toHaveClass('is-positive');
     expect(within(summary).getByText('$400.00').parentElement).toHaveTextContent('$400.00 (+2.7%)');
 
-    const chart = screen.getByRole('img', { name: /net worth by month graph/i });
+    const chart = screen.getByRole('group', { name: /net worth by month graph/i });
     expect(chart).toBeInTheDocument();
     expect(within(chart).getByText('$15,000.00 reference')).toBeInTheDocument();
+    const julyPoint = within(chart).getByRole('button', { name: 'Jul-26: $15,400.00 Actual' });
+    const chartCard = chart.closest('.net-worth-visual-card');
+    expect(within(chartCard as HTMLElement).queryByRole('tooltip')).not.toBeInTheDocument();
+    await user.hover(julyPoint);
+    const hoverWindow = within(chartCard as HTMLElement).getByRole('tooltip');
+    expect(hoverWindow).toHaveClass('net-worth-chart-popover');
+    expect(within(hoverWindow).getByText('Actual')).toBeInTheDocument();
+    expect(within(hoverWindow).getByText('Jul-26')).toBeInTheDocument();
+    expect(within(hoverWindow).getByText('$15,400.00')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Net Worth by Month' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Current Month by Account Type' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Net Worth to Goal' })).not.toBeInTheDocument();
@@ -255,7 +264,7 @@ describe('NetWorthPage', () => {
     expect(await screen.findByRole('textbox', { name: 'Taxable Jul-26 value' })).toHaveValue('$110.00');
     expect(screen.queryByRole('textbox', { name: 'Taxable Aug-26 value' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Taxable Aug-26 forecast hidden')).toHaveTextContent('—');
-    expect(screen.getByText(/Aug-26: .* Forecast/)).not.toHaveTextContent('$9,999.00');
+    expect(screen.getByRole('button', { name: /Aug-26: .* Forecast/ })).not.toHaveAccessibleName(/\$9,999\.00/);
     const goal = screen.getByRole('heading', { name: 'Net Worth to Goal' }).parentElement;
     expect(goal).not.toBeNull();
     expect(within(goal as HTMLElement).getByText('$200.00')).toBeInTheDocument();

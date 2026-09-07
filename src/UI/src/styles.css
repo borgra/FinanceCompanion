@@ -3708,6 +3708,77 @@ button.security-result:hover {
   min-height: 0;
 }
 
+.net-worth-chart-point {
+  cursor: pointer;
+}
+
+.net-worth-chart-plot {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+}
+
+.net-worth-chart-popover {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  min-width: 144px;
+  gap: 3px;
+  padding: 10px 12px;
+  pointer-events: none;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--md-sys-color-surface-container-high) 92%, transparent);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .28);
+  backdrop-filter: blur(8px);
+}
+
+.net-worth-chart-popover.is-above {
+  transform: translate(-50%, calc(-100% - 12px));
+}
+
+.net-worth-chart-popover.is-below {
+  transform: translate(-50%, 12px);
+}
+
+.net-worth-chart-popover-status {
+  width: max-content;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--md-sys-color-on-surface);
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.net-worth-chart-popover-status.is-actual {
+  background: color-mix(in srgb, #188038 25%, transparent);
+}
+
+.net-worth-chart-popover-status.is-forecast {
+  background: color-mix(in srgb, #d97706 28%, transparent);
+}
+
+.net-worth-chart-popover strong {
+  color: var(--md-sys-color-on-surface);
+  font-size: .92rem;
+}
+
+.net-worth-chart-popover > span:not(.net-worth-chart-popover-status) {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.net-worth-chart-popover b {
+  color: var(--md-sys-color-on-surface);
+  font-family: Consolas, Monaco, "Lucida Console", Courier, monospace;
+  font-size: 1rem;
+}
+
 .net-worth-chart-body p {
   flex: 0 0 auto;
   margin: 4px 0 0;

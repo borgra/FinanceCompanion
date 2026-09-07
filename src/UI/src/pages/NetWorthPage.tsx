@@ -158,6 +158,8 @@ const groupAccounts = (accounts: Account[]): NetWorthGroup[] => {
 };
 
 function NetWorthByMonthChart({ rows, beginningNetWorth }: { rows: MonthlyNetWorthRow[]; beginningNetWorth: number }) {
+  const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
+  const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const width = 960;
   const height = 260;
   const padding = { top: 24, right: 24, bottom: 44, left: 72 };
@@ -192,20 +194,78 @@ function NetWorthByMonthChart({ rows, beginningNetWorth }: { rows: MonthlyNetWor
   const actualPoints = actualRows.map((row, index) => `${x(index)},${y(row.total)}`).join(' ');
   const forecastPoints = rows.slice(currentIndex).map((row, offset) => `${x(currentIndex + offset)},${y(forecastTotals[currentIndex + offset])}`).join(' ');
   const referenceY = y(beginningNetWorth);
+  const activePointIndex = hoveredPointIndex ?? selectedPointIndex;
+  const activePoint = activePointIndex === null ? null : {
+    index: activePointIndex,
+    row: rows[activePointIndex],
+    value: forecastTotals[activePointIndex],
+  };
+  const activePointLabel = activePoint
+    ? `${activePoint.row.month}: ${formatMoney(activePoint.value)} ${activePoint.row.isFuture ? 'Forecast' : 'Actual'}`
+    : null;
+  const popoverStyle = activePoint ? {
+    left: `${Math.min(86, Math.max(14, x(activePoint.index) / width * 100))}%`,
+    top: `${y(activePoint.value) / height * 100}%`,
+  } : undefined;
+  const popoverPlacement = activePoint && y(activePoint.value) < height * 0.42 ? 'is-below' : 'is-above';
 
   return (
     <section className="net-worth-visual-card" aria-labelledby="net-worth-by-month-title">
       <h2 id="net-worth-by-month-title" style={{ fontSize: '1.05rem', marginBottom: 8 }}>Net Worth by Month</h2>
       <div className="net-worth-visual-card-body net-worth-chart-body">
-        <svg role="img" aria-label="Net worth by month graph with green actuals and orange dashed forecast" viewBox={`0 0 ${width} ${height}`}>
+        <div className="net-worth-chart-plot">
+          <svg role="group" aria-label="Net worth by month graph with green actuals and orange dashed forecast" viewBox={`0 0 ${width} ${height}`}>
           {yTicks.map((value, index) => <g key={value}><line x1={padding.left} x2={width - padding.right} y1={y(value)} y2={y(value)} stroke="var(--md-sys-color-outline-variant)" strokeWidth={index % 2 === 0 ? 1.25 : 0.75} /><text x={padding.left - 10} y={y(value) + 4} textAnchor="end" fill="var(--md-sys-color-on-surface-variant)" fontSize="11">{formatAxisTick(value)}</text></g>)}
           <line x1={padding.left} x2={width - padding.right} y1={referenceY} y2={referenceY} stroke="var(--md-sys-color-secondary)" strokeDasharray="6 5" />
           <text x={width - padding.right} y={referenceY - 8} textAnchor="end" fill="var(--md-sys-color-secondary)" fontSize="11">{formatMoney(beginningNetWorth)} reference</text>
           {actualPoints ? <polyline fill="none" stroke="#188038" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" points={actualPoints} /> : null}
           {forecastPoints ? <polyline fill="none" stroke="#d97706" strokeWidth="3" strokeDasharray="8 6" strokeLinejoin="round" strokeLinecap="round" points={forecastPoints} /> : null}
-          {rows.map((row, index) => <g key={row.month}><circle cx={x(index)} cy={y(forecastTotals[index])} r="4" fill={row.isFuture ? '#d97706' : '#188038'}><title>{`${row.month}: ${formatMoney(forecastTotals[index])} ${row.isFuture ? 'Forecast' : 'Actual'}`}</title></circle><text x={x(index)} y={height - 18} textAnchor="middle" fill="var(--md-sys-color-on-surface-variant)" fontSize="11">{row.month.slice(0, 3)}</text></g>)}
-        </svg>
-        <p style={{ fontSize: '.75rem', margin: '4px 0 0' }}><span style={{ color: '#188038' }}>● Actual</span> <span style={{ color: '#d97706', marginLeft: 12 }}>┄ Forecast</span></p>
+          {rows.map((row, index) => {
+            const pointValue = forecastTotals[index];
+            const pointLabel = `${row.month}: ${formatMoney(pointValue)} ${row.isFuture ? 'Forecast' : 'Actual'}`;
+            const isActive = activePointIndex === index;
+            return <g key={row.month}>
+              <circle
+                className="net-worth-chart-point"
+                role="button"
+                tabIndex={0}
+                aria-label={pointLabel}
+                aria-pressed={selectedPointIndex === index}
+                aria-describedby={isActive ? 'net-worth-chart-popover' : undefined}
+                cx={x(index)}
+                cy={y(pointValue)}
+                r={isActive ? 8 : 6}
+                fill={row.isFuture ? '#d97706' : '#188038'}
+                stroke={isActive ? 'var(--md-sys-color-on-surface)' : undefined}
+                strokeWidth={isActive ? 2 : 0}
+                onMouseEnter={() => setHoveredPointIndex(index)}
+                onMouseLeave={() => setHoveredPointIndex(null)}
+                onFocus={() => setHoveredPointIndex(index)}
+                onBlur={() => setHoveredPointIndex(null)}
+                onClick={() => setSelectedPointIndex(index)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setSelectedPointIndex(index);
+                  }
+                  if (event.key === 'Escape') {
+                    setHoveredPointIndex(null);
+                    setSelectedPointIndex(null);
+                  }
+                }}
+              />
+              <text x={x(index)} y={height - 18} textAnchor="middle" fill="var(--md-sys-color-on-surface-variant)" fontSize="11">{row.month.slice(0, 3)}</text>
+            </g>;
+          })}
+          </svg>
+          {activePoint && activePointLabel ? <div id="net-worth-chart-popover" className={`net-worth-chart-popover ${popoverPlacement}`} role="tooltip" style={popoverStyle}>
+            <span className={`net-worth-chart-popover-status ${activePoint.row.isFuture ? 'is-forecast' : 'is-actual'}`}>{activePoint.row.isFuture ? 'Forecast' : 'Actual'}</span>
+            <strong>{activePoint.row.month}</strong>
+            <span>Net Worth</span>
+            <b>{formatMoney(activePoint.value)}</b>
+          </div> : null}
+        </div>
+        <p style={{ fontSize: '.75rem', margin: '4px 0 0' }}><span style={{ color: '#188038' }}>● Actual</span> <span style={{ color: '#d97706', marginLeft: 12 }}>┄ Forecast</span><span style={{ marginLeft: 12 }}>Hover, focus, or select a month to view its amount.</span></p>
       </div>
     </section>
   );
