@@ -3611,7 +3611,7 @@ button.security-result:hover {
   font-size: 0.78rem;
 }
 
-/* Net Worth visual system: the same category colors appear in the allocation bar and table. */
+/* Net Worth visual system: category colors identify table groups. */
 .net-worth-category-checking { --net-worth-category-color: #4f8cff; }
 .net-worth-category-savings { --net-worth-category-color: #20b486; }
 .net-worth-category-taxable { --net-worth-category-color: #9b7aff; }
@@ -3669,6 +3669,10 @@ button.security-result:hover {
   margin-top: 24px;
 }
 
+.net-worth-visual-grid-chart-only {
+  grid-template-columns: 1fr;
+}
+
 .net-worth-visual-card {
   display: flex;
   min-width: 0;
@@ -3710,14 +3714,14 @@ button.security-result:hover {
   font-size: .75rem;
 }
 
-.net-worth-allocation-body {
+.net-worth-goal-body {
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 18px;
 }
 
-.net-worth-allocation-heading {
+.net-worth-goal-heading {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -3726,12 +3730,13 @@ button.security-result:hover {
   font-size: .85rem;
 }
 
-.net-worth-allocation-heading strong {
+.net-worth-goal-heading strong {
   color: var(--md-sys-color-on-surface);
   font-size: .95rem;
+  white-space: nowrap;
 }
 
-.net-worth-allocation-track {
+.net-worth-goal-track {
   height: 44px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--md-sys-color-outline) 75%, transparent);
@@ -3740,52 +3745,55 @@ button.security-result:hover {
   box-shadow: inset 0 2px 5px rgba(15, 23, 42, .16), 0 5px 14px rgba(15, 23, 42, .12);
 }
 
-.net-worth-allocation-fill {
-  display: flex;
+.net-worth-goal-fill {
   height: 100%;
-  overflow: hidden;
   border-radius: inherit;
+  background: #188038;
   transition: width 240ms ease;
 }
 
-.net-worth-allocation-segment {
-  display: block;
-  height: 100%;
-  min-width: 0;
-  background: var(--net-worth-category-color);
-  box-shadow: inset -1px 0 rgba(255, 255, 255, .34);
+.net-worth-goal-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
 }
 
-.net-worth-allocation-segment:last-child { box-shadow: none; }
-
-.net-worth-allocation-legend {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 18px;
+.net-worth-goal-details div {
+  min-width: 0;
 }
 
-.net-worth-allocation-legend-item {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
+.net-worth-goal-details dt {
   color: var(--md-sys-color-on-surface-variant);
-  font-size: .8rem;
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
-.net-worth-allocation-legend-item strong {
+.net-worth-goal-details dd {
+  margin: 4px 0 0;
   color: var(--md-sys-color-on-surface);
-  font-size: .8rem;
+  font-size: .9rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
-.net-worth-allocation-swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--net-worth-category-color);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--net-worth-category-color) 20%, transparent);
+
+@media (max-width: 520px) {
+  .net-worth-goal-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .net-worth-goal-heading strong {
+    white-space: normal;
+  }
+
+  .net-worth-goal-details {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 @media (max-width: 980px) {

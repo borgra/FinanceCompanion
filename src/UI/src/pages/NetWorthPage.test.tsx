@@ -108,16 +108,8 @@ describe('NetWorthPage', () => {
     expect(chart).toBeInTheDocument();
     expect(within(chart).getByText('$15,000.00 reference')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Net Worth by Month' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Current Month by Account Type' })).toBeInTheDocument();
-    const allocation = screen.getByRole('progressbar', { name: 'Current month net worth allocation' });
-    expect(allocation).toHaveAttribute('aria-valuenow', '15400');
-    expect(allocation).toHaveAttribute('aria-valuemax', '15400');
-    expect(allocation).toHaveAttribute('aria-valuetext', '$15,400.00 current allocation');
-    expect(allocation.querySelector('.net-worth-allocation-fill')).toHaveStyle({ width: '100%' });
-    expect(screen.getByText('Banking Checking')).toBeInTheDocument();
-    expect(screen.getByText('Banking Savings')).toBeInTheDocument();
-    expect(screen.getByText('Taxable Investing')).toBeInTheDocument();
-    expect(screen.getByText('Retirement Investing')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Current Month by Account Type' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Net Worth to Goal' })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /Primary Checking.*snapshot/i })).not.toBeInTheDocument();
 
     const saveChanges = screen.getByRole('button', { name: 'Save changes' });
@@ -264,11 +256,13 @@ describe('NetWorthPage', () => {
     expect(screen.queryByRole('textbox', { name: 'Taxable Aug-26 value' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Taxable Aug-26 forecast hidden')).toHaveTextContent('—');
     expect(screen.getByText(/Aug-26: .* Forecast/)).not.toHaveTextContent('$9,999.00');
-    const goal = screen.getByLabelText('Net worth goal');
-    expect(within(goal).getByText('$200.00')).toBeInTheDocument();
-    expect(within(goal).getByText('$90.00')).toBeInTheDocument();
-    expect(within(goal).getByText('55.0%')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar', { name: 'Current month net worth allocation' }).querySelector('.net-worth-allocation-fill')).toHaveStyle({ width: '55%' });
+    const goal = screen.getByRole('heading', { name: 'Net Worth to Goal' }).parentElement;
+    expect(goal).not.toBeNull();
+    expect(within(goal as HTMLElement).getByText('$200.00')).toBeInTheDocument();
+    expect(within(goal as HTMLElement).getByText('$90.00')).toBeInTheDocument();
+    expect(within(goal as HTMLElement).getByText('55.0%')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Net worth goal')).not.toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Net worth goal progress' }).querySelector('.net-worth-goal-fill')).toHaveStyle({ width: '55%' });
   });
 
   it('caps over-goal progressbar semantics while retaining the true over-goal amount in accessible text', async () => {
@@ -282,22 +276,67 @@ describe('NetWorthPage', () => {
     });
     render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [account({ id: 'taxable', name: 'Taxable', type: 'Investment', startingBalance: 250, investmentAccountType: 'Taxable', manageHoldings: true, yearlyContribution: 0 })] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={netWorthRepository} />);
 
-    const allocation = await screen.findByRole('progressbar', { name: 'Current month net worth allocation' });
-    expect(allocation).toHaveAttribute('aria-valuemax', '100');
-    expect(allocation).toHaveAttribute('aria-valuenow', '100');
-    expect(allocation).toHaveAttribute('aria-valuetext', '$250.00 of $100.00 (over goal)');
-    expect(allocation.querySelector('.net-worth-allocation-fill')).toHaveStyle({ width: '100%' });
+    const progress = await screen.findByRole('progressbar', { name: 'Net worth goal progress' });
+    expect(progress).toHaveAttribute('aria-valuemax', '100');
+    expect(progress).toHaveAttribute('aria-valuenow', '100');
+    expect(progress).toHaveAttribute('aria-valuetext', '$250.00 of $100.00 ($150.00 over goal)');
+    expect(progress.querySelector('.net-worth-goal-fill')).toHaveStyle({ width: '100%' });
   });
 
+  it('uses every account category and tracked home equity for net worth goal progress', async () => {
+    vi.setSystemTime(new Date(2026, 6, 15, 12));
+    const netWorthRepository = createMockNetWorthRepository(0);
+    vi.spyOn(netWorthRepository, 'get').mockResolvedValue({
+      beginningNetWorth: 0,
+      monthlyAccountValues: {},
+      trackMortgageInNetWorth: true,
+      netWorthGoal: 4000,
+      mortgageSchedule: {
+        houseValue: 1000,
+        startingOutstandingMortgage: 400,
+        annualInterestRate: 0,
+        monthlyPrincipalPayment: 100,
+        monthlyAdditionalPrincipalPayment: 0,
+        scheduleStartMonth: '2026-07',
+      },
+      updatedAt: '2026-01-01T00:00:00Z',
+    });
+    render(<NetWorthPage
+      accountRepository={createMockAccountRepository({ initialAccounts: [
+        account({ id: 'checking', name: 'Checking', startingBalance: -100 }),
+        account({ id: 'savings', name: 'Savings', type: 'Savings', startingBalance: 200 }),
+        account({ id: 'taxable', name: 'Taxable', type: 'Investment', investmentAccountType: 'Taxable', startingBalance: 300 }),
+        account({ id: '401k', name: '401k', type: 'Investment', investmentAccountType: '401k', startingBalance: 400 }),
+        account({ id: 'ira', name: 'IRA', type: 'Investment', investmentAccountType: 'IRA', startingBalance: 500 }),
+        account({ id: 'hsa', name: 'HSA', type: 'Investment', investmentAccountType: 'HSA', startingBalance: 600 }),
+        account({ id: 'pension', name: 'Pension', type: 'Investment', investmentAccountType: 'Pension', startingBalance: 700 }),
+      ] })}
+      incomeRepository={createMockIncomeSourceRepository()}
+      holdingRepository={createMockHoldingRepository()}
+      netWorthRepository={netWorthRepository}
+    />);
+
+    const progress = await screen.findByRole('progressbar', { name: 'Net worth goal progress' });
+    expect(progress).toHaveAttribute('aria-valuenow', '3300');
+    expect(progress).toHaveAttribute('aria-valuemax', '4000');
+    expect(progress).toHaveAttribute('aria-valuetext', '$3,300.00 of $4,000.00 ($700.00 remaining)');
+    expect(progress.querySelector('.net-worth-goal-fill')).toHaveStyle({ width: '82.5%' });
+    const goalCard = screen.getByRole('heading', { name: 'Net Worth to Goal' }).parentElement;
+    expect(within(goalCard as HTMLElement).getByText('Goal')).toBeInTheDocument();
+    expect(within(goalCard as HTMLElement).getByText('Difference')).toBeInTheDocument();
+    expect(within(goalCard as HTMLElement).getByText('Percentage Complete')).toBeInTheDocument();
+    expect(within(goalCard as HTMLElement).getByText('$700.00')).toBeInTheDocument();
+    expect(within(goalCard as HTMLElement).getByText('82.5%')).toBeInTheDocument();
+  });
   it('renders the visual cards as a shared no-scroll layout contract', async () => {
     vi.setSystemTime(new Date(2026, 6, 15, 12));
     render(<NetWorthPage accountRepository={createMockAccountRepository({ initialAccounts: [account({ id: 'checking', name: 'Checking', startingBalance: 100 })] })} incomeRepository={createMockIncomeSourceRepository()} holdingRepository={createMockHoldingRepository()} netWorthRepository={createMockNetWorthRepository(0)} />);
 
     const visualGrid = await screen.findByRole('heading', { name: 'Net Worth by Month' });
     const grid = visualGrid.parentElement?.parentElement;
-    expect(grid).toHaveClass('net-worth-visual-grid');
+    expect(grid).toHaveClass('net-worth-visual-grid', 'net-worth-visual-grid-chart-only');
     const bodies = Array.from(grid?.querySelectorAll('.net-worth-visual-card-body') ?? []);
-    expect(bodies).toHaveLength(2);
+    expect(bodies).toHaveLength(1);
     expect(bodies.every((body) => body.classList.contains('net-worth-visual-card-body'))).toBe(true);
     expect(grid?.querySelector('svg')).not.toHaveStyle({ minWidth: '680px' });
   });
