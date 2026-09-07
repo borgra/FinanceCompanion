@@ -92,14 +92,14 @@ export function SettingsConfigurationPanel({ repository, holdingRepository, netW
     setMortgageVisibilityMessage(null);
     try {
       const saved = await netWorthRepository.putConfiguration({ trackMortgageInNetWorth: trackMortgage, netWorthGoal: parsedGoal });
-      if (saved.netWorthGoal !== undefined && saved.netWorthGoal !== parsedGoal) {
+      const confirmedGoal = saved.netWorthGoal;
+      if (confirmedGoal !== parsedGoal) {
         setMortgageVisibilityError('Net Worth Goal was not saved. Please try again.');
         return;
       }
       const savedTrackingState = saved.trackMortgageInNetWorth ?? trackMortgage;
       setTrackMortgage(savedTrackingState);
-      const persistedGoal = saved.netWorthGoal ?? parsedGoal;
-      setNetWorthGoal(persistedGoal === 0 ? '' : String(persistedGoal));
+      setNetWorthGoal(confirmedGoal === 0 ? '' : String(confirmedGoal));
       onMortgageTrackingSaved?.(savedTrackingState);
       setMortgageVisibilityMessage('Net worth configuration saved.');
     } catch {
