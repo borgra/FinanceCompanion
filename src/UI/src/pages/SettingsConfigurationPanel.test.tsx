@@ -147,3 +147,26 @@ describe('mortgage schedule deletion', () => {
     expect(putConfiguration).toHaveBeenLastCalledWith({ trackMortgageInNetWorth: false, netWorthGoal: 0 });
   });
 });
+
+describe('Configuration tab state', () => {
+  it('preserves an unfinished Net Worth draft while another configuration tab is open', async () => {
+    const user = userEvent.setup();
+    const get = vi.fn().mockResolvedValue({ beginningNetWorth: 15000, updatedAt: '2026-01-01T00:00:00Z' });
+    render(
+      <SettingsConfigurationPanel
+        repository={createMockIncomeSourceRepository()}
+        holdingRepository={createMockHoldingRepository()}
+        netWorthRepository={{ get, put: async (value) => ({ beginningNetWorth: value, updatedAt: '2026-01-01T00:00:00Z' }) }}
+      />,
+    );
+
+    const baseline = await screen.findByRole('textbox', { name: /beginning net worth/i });
+    await user.clear(baseline);
+    await user.type(baseline, '27500');
+    await user.click(screen.getByRole('tab', { name: 'Budget' }));
+    await user.click(screen.getByRole('tab', { name: 'Net Worth' }));
+
+    expect(screen.getByRole('textbox', { name: /beginning net worth/i })).toHaveValue('27500');
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+});

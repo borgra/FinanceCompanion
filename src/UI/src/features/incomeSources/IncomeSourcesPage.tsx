@@ -207,8 +207,11 @@ export function IncomeSourcesPage({
     );
   }
 
+  const PageContainer = layout === 'embedded' ? 'section' : 'main';
+  const PageHeading = layout === 'embedded' ? 'h2' : 'h1';
+
   return (
-    <main
+    <PageContainer
       className={
         layout === 'embedded'
           ? 'settings-embedded-shell app-shell'
@@ -218,9 +221,9 @@ export function IncomeSourcesPage({
       <header className="page-header">
         <div className="page-header-text">
           <p className="eyebrow">{headerEyebrow}</p>
-          <h1 ref={headingRef} tabIndex={-1}>
+          <PageHeading ref={headingRef} tabIndex={-1}>
             Income Sources
-          </h1>
+          </PageHeading>
           <p>
             Define and maintain the income sources you rely on before planning
             or budgeting work begins.
@@ -412,6 +415,6 @@ export function IncomeSourcesPage({
           })}
         </section>
       )}
-    </main>
+    </PageContainer>
   );
 }

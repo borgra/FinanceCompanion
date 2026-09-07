@@ -84,15 +84,11 @@ export function LandingPage({ repository, budgetRepository, accountRepository, h
               );
             }
 
-            return <SettingsConfigurationPanel repository={repository} holdingRepository={holdingRepository} netWorthRepository={netWorthRepository} onMortgageTrackingSaved={setMortgageTrackingOverride} />;
+            return <SettingsConfigurationPanel repository={repository} holdingRepository={holdingRepository} netWorthRepository={netWorthRepository} onMortgageTrackingSaved={setMortgageTrackingOverride} onNavigateToBanking={() => setActiveSectionId('accounts')} initialTab="budget" />;
           }}
         />
       </div>
     </div>
   );
 }
-
-
-
-
 
