@@ -84,6 +84,18 @@ describe('NetWorthPage', () => {
     expect(screen.getByText('Fidelity 401k')).toBeInTheDocument();
     expect(screen.getByText('Fidelity HSA')).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Fidelity HSA' })).toHaveClass('net-worth-category-retirement');
+    const bankingHeader = screen.getByRole('columnheader', { name: 'Banking' });
+    const checkingHeader = screen.getByRole('columnheader', { name: 'Primary Checking' });
+    const savingsHeader = screen.getByRole('columnheader', { name: 'High Yield Savings' });
+    expect(bankingHeader.style.getPropertyValue('--net-worth-category-color')).toBe('#4f8cff');
+    expect(checkingHeader.style.getPropertyValue('--net-worth-category-color')).toBe('#4f8cff');
+    expect(savingsHeader.style.getPropertyValue('--net-worth-category-color')).toBe('#4f8cff');
+    expect(screen.getByRole('columnheader', { name: 'Investing Taxable' }).style.getPropertyValue('--net-worth-category-color')).toBe('#9b7aff');
+    expect(screen.getByRole('columnheader', { name: 'Fidelity Taxable' }).style.getPropertyValue('--net-worth-category-color')).toBe('#9b7aff');
+    expect(screen.getByRole('columnheader', { name: 'Investing Retirement' }).style.getPropertyValue('--net-worth-category-color')).toBe('#e98b49');
+    expect(screen.getByRole('columnheader', { name: 'Fidelity 401k' }).style.getPropertyValue('--net-worth-category-color')).toBe('#e98b49');
+    expect(screen.getByRole('columnheader', { name: 'Investing HSA' }).style.getPropertyValue('--net-worth-category-color')).toBe('#e98b49');
+    expect(screen.getByRole('columnheader', { name: 'Fidelity HSA' }).style.getPropertyValue('--net-worth-category-color')).toBe('#e98b49');
 
     const summary = screen.getByLabelText('Net worth summary');
     expect(within(summary).getByText('$15,400.00')).toBeInTheDocument();

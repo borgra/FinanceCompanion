@@ -3656,7 +3656,7 @@ button.security-result:hover {
 
 .excel-table th.net-worth-account-header,
 .excel-table th.net-worth-group-header {
-  background-color: color-mix(in srgb, var(--net-worth-category-color, var(--md-sys-color-surface-container)) 16%, var(--md-sys-color-surface-container)) !important;
+  background: color-mix(in srgb, var(--net-worth-category-color, var(--md-sys-color-surface-container)) 16%, var(--md-sys-color-surface-container)) !important;
   border-bottom-color: transparent !important;
   box-shadow: none !important;
 }
