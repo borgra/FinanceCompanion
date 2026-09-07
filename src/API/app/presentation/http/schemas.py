@@ -33,7 +33,7 @@ class IncomePeriodPayload(CamelModel):
     id: str
     start_date: str = Field(serialization_alias="startDate")
     yearly_gross_amount: int = Field(serialization_alias="yearlyGrossAmount")
-    net_percentage: int = Field(serialization_alias="netPercentage")
+    net_percentage: float = Field(serialization_alias="netPercentage")
     end_date: str | None = Field(default=None, serialization_alias="endDate")
 
 

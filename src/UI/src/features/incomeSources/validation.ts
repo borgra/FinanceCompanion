@@ -49,7 +49,7 @@ export function validateIncomeSourceDraft(
       netPercentage > 100
     ) {
       periodErrors[index].netPercentage =
-        'Enter a net percentage from 1 to 100.';
+        'Enter a net percentage greater than 0 and up to 100.';
     }
   });
 

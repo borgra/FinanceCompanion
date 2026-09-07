@@ -40,7 +40,7 @@ def _income_period_from_dict(data: dict) -> IncomePeriod:
         start_date=data["startDate"],
         end_date=data.get("endDate"),
         yearly_gross_amount=int(data["yearlyGrossAmount"]),
-        net_percentage=int(data["netPercentage"]),
+        net_percentage=float(data["netPercentage"]),
     )
 
 

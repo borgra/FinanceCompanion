@@ -897,3 +897,27 @@ def test_holding_writes_reject_growth_rates_below_negative_one():
     })
 
     assert response.status_code == 422
+
+
+def test_income_source_api_preserves_decimal_net_percentage():
+    client = build_test_client()
+    authenticate(client)
+
+    response = client.post(
+        "/api/v1/income-sources",
+        json={
+            "name": "Decimal pay",
+            "periods": [
+                {
+                    "id": "decimal-period",
+                    "startDate": "2026-01-01",
+                    "yearlyGrossAmount": 130000,
+                    "netPercentage": 72.55,
+                }
+            ],
+            "status": "Active",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["periods"][0]["netPercentage"] == 72.55

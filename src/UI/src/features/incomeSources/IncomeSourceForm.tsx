@@ -349,7 +349,7 @@ function IncomePeriodEditor({
               inputMode="decimal"
               max="100"
               min="0"
-              step="0.1"
+              step="0.01"
               type="number"
               data-has-suffix="true"
               value={period.netPercentage}

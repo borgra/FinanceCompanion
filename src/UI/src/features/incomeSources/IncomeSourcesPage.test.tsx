@@ -77,7 +77,7 @@ describe('IncomeSourcesPage', () => {
     expect(screen.getByText(/enter a source name/i)).toBeInTheDocument();
     expect(screen.getByText(/enter a start date/i)).toBeInTheDocument();
     expect(screen.getByText(/enter a positive yearly gross amount/i)).toBeInTheDocument();
-    expect(screen.getByText(/enter a net percentage from 1 to 100/i)).toBeInTheDocument();
+    expect(screen.getByText(/enter a net percentage greater than 0 and up to 100/i)).toBeInTheDocument();
   });
 
   it('keeps salary type and bi-weekly cadence fixed', async () => {
@@ -290,5 +290,21 @@ describe('IncomeSourcesPage', () => {
     expect(screen.getByRole('button', { name: /add income source/i })).toHaveFocus();
     await userEvent.tab();
     expect(screen.getByRole('tab', { name: 'All' })).toHaveFocus();
+  });
+});
+
+describe('decimal Net Percentage', () => {
+  it('saves a decimal Net Percentage without rounding it', async () => {
+    const repository = renderPage();
+    await userEvent.click(await screen.findByRole('button', { name: /add income source/i }));
+    await userEvent.type(screen.getByLabelText(/source name/i), 'Decimal pay');
+    await userEvent.type(screen.getByLabelText(/start date/i), '2026-01-01');
+    await userEvent.type(screen.getByLabelText(/yearly gross pay/i), '130000');
+    await userEvent.type(screen.getByLabelText(/net percentage/i), '72.55');
+
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    const [savedSource] = await repository.listIncomeSources();
+    expect(savedSource.periods[0].netPercentage).toBe(72.55);
   });
 });
