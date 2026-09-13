@@ -20,6 +20,24 @@ describe('MortgageSchedulePanel', () => {
   });
 
   afterEach(() => vi.useRealTimers());
+  it.each([
+    ['2025-05', 15000, 141],
+    ['2026-02', 15000, 150],
+    ['2026-01', 15000, 149],
+    ['2025-12', 100, 0],
+    ['2026-01', 100, 0],
+    ['2026-01', 0, 0],
+  ])('shows remaining payments for a schedule starting %s with balance %i', (scheduleStartMonth, startingOutstandingMortgage, remaining) => {
+    render(
+      <MortgageSchedulePanel
+        initial={{ ...initial, scheduleStartMonth, startingOutstandingMortgage }}
+        repository={{ putMortgageSchedule: vi.fn() }}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Payments Remaining').parentElement?.querySelector('strong')).toHaveTextContent(new RegExp(`^${remaining}$`));
+  });
   it('uses shared money cells to fill principal and extra-principal overrides down the schedule', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const putMortgageSchedule = vi.fn().mockResolvedValue({ mortgageSchedule: initial });
