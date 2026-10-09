@@ -483,6 +483,15 @@ describe('InvestingPage', () => {
         accountPositions: [{ accountId: 'acc-401k', quantity: 3, costBasis: null }],
         createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
       },
+      {
+        id: 'holding-shared',
+        security: { symbol: 'SHARED', name: 'Shared Security', exchange: 'NYSE', assetType: 'Equity', currency: 'USD', price: 25 },
+        accountPositions: [
+          { accountId: 'acc-taxable-brokerage', quantity: 2, costBasis: null },
+          { accountId: 'acc-401k', quantity: 4, costBasis: null },
+        ],
+        createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      },
     ];
     const holdingRepository = { ...createMockHoldingRepository(), listHoldings: async () => holdings };
 
@@ -494,7 +503,13 @@ describe('InvestingPage', () => {
 
     await user.selectOptions(screen.getByLabelText('Filter holdings by account'), 'acc-401k');
     expect(await screen.findByText('Retirement Security')).toBeInTheDocument();
+    expect(screen.getByText('Shared Security')).toBeInTheDocument();
     expect(screen.queryByText('Taxable Security')).not.toBeInTheDocument();
+    expect(screen.getByText('Viewing holdings in Fidelity 401k.')).toBeInTheDocument();
+    expect(screen.getByText('Fidelity 401k total')).toBeInTheDocument();
+    expect(screen.getByText('$400.00')).toBeInTheDocument();
+    expect(screen.getByLabelText('SHARED quantity for Fidelity 401k')).toBeInTheDocument();
+    expect(screen.queryByLabelText('SHARED quantity for Fidelity Taxable Brokerage')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Show all accounts' }));
     expect(await screen.findByText('Taxable Security')).toBeInTheDocument();

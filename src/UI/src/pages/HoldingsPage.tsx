@@ -282,6 +282,13 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     [accounts],
   );
 
+  const selectedAccount = useMemo(
+    () => managedAccounts.find((account) => account.id === selectedAccountFilterId) ?? null,
+    [managedAccounts, selectedAccountFilterId],
+  );
+
+  const visibleAccounts = selectedAccount ? [selectedAccount] : managedAccounts;
+
   const accountNameById = useMemo(
     () => new Map(accounts.map((account) => [account.id, account.name])),
     [accounts],
@@ -316,6 +323,17 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     }
     return values;
   }, [accounts, holdings]);
+
+  const selectedAccountValue = useMemo(
+    () => selectedAccount
+      ? holdings.reduce((total, holding) => {
+        const price = isCashSecurity(holding.security) ? 1 : holding.security.price ?? 0;
+        const quantity = holding.accountPositions.find((position) => position.accountId === selectedAccount.id)?.quantity ?? 0;
+        return total + quantity * price;
+      }, 0)
+      : 0,
+    [holdings, selectedAccount],
+  );
 
   const toggleSort = (key: 'name' | 'symbol') => {
     setSort((current) => current?.key === key
@@ -752,7 +770,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
               </span>
             </button>
           </div>
-          <p>Manage share quantities by investment account.</p>
+          <p>{selectedAccount ? `Viewing holdings in ${selectedAccount.name}.` : 'Manage share quantities by investment account.'}</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <label htmlFor="holdings-account-filter">Account</label>
             <select id="holdings-account-filter" aria-label="Filter holdings by account" value={selectedAccountFilterId} onChange={(event) => setSelectedAccountFilterId(event.target.value)}>
@@ -798,12 +816,18 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         </div>
       </div>
 
-      <section className="holdings-value-summary" aria-label="Investment value summary">
-        <div><span>Total investments</span><strong>{formatPortfolioMoney(investmentValues.total)}</strong></div>
-        <div><span>Taxable</span><strong>{formatPortfolioMoney(investmentValues.taxable)}</strong></div>
-        <div><span>Retirement</span><strong>{formatPortfolioMoney(investmentValues.retirement)}</strong></div>
-        <div><span>HSA</span><strong>{formatPortfolioMoney(investmentValues.hsa)}</strong></div>
-      </section>
+      {selectedAccount ? (
+        <section className="holdings-value-summary" aria-label={`${selectedAccount.name} account value summary`}>
+          <div><span>{selectedAccount.name} total</span><strong>{formatPortfolioMoney(selectedAccountValue)}</strong></div>
+        </section>
+      ) : (
+        <section className="holdings-value-summary" aria-label="Investment value summary">
+          <div><span>Total investments</span><strong>{formatPortfolioMoney(investmentValues.total)}</strong></div>
+          <div><span>Taxable</span><strong>{formatPortfolioMoney(investmentValues.taxable)}</strong></div>
+          <div><span>Retirement</span><strong>{formatPortfolioMoney(investmentValues.retirement)}</strong></div>
+          <div><span>HSA</span><strong>{formatPortfolioMoney(investmentValues.hsa)}</strong></div>
+        </section>
+      )}
 
       {managedAccounts.length === 0 ? (
         <div className="investment-account-empty">
@@ -815,11 +839,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
             <tr>
               <FinanceTableHeaderCell icon="show_chart" aria-sort={sort?.key === 'name' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}><button className="link-button" type="button" onClick={() => toggleSort('name')} aria-label="Sort by Security Name">Security {sort?.key === 'name' ? (sort.direction === 'asc' ? '↑' : '↓') : ''}</button></FinanceTableHeaderCell>
               <FinanceTableHeaderCell aria-sort={sort?.key === 'symbol' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}><button className="link-button" type="button" onClick={() => toggleSort('symbol')} aria-label="Sort by Ticker">Ticker {sort?.key === 'symbol' ? (sort.direction === 'asc' ? '↑' : '↓') : ''}</button></FinanceTableHeaderCell>
-              <FinanceTableHeaderCell>Total Qty</FinanceTableHeaderCell>
+              <FinanceTableHeaderCell>{selectedAccount ? 'Quantity' : 'Total Qty'}</FinanceTableHeaderCell>
               <FinanceTableHeaderCell isEditable>Price</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Value</FinanceTableHeaderCell>
-              {managedAccounts.map((account) => (
-                <FinanceTableHeaderCell key={account.id} icon="account_balance" isEditable className={selectedAccountFilterId === account.id ? 'holdings-account-column-highlight' : undefined}>
+              {visibleAccounts.map((account) => (
+                <FinanceTableHeaderCell key={account.id} icon="account_balance" isEditable className={selectedAccount ? 'holdings-account-column-highlight' : undefined}>
                   {account.name.length > 18 ? `${account.name.slice(0, 15)}...` : account.name}
                 </FinanceTableHeaderCell>
               ))}
@@ -829,13 +853,13 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           <tbody>
             {orderedHoldings.length === 0 ? (
               <tr>
-                <td colSpan={6 + managedAccounts.length}>
+                <td colSpan={6 + visibleAccounts.length}>
                   <span className="excel-cell-val">{holdings.length === 0 ? 'No holdings have been added yet.' : 'No holdings are in the selected account.'}</span>
                 </td>
               </tr>
             ) : (
               orderedHoldings.map((holding) => {
-                const totalQuantity = managedAccounts.reduce(
+                const totalQuantity = visibleAccounts.reduce(
                   (total, account) => total + getQuantity(holding, account.id),
                   0,
                 );
@@ -877,8 +901,8 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                         formatValue={formatMoney}
                       />
                     </td>
-                    {managedAccounts.map((account) => (
-                      <td key={account.id} title={accountNameById.get(account.id)} className={selectedAccountFilterId === account.id ? 'holdings-account-column-highlight' : undefined}>
+                    {visibleAccounts.map((account) => (
+                      <td key={account.id} title={accountNameById.get(account.id)} className={selectedAccount ? 'holdings-account-column-highlight' : undefined}>
                         <FinanceMoneyCellInput
                           value={getQuantity(holding, account.id)}
                           formatValue={formatQuantity}
