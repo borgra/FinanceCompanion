@@ -29,7 +29,7 @@ The workflows use these GitHub environments:
 | `infrastructure` | `Infra Up`, `Infra Down` |
 | `deployment` | `Frontend Deploy`, `Backend Deploy` |
 
-Configure environment protection rules in GitHub for the `infrastructure` environment, especially for resource deletion. Required reviewers are recommended.
+Configure environment protection rules in GitHub for both environments, especially `infrastructure` for resource creation and deletion. Required reviewers are recommended.
 
 ## Federated Credential Subjects
 
@@ -58,12 +58,23 @@ Recommended Azure RBAC:
 | Infrastructure identity | `Contributor` at subscription scope, or a custom role that can create resource groups and deploy the required resource types. |
 | Deployment identity | `Contributor` on the application resource group only. |
 
+Creating the optional Foundry tranche also creates scoped role assignments for the project's service identity and API caller. Its infrastructure operator needs `Microsoft.Authorization/roleAssignments/write` at those Foundry scopes (for example, appropriately scoped Role Based Access Control Administrator in addition to resource creation permissions). Contributor alone cannot grant these roles. Keep this additional permission off the normal Backend Deploy identity. For an existing account, scope the grant to that account; initial account creation requires an administrator able to assign roles beneath the target resource group.
+
 The deployment identity needs enough permission to:
 
 - Read Static Web App deployment secrets.
 - Update the Static Web App deployment.
 - Update Container Apps.
 - Read Cosmos DB connection strings if backend deployment is enabled.
+
+Foundry inference uses the API Container App's managed identity, separately from
+the GitHub OIDC deployment principal and the application's Entra sign-in client.
+An administrator grants project-scoped Foundry User access (or resource-scoped
+Cognitive Services OpenAI User for direct OpenAI inference). See
+[Foundry Entra RBAC](../Docs/Foundry%20Entra%20RBAC.md) for the idempotent setup
+script, exact role GUIDs, local developer access, optional user-assigned identity,
+and endpoint/scope troubleshooting. Do not grant the runtime identity Contributor
+or expand the deployment principal's permissions just to make inference work.
 
 ## Secrets
 

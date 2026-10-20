@@ -5379,3 +5379,28 @@ button.security-result:hover {
 .configuration-danger-card { border-color: color-mix(in srgb, var(--md-sys-color-error) 45%, var(--md-sys-color-outline-variant)); }
 .danger-action { color: var(--md-sys-color-error); }
 @media (max-width: 720px) { .configuration-card-grid { grid-template-columns: 1fr; } .configuration-card-wide { grid-column: auto; } .configuration-tabs { width: 100%; } .configuration-actions .primary-action, .configuration-actions .secondary-action { width: 100%; } }
+
+.distribution-research {
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-s);
+  padding: 12px 14px;
+}
+.distribution-research .passive-income-section-heading { flex-wrap: wrap; gap: 12px; }
+.distribution-research p { max-width: 80ch; }
+.distribution-research-status { display: grid; gap: 12px; padding-left: 20px; }
+.distribution-research-status li { overflow-wrap: anywhere; }
+.distribution-research-status span { display: block; }
+.distribution-research summary { cursor: pointer; }
+.saved-web-research { margin-top: 8px; }
+.saved-web-research-answer { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 28rem; overflow-y: auto; }
+.distribution-table-scroll { overflow-x: auto; }
+.distribution-payments-table { width: 100%; min-width: 680px; table-layout: fixed; border-collapse: collapse; font-size: 0.82rem; }
+.distribution-payments-table caption { text-align: left; padding: 8px; }
+.distribution-payments-table th, .distribution-payments-table td { padding: 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--md-sys-color-outline-variant); }
+.distribution-payments-table thead th:nth-child(2) { width: 38%; }
+.distribution-payments-table tbody th { font-weight: 400; }
+.distribution-payments-table small { display: block; white-space: normal; overflow-wrap: anywhere; }
+.passive-income-summary-card small { color: var(--md-sys-color-on-surface-variant); }
+.passive-income-year-control .field { max-width: 100%; }
+.passive-income-year-control select { max-width: 100%; }
+.passive-income-month-expanded { grid-column: 1 / -1; }

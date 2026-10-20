@@ -82,13 +82,15 @@ def test_refresh_atomically_updates_same_symbol_and_preserves_each_manual_schedu
     store.holdings["user"] = [holding("first", growth=0.08), holding("second", growth=0.12)]
     repository = InMemoryHoldingRepository(store)
 
-    refreshed = RefreshHoldingDividends(repository, StubDividendResearchProvider()).execute("user", "first")
+    refreshed = RefreshHoldingDividends(repository, StubDividendResearchProvider(), today=lambda: date(2026, 9, 4)).execute("user", "first")
     saved = repository.list_for_user("user")
 
     assert refreshed.security.dividend_research_provider == "stub"
     assert refreshed.security.dividend_research_adjustment_basis == "current_share_basis"
-    assert len(refreshed.security.source_payout_details) == 12
-    assert len(refreshed.security.payout_details) == 13
+    assert len(refreshed.security.source_payout_details) == 13
+    assert len(refreshed.security.payout_details) == 14
+    assert len([item for item in refreshed.security.payout_details if item.status == "projected" and item.ex_dividend_date.startswith("2027")]) == 4
+    assert all(item.ex_dividend_date >= "2024-09-04" for item in refreshed.security.source_payout_details)
     assert any(payout.amount == 9.99 for payout in refreshed.security.payout_details)
     assert any(payout.source == "stub" for payout in refreshed.security.payout_details)
     assert [item.security.dividend_growth_rate for item in saved] == [0.08, 0.12]
@@ -100,7 +102,7 @@ def test_manual_payment_overrides_matching_researched_date_without_hiding_other_
     store = InMemoryDataStore()
     saved = holding("first")
     provider = StubDividendResearchProvider()
-    source = provider.research(request()).payments[0]
+    source = next(item for item in provider.research(request()).payments if item.ex_dividend_date == "2025-02-15")
     override = replace(
         saved.security.manual_payout_details[0],
         ex_dividend_date=source.ex_dividend_date,
@@ -109,11 +111,11 @@ def test_manual_payment_overrides_matching_researched_date_without_hiding_other_
     saved.security.manual_payout_details = [override]
     store.holdings["user"] = [saved]
 
-    refreshed = RefreshHoldingDividends(InMemoryHoldingRepository(store), provider).execute(
+    refreshed = RefreshHoldingDividends(InMemoryHoldingRepository(store), provider, today=lambda: date(2026, 9, 4)).execute(
         "user", "first"
     )
 
-    assert len(refreshed.security.payout_details) == 12
+    assert len(refreshed.security.payout_details) == 13
     matching = [
         payout for payout in refreshed.security.payout_details
         if payout.ex_dividend_date == source.ex_dividend_date
@@ -134,7 +136,7 @@ def test_invalid_provider_result_does_not_mutate_saved_holding():
     repository = InMemoryHoldingRepository(store)
 
     with pytest.raises(DividendResearchValidationError):
-        RefreshHoldingDividends(repository, InvalidProvider()).execute("user", "first")
+        RefreshHoldingDividends(repository, InvalidProvider(), today=lambda: date(2026, 9, 4)).execute("user", "first")
 
     assert repository.list_for_user("user") == [original]
 

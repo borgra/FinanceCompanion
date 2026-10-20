@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+from datetime import date
+
 from app.domain.models import (
     Account,
     AccountColumn,
@@ -35,6 +38,7 @@ from app.presentation.http.schemas import (
     UserResponse,
 )
 from app.domain.models.security_metadata import normalize_security_metadata
+from app.application.dividend_payouts import normalize_distribution_metadata
 
 
 def to_user_response(user: User) -> UserResponse:
@@ -213,31 +217,11 @@ def to_account_payload(item: Account) -> AccountPayload:
 
 
 def to_security_payout_details(payload: SecurityPayoutDetailsPayload) -> SecurityPayoutDetails:
-    return SecurityPayoutDetails(
-        ex_dividend_date=payload.ex_dividend_date,
-        amount=payload.amount,
-        declaration_date=payload.declaration_date,
-        record_date=payload.record_date,
-        payment_date=payload.payment_date,
-        source=payload.source,
-        source_url=payload.source_url,
-        status=payload.status,
-        mode=payload.mode,
-    )
+    return SecurityPayoutDetails(**payload.model_dump())
 
 
 def to_security_payout_details_payload(item: SecurityPayoutDetails) -> SecurityPayoutDetailsPayload:
-    return SecurityPayoutDetailsPayload(
-        ex_dividend_date=item.ex_dividend_date,
-        amount=item.amount,
-        declaration_date=item.declaration_date,
-        record_date=item.record_date,
-        payment_date=item.payment_date,
-        source=item.source,
-        source_url=item.source_url,
-        status=item.status,
-        mode=item.mode,
-    )
+    return SecurityPayoutDetailsPayload(**asdict(item))
 
 
 def to_corporate_action(payload: CorporateActionPayload) -> CorporateAction:
@@ -253,14 +237,14 @@ def to_corporate_action(payload: CorporateActionPayload) -> CorporateAction:
 def to_corporate_action_payload(item: CorporateAction) -> CorporateActionPayload:
     return CorporateActionPayload(
         id=item.id,
-        effective_date=item.effective_date,
+        effective_date=date.fromisoformat(item.effective_date),
         type=item.type,
         old_shares=item.old_shares,
         new_shares=item.new_shares,
     )
 
 def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
-    return normalize_security_metadata(SecurityMetadata(
+    return normalize_distribution_metadata(normalize_security_metadata(SecurityMetadata(
         symbol=payload.symbol.strip().upper(),
         name=payload.name,
         exchange=payload.exchange,
@@ -285,6 +269,14 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
         dividend_research_schema_version=payload.dividend_research_schema_version,
         dividend_research_adjustment_basis=payload.dividend_research_adjustment_basis,
         dividend_research_warnings=payload.dividend_research_warnings,
+        dividend_research_as_of=payload.dividend_research_as_of,
+        dividend_research_status=payload.dividend_research_status,
+        dividend_research_history_start=payload.dividend_research_history_start,
+        dividend_research_forecast_end=payload.dividend_research_forecast_end,
+        dividend_research_snapshot_id=payload.dividend_research_snapshot_id,
+        dividend_research_cache_key=payload.dividend_research_cache_key,
+        dividend_research_snapshot=payload.dividend_research_snapshot,
+        payout_audit_details=[to_security_payout_details(payout) for payout in payload.payout_audit_details],
         sma20=payload.sma20,
         sma50=payload.sma50,
         sma200=payload.sma200,
@@ -306,7 +298,7 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
             to_corporate_action(item)
             for item in payload.corporate_actions
         ],
-    ))
+    )))
 
 
 def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayload:
@@ -335,6 +327,14 @@ def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayl
         dividend_research_schema_version=item.dividend_research_schema_version,
         dividend_research_adjustment_basis=item.dividend_research_adjustment_basis,
         dividend_research_warnings=item.dividend_research_warnings,
+        dividend_research_as_of=item.dividend_research_as_of,
+        dividend_research_status=item.dividend_research_status,
+        dividend_research_history_start=item.dividend_research_history_start,
+        dividend_research_forecast_end=item.dividend_research_forecast_end,
+        dividend_research_snapshot_id=item.dividend_research_snapshot_id,
+        dividend_research_cache_key=item.dividend_research_cache_key,
+        dividend_research_snapshot=item.dividend_research_snapshot,
+        payout_audit_details=[to_security_payout_details_payload(payout) for payout in item.payout_audit_details],
         sma20=item.sma20,
         sma50=item.sma50,
         sma200=item.sma200,

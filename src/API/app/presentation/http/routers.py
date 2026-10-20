@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import uuid
+import logging
 from dataclasses import asdict, replace
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.domain.dividend_research import DividendResearchValidationError
+from app.domain.dividend_research import DividendResearchProviderError, DividendResearchValidationError
 from app.domain.exceptions import AuthenticationError, DomainError, NotFoundError
 from app.infrastructure.alpha_vantage_security_details import SecurityDetailsUnavailableError
 from app.infrastructure.alpha_vantage_security_search import SecuritySearchUnavailableError
@@ -556,10 +557,13 @@ def refresh_holding_dividends(
         return to_holding_payload(
             container.refresh_holding_dividends.execute(user.user_id, holding_id)
         )
+    except DividendResearchProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except DividendResearchValidationError as exc:
+        logging.getLogger(__name__).warning("Distribution research validation failed: %s", str(exc).replace("\r", " ").replace("\n", " "))
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Dividend research returned an invalid result.",
+            detail=f"Distribution research could not be imported: {exc}",
         ) from exc
     except DomainError as exc:
         raise _domain_error_to_http(exc) from exc

@@ -515,183 +515,58 @@ describe('InvestingPage', () => {
     expect(await screen.findByText('Taxable Security')).toBeInTheDocument();
     expect(screen.getByText('Retirement Security')).toBeInTheDocument();
   });
-  it('shows passive income by month with prior actuals and current and next-year estimates', async () => {
-    const holdingRepository = createMockHoldingRepository();
-    const vti = (await holdingRepository.searchSecurities('vti'))[0];
-    const manualPayouts = (vti.payoutDetails ?? []).map((payout) => ({ ...payout, mode: 'manual' as const, source: 'user' }));
-    await holdingRepository.createHolding({
-      security: { ...vti, payoutDetails: manualPayouts, manualPayoutDetails: manualPayouts },
-      accountPositions: [
-        { accountId: 'acc-taxable-brokerage', quantity: 12.5, costBasis: null },
-      ],
-    });
-
-    const confirm = vi.spyOn(window, 'confirm');
-    confirm.mockClear();
-    const refreshHoldingSecurityDetails = vi.spyOn(holdingRepository, 'refreshHoldingSecurityDetails');
-    const refreshHoldingDividends = vi.spyOn(holdingRepository, 'refreshHoldingDividends');
-    const currentYear = new Date().getFullYear();
-    render(
-      <InvestingPage
-        accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
-        holdingRepository={holdingRepository}
-        incomeRepository={createMockIncomeSourceRepository()}
-      />,
-    );
-
+  it('refreshes researched distributions from Holdings and displays all three Income years', async () => {
+    vi.setSystemTime(new Date('2026-10-19T12:00:00'));
+    const repository = createMockHoldingRepository();
+    const security = (await repository.searchSecurities('vti'))[0];
+    await repository.createHolding({ security, accountPositions: [{ accountId: 'acc-taxable-brokerage', quantity: 10 }] });
+    const refresh = vi.spyOn(repository, 'refreshHoldingDividends');
+    render(<InvestingPage accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })} holdingRepository={repository} incomeRepository={createMockIncomeSourceRepository()} />);
     await userEvent.click(screen.getByRole('tab', { name: 'Holdings' }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Update VTI holding' }));
-    await screen.findByText('VTI was updated.');
-    expect(confirm).not.toHaveBeenCalled();
-    expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
-    expect(refreshHoldingSecurityDetails.mock.calls[0]).toHaveLength(1);
-    expect(screen.queryByRole('button', { name: 'Corporate Actions' })).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Update VTI dividends' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Update VTI dividends' }));
     expect(await screen.findByText('VTI dividends were updated with stub data.')).toBeInTheDocument();
-    expect(refreshHoldingDividends).toHaveBeenCalledWith(expect.any(String));
-    expect(screen.getByText(/Stub data · Last updated/)).toBeInTheDocument();
-
+    expect(refresh).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole('tab', { name: 'Passive Income' }));
-
-    expect(await screen.findByRole('heading', { name: 'Passive Income' })).toBeInTheDocument();
-    expect(screen.getByText(String(currentYear))).toBeInTheDocument();
-    expect(screen.getByText('Annual Dividend Income')).toBeInTheDocument();
-    expect(screen.getByText('Average Monthly Dividend Income')).toBeInTheDocument();
-    expect(screen.getAllByText('$5.63').length).toBeGreaterThan(0);
-
-    const decemberEstimate = screen.getByRole('button', { name: /Dec, 1 payment, \$5\.24/i });
-    expect(decemberEstimate.closest('article')).toHaveClass('passive-income-estimate');
-
-    await userEvent.click(screen.getByRole('button', { name: /Jul, 1 payment, \$5\.63/i }));
-
-    expect(screen.getByText(`${currentYear}-07-02`)).toBeInTheDocument();
-    expect(screen.getByText('VTI')).toBeInTheDocument();
-    expect(screen.getByText('Vanguard Total Stock Market ETF')).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Show prior year' }));
-
-    expect(screen.getByText(String(currentYear - 1))).toBeInTheDocument();
-    expect(screen.getByText('Prior year actuals')).toBeInTheDocument();
-    expect(screen.getAllByText('$5.00').length).toBeGreaterThan(0);
-
-    await userEvent.click(screen.getByRole('button', { name: 'Show next year' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Show next year' }));
-
-    expect(screen.getByText(String(currentYear + 1))).toBeInTheDocument();
-    expect(screen.getByText('Next year estimate')).toBeInTheDocument();
-    expect(screen.getByText('Annual Dividend Income')).toBeInTheDocument();
-    expect(screen.getAllByText('$5.89').length).toBeGreaterThan(0);
-
-    const nextYearJulyEstimate = screen.getByRole('button', { name: /Jul, 1 payment, \$5\.89/i });
-    expect(nextYearJulyEstimate.closest('article')).toHaveClass('passive-income-estimate');
-    await userEvent.click(nextYearJulyEstimate);
-
-    expect(screen.getByText(`${currentYear + 1}-07-02`)).toBeInTheDocument();
-    expect(screen.getByText('4.79% growth estimate')).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Show current year' }));
-
-    expect(screen.getByText(String(currentYear))).toBeInTheDocument();
-    expect(screen.getByText('Current year')).toBeInTheDocument();
+    const year = await screen.findByRole('combobox', { name: 'Distribution year' });
+    expect(year).toHaveValue('2026');
+    expect(screen.getByRole('button', { name: /Nov, 1 payment, \$4.15, announced/ })).toBeInTheDocument();
+    await userEvent.selectOptions(year, '2025');
+    expect(screen.getByRole('button', { name: /Feb, 1 payment, \$3.80, actual/ })).toBeInTheDocument();
+    await userEvent.selectOptions(year, '2027');
+    const projected = screen.getByRole('button', { name: /Feb, 1 payment, \$3.98, projected/ });
+    await userEvent.click(projected);
+    expect(screen.getByText('Projected · Income')).toBeInTheDocument();
+    expect(screen.getByText(/Method: seasonal_median_v1/)).toBeInTheDocument();
+    expect(screen.queryByText(/% growth estimate/)).not.toBeInTheDocument();
   });
 
-  it('correctly handles future manual payouts, prioritizing defined next-year payouts and mapping leap year Feb 29 to Feb 28', async () => {
-    const RealDate = globalThis.Date;
-    const mockDate = new RealDate('2025-01-15T12:00:00Z');
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    (globalThis as any).Date = function (...args: any[]) {
-      if (args.length > 0) {
-        return new (RealDate as any)(...args);
-      }
-      return mockDate;
-    };
-    (globalThis as any).Date.now = () => mockDate.getTime();
-    (globalThis as any).Date.UTC = RealDate.UTC;
-    (globalThis as any).Date.parse = RealDate.parse;
-    (globalThis as any).Date.prototype = RealDate.prototype;
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    const mockHolding: Holding = {
+  it('keeps future manual entries announced and never invents near-term payments from legacy history', async () => {
+    vi.setSystemTime(new Date('2025-01-15T12:00:00'));
+    const repository = createMockHoldingRepository();
+    const holding: Holding = {
       id: 'holding-test',
-      security: {
-        symbol: 'TEST',
-        name: 'Test Security',
-        exchange: 'NASDAQ',
-        assetType: 'Equity',
-        currency: 'USD',
-        dividendGrowthRate: 0.1,
+      security: { symbol: 'TEST', name: 'Test Security', exchange: 'NASDAQ', assetType: 'Equity', currency: 'USD', dividendGrowthRate: 0.1,
         payoutDetails: [
-          { exDividendDate: '2024-02-29', paymentDate: '2024-02-29', amount: 1.0, source: 'manual' },
-          { exDividendDate: '2024-08-15', paymentDate: '2024-08-15', amount: 3.0, source: 'manual' },
-          { exDividendDate: '2025-09-15', paymentDate: '2025-09-15', amount: 2.0, source: 'manual' },
-          { exDividendDate: '2026-08-20', paymentDate: '2026-08-20', amount: 4.0, source: 'manual' },
+          { exDividendDate: '2024-02-29', amount: 1, mode: 'manual' },
+          { exDividendDate: '2025-09-15', amount: 2, mode: 'manual' },
+          { exDividendDate: '2026-08-20', amount: 4, mode: 'manual' },
         ],
       },
-      accountPositions: [
-        { accountId: 'acc-taxable-brokerage', quantity: 10 },
-      ],
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
+      accountPositions: [{ accountId: 'acc-taxable-brokerage', quantity: 10 }],
+      createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z',
     };
-
-    const mockRepository = createMockHoldingRepository();
-    vi.spyOn(mockRepository, 'listHoldings').mockResolvedValue([mockHolding]);
-
-    render(
-      <InvestingPage
-        accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })}
-        holdingRepository={mockRepository}
-        incomeRepository={createMockIncomeSourceRepository()}
-      />,
-    );
-
+    vi.spyOn(repository, 'listHoldings').mockResolvedValue([holding]);
+    render(<InvestingPage accountRepository={createMockAccountRepository({ initialAccounts: investmentAccounts })} holdingRepository={repository} incomeRepository={createMockIncomeSourceRepository()} />);
     await userEvent.click(screen.getByRole('tab', { name: 'Passive Income' }));
-
-    expect(await screen.findByRole('heading', { name: 'Passive Income' })).toBeInTheDocument();
-    expect(screen.getByText('2025')).toBeInTheDocument();
-
-    const febBtn = screen.getByRole('button', { name: /Feb, 1 payment, \$11\.00/i });
-    expect(febBtn.closest('article')).toHaveClass('passive-income-estimate');
-    await userEvent.click(febBtn);
-    expect(screen.getByText('2025-02-28')).toBeInTheDocument();
-
-    const augBtn = screen.getByRole('button', { name: /Aug, 1 payment, \$33\.00/i });
-    expect(augBtn.closest('article')).toHaveClass('passive-income-estimate');
-
-    const sepBtn = screen.getByRole('button', { name: /Sep, 1 payment, \$20\.00/i });
-    expect(sepBtn.closest('article')).toHaveClass('passive-income-estimate');
-    await userEvent.click(sepBtn);
-    expect(screen.getByText('2025-09-15')).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Show next year' }));
-    expect(screen.getByText('2026')).toBeInTheDocument();
-
-    const febNextBtn = screen.getByRole('button', { name: /Feb, 1 payment, \$12\.10/i });
-    expect(febNextBtn.closest('article')).toHaveClass('passive-income-estimate');
-
-    const augNextBtn = screen.getByRole('button', { name: /Aug, 1 payment, \$40\.00/i });
-    expect(augNextBtn.closest('article')).toHaveClass('passive-income-estimate');
-    await userEvent.click(augNextBtn);
-    expect(screen.getByText('2026-08-20')).toBeInTheDocument();
-    expect(screen.queryByText('$36.30')).not.toBeInTheDocument();
-
-    const sepNextBtn = screen.getByRole('button', { name: /Sep, 1 payment, \$22\.00/i });
-    expect(sepNextBtn.closest('article')).toHaveClass('passive-income-estimate');
-
-    await userEvent.click(screen.getByRole('button', { name: 'Show current year' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Show prior year' }));
-    expect(screen.getByText('2024')).toBeInTheDocument();
-
-    const febPriorBtn = screen.getByRole('button', { name: /Feb, 1 payment, \$10\.00/i });
-    expect(febPriorBtn.closest('article')).not.toHaveClass('passive-income-estimate');
-    await userEvent.click(febPriorBtn);
+    const year = await screen.findByRole('combobox', { name: 'Distribution year' });
+    expect(screen.getByRole('button', { name: /Feb, 0 payments/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sep, 1 payment, \$20.00, announced/ })).toBeInTheDocument();
+    await userEvent.selectOptions(year, '2026');
+    expect(screen.getByRole('button', { name: /Aug, 1 payment, \$40.00, announced/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Feb, 0 payments/ })).toBeInTheDocument();
+    await userEvent.selectOptions(year, '2024');
+    await userEvent.click(screen.getByRole('button', { name: /Feb, 1 payment, \$10.00, actual/ }));
     expect(screen.getByText('2024-02-29')).toBeInTheDocument();
-
-    const augPriorBtn = screen.getByRole('button', { name: /Aug, 1 payment, \$30\.00/i });
-    expect(augPriorBtn.closest('article')).not.toHaveClass('passive-income-estimate');
-
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    (globalThis as any).Date = RealDate;
-    /* eslint-enable @typescript-eslint/no-explicit-any */
+    expect(screen.getByText('User-entered')).toBeInTheDocument();
   });
 });

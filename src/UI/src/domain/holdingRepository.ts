@@ -12,6 +12,7 @@ import type {
 export type HoldingRepository = {
   searchSecurities: (query: string) => Promise<SecurityMetadata[]>;
   listHoldings: () => Promise<Holding[]>;
+  reloadHoldings?: () => Promise<Holding[]>;
   createHolding: (draft: HoldingDraft) => Promise<Holding>;
   updateHolding: (id: string, draft: HoldingDraft) => Promise<Holding>;
   updateHoldingsBatch: (changes: Array<{ id: string; draft: HoldingDraft }>) => Promise<Holding[]>;
@@ -53,10 +54,14 @@ const mergeDividendPayouts = (
     let matchIndex = merged.findIndex((candidate) =>
       candidate.mode !== 'manual'
       && candidate.exDividendDate === payout.exDividendDate
+      && (candidate.distributionType ?? 'income') === (payout.distributionType ?? 'income')
+      && (candidate.isRegular ?? true) === (payout.isRegular ?? true)
       && candidate.paymentDate === payout.paymentDate);
     if (matchIndex < 0) {
       matchIndex = merged.findIndex((candidate) =>
-        candidate.mode !== 'manual' && candidate.exDividendDate === payout.exDividendDate);
+        candidate.mode !== 'manual' && candidate.exDividendDate === payout.exDividendDate
+        && (candidate.distributionType ?? 'income') === (payout.distributionType ?? 'income')
+        && (candidate.isRegular ?? true) === (payout.isRegular ?? true));
     }
     if (matchIndex < 0) merged.push(payout);
     else merged[matchIndex] = payout;
@@ -363,17 +368,30 @@ export function createMockHoldingRepository(): HoldingRepository {
       const year = today.getFullYear();
       const sourceUrl = 'https://example.test/finance-companion/stub-dividends';
       const sourcePayoutDetails: SecurityPayoutDetails[] = [];
-      for (const [targetYear, amount] of [[year - 2, 0.35], [year - 1, 0.38], [year, 0.415]] as const) {
+      const asOf = `${year}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const historyDay = Math.min(today.getDate(), new Date(year - 2, today.getMonth() + 1, 0).getDate());
+      const historyStart = `${year - 2}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(historyDay).padStart(2, '0')}`;
+      for (const [targetYear, amount] of [[year - 2, 0.35], [year - 1, 0.38], [year, 0.415], [year + 1, 0.3975]] as const) {
         for (const month of [2, 5, 8, 11]) {
           const date = `${targetYear}-${String(month).padStart(2, '0')}-15`;
+          if (date < historyStart) continue;
           sourcePayoutDetails.push({
+            eventId: `stub-${existing.security.exchange}-${existing.security.symbol}-${date}`,
+            securityId: `${existing.security.exchange}:${existing.security.symbol}`,
             exDividendDate: date,
             paymentDate: `${targetYear}-${String(month).padStart(2, '0')}-22`,
             amount,
+            amountPerShare: String(amount),
+            currency: existing.security.currency,
+            shareBasis: `as_of:${asOf}`,
+            distributionType: 'income',
+            isRegular: true,
             mode: 'source',
             source: 'stub',
             sourceUrl,
-            status: targetYear === year && month > today.getMonth() + 1 ? 'announced' : 'completed',
+            status: targetYear > year ? 'projected' : date > asOf ? 'announced' : 'completed',
+            forecastMethod: targetYear > year ? 'seasonal_median_v1 (demonstration fixture)' : null,
+            forecastAsOf: targetYear > year ? asOf : null,
           });
         }
       }
@@ -386,17 +404,21 @@ export function createMockHoldingRepository(): HoldingRepository {
           sourcePayoutDetails,
           corporateActions: [{ id: `research-action-1-${year - 2}-06-01`, effectiveDate: `${year - 2}-06-01`, type: 'stock_split', oldShares: 1, newShares: 2 }],
           dividendStatus: 'stub',
-          dividendResearchRetrievedAt: `${today.toISOString().slice(0, 10)}T00:00:00Z`,
+          dividendResearchRetrievedAt: nowIso(),
           dividendResearchProvider: 'stub',
           dividendResearchSourceUrl: sourceUrl,
           dividendResearchAuthoritative: false,
-          dividendResearchSchemaVersion: 1,
+          dividendResearchSchemaVersion: 2,
           dividendResearchAdjustmentBasis: 'current_share_basis',
           dividendResearchWarnings: ['Stub data is deterministic and non-authoritative.'],
+          dividendResearchAsOf: asOf,
+          dividendResearchStatus: 'partial',
+          dividendResearchHistoryStart: historyStart,
+          dividendResearchForecastEnd: `${year + 1}-12-31`,
         },
         updatedAt: nowIso(),
       };
-      holdings = holdings.map((holding) => holding.id === id ? updated : holding);
+      holdings = holdings.map((holding) => holding.security.symbol.toUpperCase() === existing.security.symbol.toUpperCase() && holding.security.exchange.toUpperCase() === existing.security.exchange.toUpperCase() ? { ...holding, security: { ...updated.security, manualPayoutDetails: holding.security.manualPayoutDetails, payoutDetails: mergeDividendPayouts(sourcePayoutDetails, holding.security.manualPayoutDetails ?? []) }, updatedAt: updated.updatedAt } : holding);
       return { ...updated, security: { ...updated.security } };
     },
     refreshHeldSecurityDetails: async () => {

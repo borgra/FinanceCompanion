@@ -14,8 +14,26 @@ export type SecurityPayoutDetails = {
   paymentDate?: string | null;
   source?: string | null;
   sourceUrl?: string | null;
-  status?: 'completed' | 'announced';
+  status?: 'completed' | 'announced' | 'projected' | 'superseded';
   mode?: 'source' | 'manual';
+  eventId?: string | null;
+  securityId?: string | null;
+  currency?: string | null;
+  distributionType?: 'income' | 'capital_gain' | 'return_of_capital' | 'other';
+  isRegular?: boolean;
+  regularityBasis?: string | null;
+  evidenceRef?: string | null;
+  sourceAuthority?: string | null;
+  amountPerShare?: string | null;
+  rawAmount?: string | null;
+  shareBasis?: string | null;
+  appliedActionIds?: string[];
+  forecastMethod?: string | null;
+  forecastRange?: { min: string; max: string } | null;
+  forecastInputEventIds?: string[];
+  forecastAsOf?: string | null;
+  supersedesEventId?: string | null;
+  excludedFromTotals?: boolean;
 };
 
 export type SecurityMetadata = {
@@ -51,6 +69,13 @@ export type SecurityMetadata = {
   dividendResearchSchemaVersion?: number | null;
   dividendResearchAdjustmentBasis?: 'raw' | 'current_share_basis' | null;
   dividendResearchWarnings?: string[];
+  dividendResearchAsOf?: string | null;
+  dividendResearchStatus?: 'fresh' | 'partial' | 'unavailable' | 'unsupported' | null;
+  dividendResearchHistoryStart?: string | null;
+  dividendResearchForecastEnd?: string | null;
+  dividendResearchSnapshotId?: string | null;
+  dividendResearchSnapshot?: Record<string, unknown>;
+  payoutAuditDetails?: SecurityPayoutDetails[];
   corporateActions?: CorporateAction[];
 };
 

@@ -22,6 +22,24 @@ class SecurityPayoutDetails:
     source_url: str | None = None
     status: str = "completed"
     mode: str = "source"
+    event_id: str | None = None
+    security_id: str | None = None
+    currency: str | None = None
+    distribution_type: str = "income"
+    is_regular: bool = True
+    regularity_basis: str | None = None
+    amount_per_share: str | None = None
+    raw_amount: str | None = None
+    share_basis: str | None = None
+    applied_action_ids: list[str] = field(default_factory=list)
+    evidence_ref: str | None = None
+    source_authority: str | None = None
+    forecast_method: str | None = None
+    forecast_range: dict[str, str] | None = None
+    forecast_input_event_ids: list[str] = field(default_factory=list)
+    forecast_as_of: str | None = None
+    supersedes_event_id: str | None = None
+    excluded_from_totals: bool = False
 
 
 @dataclass(slots=True)
@@ -68,6 +86,14 @@ class SecurityMetadata:
     dividend_research_schema_version: int | None = None
     dividend_research_adjustment_basis: str | None = None
     dividend_research_warnings: list[str] = field(default_factory=list)
+    dividend_research_as_of: str | None = None
+    dividend_research_status: str | None = None
+    dividend_research_history_start: str | None = None
+    dividend_research_forecast_end: str | None = None
+    dividend_research_snapshot_id: str | None = None
+    dividend_research_cache_key: str | None = None
+    dividend_research_snapshot: dict = field(default_factory=dict)
+    payout_audit_details: list[SecurityPayoutDetails] = field(default_factory=list)
 
 
 def is_cash_security(security: SecurityMetadata) -> bool:

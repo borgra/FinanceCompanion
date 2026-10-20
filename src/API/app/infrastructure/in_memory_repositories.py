@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import UTC, datetime
 
+from app.application.dividend_payouts import merge_dividend_payouts, normalize_distribution_metadata
 from app.domain.exceptions import NotFoundError
 from app.domain.models import (
     Account,
@@ -138,7 +139,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         _security_payout_details_from_dict(item)
         for item in data.get("manualPayoutDetails", [])
     ]
-    return normalize_security_metadata(SecurityMetadata(
+    return normalize_distribution_metadata(normalize_security_metadata(SecurityMetadata(
         symbol=data["symbol"],
         name=data["name"],
         exchange=data["exchange"],
@@ -163,33 +164,37 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         dividend_research_schema_version=data.get("dividendResearchSchemaVersion"),
         dividend_research_adjustment_basis=data.get("dividendResearchAdjustmentBasis"),
         dividend_research_warnings=list(data.get("dividendResearchWarnings", [])),
+        dividend_research_as_of=data.get("dividendResearchAsOf"),
+        dividend_research_status=data.get("dividendResearchStatus"),
+        dividend_research_history_start=data.get("dividendResearchHistoryStart"),
+        dividend_research_forecast_end=data.get("dividendResearchForecastEnd"),
+        dividend_research_snapshot_id=data.get("dividendResearchSnapshotId"),
+        dividend_research_cache_key=data.get("dividendResearchCacheKey"),
+        dividend_research_snapshot=data.get("dividendResearchSnapshot") or {},
+        payout_audit_details=[_security_payout_details_from_dict(item) for item in data.get("payoutAuditDetails", [])],
         sma20=_optional_float(data.get("sma20")),
         sma50=_optional_float(data.get("sma50")),
         sma200=_optional_float(data.get("sma200")),
         details_updated_at=data.get("detailsUpdatedAt"),
         details_status=data.get("detailsStatus"),
-        payout_details=manual_payout_details or source_payout_details,
+        payout_details=merge_dividend_payouts(source_payout_details, manual_payout_details),
         source_payout_details=source_payout_details,
         manual_payout_details=manual_payout_details,
         corporate_actions=[
             CorporateAction(id=item["id"], effective_date=item["effectiveDate"], type=item["type"], old_shares=float(item["oldShares"]), new_shares=float(item["newShares"]))
             for item in data.get("corporateActions", [])
         ],
-    ))
+    )))
 
 
 def _security_payout_details_from_dict(data: dict) -> SecurityPayoutDetails:
-    return SecurityPayoutDetails(
-        ex_dividend_date=data["exDividendDate"],
-        amount=float(data["amount"]),
-        declaration_date=data.get("declarationDate"),
-        record_date=data.get("recordDate"),
-        payment_date=data.get("paymentDate"),
-        source=data.get("source"),
-        source_url=data.get("sourceUrl"),
-        status=data.get("status", "completed"),
-        mode=data.get("mode", "source"),
-    )
+    values = {}
+    for item in fields(SecurityPayoutDetails):
+        key = item.name.split("_")[0] + "".join(part.title() for part in item.name.split("_")[1:])
+        if key in data:
+            values[item.name] = data[key]
+    values["amount"] = float(data["amount"])
+    return SecurityPayoutDetails(**values)
 
 
 def _holding_account_position_from_dict(data: dict) -> HoldingAccountPosition:

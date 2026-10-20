@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IncomeSource } from '../domain/incomeSource';
+import type { Holding } from '../domain/holding';
 import type { Workspace } from '../domain/workspace';
 import type { HttpClient } from './httpClient';
 import { createWorkspaceSession } from './workspaceSession';
@@ -26,6 +27,23 @@ const workspace = (): Workspace => ({
 });
 
 describe('workspace session', () => {
+  it('reloads all holding research after a security-wide mutation without copying manual overrides', async () => {
+    const first: Holding = {
+      id: 'first', security: { symbol: 'TEST', name: 'Test', exchange: 'NYSE', assetType: 'Equity', currency: 'USD', manualPayoutDetails: [{ exDividendDate: '2026-01-01', amount: 1, mode: 'manual' }] },
+      accountPositions: [{ accountId: 'account', quantity: 10 }], createdAt: '', updatedAt: '',
+    };
+    const second: Holding = { ...first, id: 'second', security: { ...first.security, manualPayoutDetails: [{ exDividendDate: '2026-01-01', amount: 2, mode: 'manual' }] } };
+    const refreshed = [first, second].map((holding) => ({ ...holding, security: { ...holding.security, dividendResearchStatus: 'fresh' as const } }));
+    const client = { get: vi.fn().mockResolvedValue(refreshed), post: vi.fn().mockResolvedValue(refreshed[0]) } as unknown as HttpClient;
+    const repositories = createWorkspaceSession({ ...workspace(), holdings: [first, second] }, client);
+    await repositories.holdingRepository.refreshHoldingDividends(first.id);
+    await repositories.holdingRepository.reloadHoldings!();
+    const holdings = await repositories.holdingRepository.listHoldings();
+    expect(client.get).toHaveBeenCalledWith('/holdings');
+    expect(holdings.map((holding) => holding.security.dividendResearchStatus)).toEqual(['fresh', 'fresh']);
+    expect(holdings.map((holding) => holding.security.manualPayoutDetails?.[0].amount)).toEqual([1, 2]);
+  });
+
   it('serves reads from memory and reconciles successful writes', async () => {
     const saved = { ...source, id: 'income-2', name: 'Consulting' };
     const client = {

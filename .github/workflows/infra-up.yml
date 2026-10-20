@@ -22,14 +22,31 @@ jobs:
   deploy:
     name: Deploy Azure infrastructure
     runs-on: ubuntu-latest
-    environment: deployment
+    environment: infrastructure
     concurrency:
       group: azure-infrastructure
       cancel-in-progress: false
+    env:
+      DIVIDEND_RESEARCH_PROVIDER: ${{ vars.DIVIDEND_RESEARCH_PROVIDER || 'stub' }}
+      AZURE_FOUNDRY_ENDPOINT: ${{ vars.AZURE_FOUNDRY_ENDPOINT }}
+      AZURE_FOUNDRY_DEPLOYMENT: ${{ vars.AZURE_FOUNDRY_DEPLOYMENT }}
+      AZURE_FOUNDRY_REASONING_EFFORT: ${{ vars.AZURE_FOUNDRY_REASONING_EFFORT }}
+      AZURE_FOUNDRY_CAPACITY: ${{ vars.AZURE_FOUNDRY_CAPACITY || '100' }}
+      AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID: ${{ vars.AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Validate session secret
+        env:
+          API_SESSION_SECRET: ${{ secrets.ENV_PROD_SESSION_SECRET || secrets.AZURE_API_SESSION_SECRET }}
+        shell: bash
+        run: |
+          if [[ ${#API_SESSION_SECRET} -lt 32 || "$API_SESSION_SECRET" == local-dev-session-secret* ]]; then
+            echo "Configure a private random ENV_PROD_SESSION_SECRET (at least 32 characters)." >&2
+            exit 1
+          fi
 
       - name: Azure login
         uses: azure/login@v3
@@ -144,27 +161,74 @@ jobs:
               jq -r '.properties.outputs | to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' runtime-base-outputs.json
             } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Deploy Runtime API
+      - name: Deploy Foundry and GPT-6 Luna
+        if: env.DIVIDEND_RESEARCH_PROVIDER == 'azure_foundry' && env.AZURE_FOUNDRY_ENDPOINT == ''
         uses: azure/cli@v3
         with:
           inlineScript: |
+            set -euo pipefail
+            az deployment group create \
+              --name "${APP_NAME}-foundry" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --template-file infra/foundry.bicep \
+              --parameters appName="${APP_NAME}" location="${AZURE_LOCATION}" capacity="${AZURE_FOUNDRY_CAPACITY}" \
+              --query properties.outputs --output json --only-show-errors > foundry-outputs.json
+            {
+              echo "AZURE_FOUNDRY_ENDPOINT=$(jq -r '.projectEndpoint.value' foundry-outputs.json)"
+              echo "AZURE_FOUNDRY_DEPLOYMENT=$(jq -r '.deploymentName.value' foundry-outputs.json)"
+              echo "AZURE_FOUNDRY_REASONING_EFFORT=$(jq -r '.reasoningEffort.value' foundry-outputs.json)"
+              echo "NEW_FOUNDRY_RESOURCE_ID=$(jq -r '.foundryResourceId.value' foundry-outputs.json)"
+              echo "NEW_FOUNDRY_PROJECT_NAME=$(jq -r '.projectName.value' foundry-outputs.json)"
+            } >> "${GITHUB_ENV}"
+
+      - name: Deploy Runtime API
+        env:
+          API_SESSION_SECRET: ${{ secrets.ENV_PROD_SESSION_SECRET || secrets.AZURE_API_SESSION_SECRET }}
+          LEGACY_ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          ENTRA_CLIENT_ID: ${{ vars.ENV_PROD_ENTRA_CLIENT_ID || vars.AZURE_ENTRA_CLIENT_ID }}
+          ENTRA_TENANT_ID: ${{ vars.ENV_PROD_ENTRA_TENANT_ID || vars.AZURE_ENTRA_TENANT_ID }}
+          ALLOWED_EMAIL: ${{ vars.ENV_PROD_ALLOWED_EMAIL || vars.AZURE_ALLOWED_EMAIL }}
+          API_ENVIRONMENT: ${{ vars.AZURE_API_ENVIRONMENT || 'production' }}
+        uses: azure/cli@v3
+        with:
+          inlineScript: |
+            set -euo pipefail
             started_at="$(date +%s)"
+            if [ "${API_ENVIRONMENT}" != "development" ]; then
+              test -n "${ENTRA_CLIENT_ID}" || { echo "Configure ENV_PROD_ENTRA_CLIENT_ID or AZURE_ENTRA_CLIENT_ID." >&2; exit 1; }
+              test -n "${ENTRA_TENANT_ID}" || { echo "Configure ENV_PROD_ENTRA_TENANT_ID or AZURE_ENTRA_TENANT_ID." >&2; exit 1; }
+            fi
+            test -n "${ALLOWED_EMAIL}" || { echo "Configure ENV_PROD_ALLOWED_EMAIL or AZURE_ALLOWED_EMAIL." >&2; exit 1; }
+            MI_CLIENT_ID=""
+            if [ -n "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" ]; then
+              MI_CLIENT_ID="$(az identity show --ids "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" --query clientId --output tsv --only-show-errors)"
+              test -n "${MI_CLIENT_ID}" || { echo "Unable to resolve the user-assigned managed identity client ID." >&2; exit 1; }
+            fi
+            SECRET_PARAMS="$(mktemp)"
+            trap 'rm -f "${SECRET_PARAMS}"' EXIT
+            jq -n --arg ss "${API_SESSION_SECRET}" --arg av "${LEGACY_ALPHA_VANTAGE_API_KEY}" \
+              '{sessionSecret:{value:$ss},alphaVantageApiKey:{value:$av}}' > "${SECRET_PARAMS}"
             az deployment group create \
               --name "finance-companion-runtime-api-${{ github.run_id }}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --template-file infra/runtime-api.bicep \
-              --parameters appName="${APP_NAME}" \
+              --parameters "@${SECRET_PARAMS}" \
+                           appName="${APP_NAME}" \
                            location="${AZURE_LOCATION}" \
                            staticWebAppLocation="${AZURE_STATIC_WEB_APP_LOCATION}" \
                            apiTargetPort="${AZURE_API_TARGET_PORT}" \
                            apiMaxReplicas="${AZURE_API_MAX_REPLICAS}" \
                            tableName="${AZURE_TABLE_NAME}" \
-                           entraClientId="${{ vars.AZURE_ENTRA_CLIENT_ID }}" \
-                           entraTenantId="${{ vars.AZURE_ENTRA_TENANT_ID }}" \
-                           allowedEmail="${{ vars.AZURE_ALLOWED_EMAIL || 'steveborgra@gmail.com' }}" \
-                           sessionSecret="${{ secrets.AZURE_API_SESSION_SECRET }}" \
-                           alphaVantageApiKey="${{ secrets.ALPHA_VANTAGE_API_KEY }}" \
-                           environment="${{ vars.AZURE_API_ENVIRONMENT || 'production' }}" \
+                           entraClientId="${ENTRA_CLIENT_ID}" \
+                           entraTenantId="${ENTRA_TENANT_ID}" \
+                           allowedEmail="${ALLOWED_EMAIL}" \
+                           environment="${API_ENVIRONMENT}" \
+                           dividendResearchProvider="${DIVIDEND_RESEARCH_PROVIDER}" \
+                           azureFoundryEndpoint="${AZURE_FOUNDRY_ENDPOINT}" \
+                           azureFoundryDeployment="${AZURE_FOUNDRY_DEPLOYMENT}" \
+                           azureFoundryReasoningEffort="${AZURE_FOUNDRY_REASONING_EFFORT}" \
+                           azureFoundryManagedIdentityResourceId="${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" \
+                           azureFoundryManagedIdentityClientId="${MI_CLIENT_ID}" \
               --only-show-errors \
               --output json > runtime-api-outputs.json
             ended_at="$(date +%s)"
@@ -178,6 +242,13 @@ jobs:
               echo "| --- | --- |"
               jq -r '.properties.outputs | to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' runtime-api-outputs.json
             } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Authorize API identity for the new Foundry project
+        if: env.NEW_FOUNDRY_RESOURCE_ID != ''
+        shell: pwsh
+        run: |
+          $runtime = Get-Content runtime-api-outputs.json -Raw | ConvertFrom-Json
+          ./infra/scripts/configure-foundry-access.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -ResourceGroupName $env:AZURE_RESOURCE_GROUP -ContainerAppName $runtime.properties.outputs.containerAppName.value -FoundryResourceId $env:NEW_FOUNDRY_RESOURCE_ID -FoundryProjectName $env:NEW_FOUNDRY_PROJECT_NAME -EndpointKind Project -UserAssignedIdentityResourceId $env:AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID
 
       - name: Deploy Optional Storage
         if: env.AZURE_ENABLE_BLOB_STORAGE == 'true'

@@ -1,18 +1,11 @@
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 
 from app.infrastructure.settings import Settings
 from app.presentation.http.container import build_container
 from app.presentation.http.retirement_router import router as retirement_router
 from app.presentation.http.routers import router
-
-print("DIAGNOSTIC: STARTING CONTAINER APP", flush=True)
-print(f"DIAGNOSTIC: ENVIRONMENT = {os.environ.get('FINANCE_COMPANION_ENVIRONMENT')}", flush=True)
-print(f"DIAGNOSTIC: ALLOWED_EMAIL = {os.environ.get('FINANCE_COMPANION_ALLOWED_EMAIL')}", flush=True)
-print(f"DIAGNOSTIC: SESSION_SECRET_LENGTH = {len(os.environ.get('FINANCE_COMPANION_SESSION_SECRET', ''))}", flush=True)
-print(f"DIAGNOSTIC: COSMOS_CONN_STR_LENGTH = {len(os.environ.get('FINANCE_COMPANION_COSMOS_TABLE_CONNECTION_STRING', ''))}", flush=True)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -23,6 +16,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def persist_local_json(request, call_next):
+        if settings.environment == "development":
+            host = (request.headers.get("host") or "").strip().lower()
+            if host and host not in {"localhost", "localhost:8000", "127.0.0.1", "127.0.0.1:8000", "[::1]", "[::1]:8000", "testserver"}:
+                return JSONResponse(status_code=403, content={"detail": "Untrusted Host header."})
+        # SameSite=None cookies require CSRF protection independent of CORS.
+        # Non-browser clients can use bearer tokens without an Origin header.
+        if request.method != "OPTIONS":
+            origin = request.headers.get("origin")
+            cookie_session = settings.session_cookie_name in request.cookies
+            is_write = request.method not in {"GET", "HEAD"}
+            if (
+                (origin is not None and origin not in settings.cors_origins)
+                or (request.headers.get("sec-fetch-site") == "cross-site")
+                or (is_write and cookie_session and origin is None)
+            ):
+                return JSONResponse(status_code=403, content={"detail": "A trusted Origin is required for this request."})
         response = await call_next(request)
         store = getattr(app.state.container, "data_store", None)
         if store is not None:

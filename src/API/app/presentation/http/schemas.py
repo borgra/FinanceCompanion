@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Any, Literal
 
@@ -192,8 +193,37 @@ class SecurityPayoutDetailsPayload(CamelModel):
     payment_date: str | None = Field(default=None, serialization_alias="paymentDate")
     source: str | None = None
     source_url: str | None = Field(default=None, serialization_alias="sourceUrl")
-    status: Literal["completed", "announced"] = "completed"
+    status: Literal["completed", "announced", "projected", "superseded"] = "completed"
     mode: str = "source"
+    event_id: str | None = None
+    security_id: str | None = None
+    currency: str | None = None
+    distribution_type: Literal["income", "capital_gain", "return_of_capital", "other"] = "income"
+    is_regular: bool = True
+    regularity_basis: str | None = None
+    amount_per_share: str | None = None
+    raw_amount: str | None = None
+    share_basis: str | None = None
+    applied_action_ids: list[str] = Field(default_factory=list)
+    evidence_ref: str | None = None
+    source_authority: str | None = None
+    forecast_method: str | None = None
+    forecast_range: dict[str, str] | None = None
+    forecast_input_event_ids: list[str] = Field(default_factory=list)
+    forecast_as_of: str | None = None
+    supersedes_event_id: str | None = None
+    excluded_from_totals: bool = False
+
+    @model_validator(mode="after")
+    def validate_payout_fields(self) -> "SecurityPayoutDetailsPayload":
+        import math
+        if not math.isfinite(self.amount) or self.amount < 0 or self.amount > 1_000_000_000:
+            raise ValueError("Payout amount must be finite and non-negative.")
+        for field_name in ("ex_dividend_date", "declaration_date", "record_date", "payment_date", "forecast_as_of"):
+            value = getattr(self, field_name)
+            if value is not None:
+                date.fromisoformat(value)
+        return self
 
 
 class CorporateActionFields(CamelModel):
@@ -206,8 +236,6 @@ class CorporateActionFields(CamelModel):
 
     @model_validator(mode="after")
     def validate_action(self) -> "CorporateActionFields":
-        if self.effective_date > date.today():
-            raise ValueError("Corporate action effective dates cannot be in the future.")
         if self.old_shares == self.new_shares:
             raise ValueError("Corporate action share ratios cannot be 1:1.")
         if self.type == "stock_split" and self.new_shares <= self.old_shares:
@@ -262,6 +290,14 @@ class SecurityMetadataPayload(CamelModel):
     dividend_research_schema_version: int | None = Field(default=None, serialization_alias="dividendResearchSchemaVersion")
     dividend_research_adjustment_basis: str | None = Field(default=None, serialization_alias="dividendResearchAdjustmentBasis")
     dividend_research_warnings: list[str] = Field(default_factory=list, serialization_alias="dividendResearchWarnings")
+    dividend_research_as_of: str | None = None
+    dividend_research_status: Literal["fresh", "partial", "unavailable", "unsupported"] | None = None
+    dividend_research_history_start: str | None = None
+    dividend_research_forecast_end: str | None = None
+    dividend_research_snapshot_id: str | None = None
+    dividend_research_cache_key: str | None = None
+    dividend_research_snapshot: dict = Field(default_factory=dict)
+    payout_audit_details: list[SecurityPayoutDetailsPayload] = Field(default_factory=list)
     corporate_actions: list[CorporateActionPayload] = Field(
         default_factory=list,
         max_length=500,
@@ -298,6 +334,22 @@ class HoldingPayload(CamelModel):
 
 
 class SecurityMetadataWritePayload(SecurityMetadataPayload):
+    symbol: str = Field(min_length=1, max_length=24, pattern=r"^\s*[A-Za-z0-9][A-Za-z0-9.\-]{0,23}\s*$")
+    name: str = Field(min_length=1, max_length=250)
+    exchange: str = Field(min_length=1, max_length=64)
+    asset_type: str = Field(min_length=1, max_length=64, serialization_alias="assetType")
+    currency: str = Field(min_length=1, max_length=16)
+    payout_details: list[SecurityPayoutDetailsPayload] = Field(default_factory=list, max_length=1000, serialization_alias="payoutDetails")
+    source_payout_details: list[SecurityPayoutDetailsPayload] = Field(default_factory=list, max_length=1000, serialization_alias="sourcePayoutDetails")
+    manual_payout_details: list[SecurityPayoutDetailsPayload] = Field(default_factory=list, max_length=1000, serialization_alias="manualPayoutDetails")
+    payout_audit_details: list[SecurityPayoutDetailsPayload] = Field(default_factory=list, max_length=1000)
+    dividend_research_warnings: list[str] = Field(default_factory=list, max_length=100, serialization_alias="dividendResearchWarnings")
+
+    @model_validator(mode="after")
+    def validate_snapshot_size(self) -> "SecurityMetadataWritePayload":
+        if self.dividend_research_snapshot and len(json.dumps(self.dividend_research_snapshot)) > 500_000:
+            raise ValueError("dividendResearchSnapshot exceeds the maximum allowed size.")
+        return self
     dividend_growth_rate: float | None = Field(
         default=None,
         ge=-1,

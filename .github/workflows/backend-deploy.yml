@@ -28,6 +28,13 @@ jobs:
     concurrency:
       group: backend-deployment
       cancel-in-progress: true
+    env:
+      DIVIDEND_RESEARCH_PROVIDER: ${{ vars.DIVIDEND_RESEARCH_PROVIDER || 'stub' }}
+      AZURE_FOUNDRY_ENDPOINT: ${{ vars.AZURE_FOUNDRY_ENDPOINT }}
+      AZURE_FOUNDRY_DEPLOYMENT: ${{ vars.AZURE_FOUNDRY_DEPLOYMENT }}
+      AZURE_FOUNDRY_REASONING_EFFORT: ${{ vars.AZURE_FOUNDRY_REASONING_EFFORT }}
+      AZURE_FOUNDRY_AUTH_MODE: ${{ vars.AZURE_FOUNDRY_AUTH_MODE || 'entra' }}
+      AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID: ${{ vars.AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID }}
 
     steps:
       - name: Checkout
@@ -36,12 +43,52 @@ jobs:
       - name: Validate API Dockerfile
         run: test -f "${API_PATH}/Dockerfile"
 
+      - name: Validate session secret
+        env:
+          API_SESSION_SECRET: ${{ secrets.ENV_PROD_SESSION_SECRET || secrets.AZURE_API_SESSION_SECRET }}
+        shell: bash
+        run: |
+          if [[ ${#API_SESSION_SECRET} -lt 32 || "$API_SESSION_SECRET" == local-dev-session-secret* ]]; then
+            echo "Configure a private random ENV_PROD_SESSION_SECRET (at least 32 characters)." >&2
+            exit 1
+          fi
+
       - name: Azure login
         uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_DEPLOY_CLIENT_ID || vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve provisioned Foundry configuration
+        if: env.DIVIDEND_RESEARCH_PROVIDER == 'azure_foundry' && env.AZURE_FOUNDRY_ENDPOINT == ''
+        uses: azure/cli@v3
+        with:
+          inlineScript: |
+            set -euo pipefail
+            OUTPUTS="$(az deployment group show --resource-group "${AZURE_RESOURCE_GROUP}" --name "${APP_NAME}-foundry" --query properties.outputs --output json --only-show-errors)"
+            ENDPOINT="$(echo "${OUTPUTS}" | jq -r '.projectEndpoint.value // empty')"
+            DEPLOYMENT="${AZURE_FOUNDRY_DEPLOYMENT}"
+            if [ -z "${DEPLOYMENT}" ]; then DEPLOYMENT="$(echo "${OUTPUTS}" | jq -r '.deploymentName.value // empty')"; fi
+            test -n "${ENDPOINT}" && test -n "${DEPLOYMENT}" || { echo "Run the Foundry infrastructure tranche or configure the endpoint/deployment variables." >&2; exit 1; }
+            echo "AZURE_FOUNDRY_ENDPOINT=${ENDPOINT}" >> "${GITHUB_ENV}"
+            echo "AZURE_FOUNDRY_DEPLOYMENT=${DEPLOYMENT}" >> "${GITHUB_ENV}"
+            if [ -z "${AZURE_FOUNDRY_REASONING_EFFORT}" ]; then
+              echo "AZURE_FOUNDRY_REASONING_EFFORT=$(echo "${OUTPUTS}" | jq -r '.reasoningEffort.value // "low"')" >> "${GITHUB_ENV}"
+            fi
+
+      - name: Validate distribution provider configuration
+        shell: bash
+        run: |
+          case "${DIVIDEND_RESEARCH_PROVIDER}" in
+            stub) ;;
+            azure_foundry)
+              test -n "${AZURE_FOUNDRY_ENDPOINT}" || { echo "Set AZURE_FOUNDRY_ENDPOINT in deployment environment variables." >&2; exit 1; }
+              test -n "${AZURE_FOUNDRY_DEPLOYMENT}" || { echo "Set AZURE_FOUNDRY_DEPLOYMENT in deployment environment variables." >&2; exit 1; }
+              test "${AZURE_FOUNDRY_AUTH_MODE}" = entra || { echo "Production deployment requires Foundry Entra managed identity authentication." >&2; exit 1; }
+              ;;
+            *) echo "Unknown DIVIDEND_RESEARCH_PROVIDER." >&2; exit 1 ;;
+          esac
 
       - name: Resolve Azure resources
         uses: azure/cli@v3
@@ -111,7 +158,28 @@ jobs:
               exit 1
             fi
 
-            echo "CORS_ORIGINS=[\"http://localhost:5173\",\"https://${STATIC_WEB_APP_HOSTNAME}\"]" >> "${GITHUB_ENV}"
+            echo "CORS_ORIGINS=[\"https://${STATIC_WEB_APP_HOSTNAME}\"]" >> "${GITHUB_ENV}"
+
+      - name: Enable Foundry runtime managed identity
+        if: env.DIVIDEND_RESEARCH_PROVIDER == 'azure_foundry'
+        uses: azure/cli@v3
+        with:
+          inlineScript: |
+            az containerapp identity assign \
+              --name "${API_CONTAINER_APP_NAME}" \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --system-assigned --output none --only-show-errors
+            MI_CLIENT_ID=""
+            if [ -n "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" ]; then
+              az containerapp identity assign \
+                --name "${API_CONTAINER_APP_NAME}" \
+                --resource-group "${AZURE_RESOURCE_GROUP}" \
+                --user-assigned "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" \
+                --output none --only-show-errors
+              MI_CLIENT_ID="$(az identity show --ids "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" --query clientId --output tsv --only-show-errors)"
+              test -n "${MI_CLIENT_ID}" || { echo "Unable to resolve the user-assigned managed identity client ID." >&2; exit 1; }
+            fi
+            echo "AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID=${MI_CLIENT_ID}" >> "${GITHUB_ENV}"
 
       - name: Set image name
         run: |
@@ -128,9 +196,13 @@ jobs:
         run: docker push "${IMAGE_NAME}"
 
       - name: Configure API secrets
+        env:
+          LEGACY_ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          API_SESSION_SECRET: ${{ secrets.ENV_PROD_SESSION_SECRET || secrets.AZURE_API_SESSION_SECRET }}
         uses: azure/cli@v3
         with:
           inlineScript: |
+            set -euo pipefail
             COSMOS_TABLE_CONNECTION_STRING="$(az cosmosdb keys list \
               --name "${COSMOS_ACCOUNT_NAME}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
@@ -143,14 +215,32 @@ jobs:
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --secrets \
                 cosmos-table-connection-string="${COSMOS_TABLE_CONNECTION_STRING}" \
-                session-secret="${{ secrets.ENV_PROD_SESSION_SECRET }}" \
-                alpha-vantage-api-key="${{ secrets.ALPHA_VANTAGE_API_KEY }}" \
-              --only-show-errors
+                session-secret="${API_SESSION_SECRET}" \
+              --only-show-errors --output none
+
+            ALPHA_VANTAGE_SECRET_REF=""
+            if [ -n "${LEGACY_ALPHA_VANTAGE_API_KEY}" ]; then
+              az containerapp secret set \
+                --name "${API_CONTAINER_APP_NAME}" \
+                --resource-group "${AZURE_RESOURCE_GROUP}" \
+                --secrets alpha-vantage-api-key="${LEGACY_ALPHA_VANTAGE_API_KEY}" \
+                --only-show-errors --output none
+              ALPHA_VANTAGE_SECRET_REF="secretref:alpha-vantage-api-key"
+            fi
+            echo "ALPHA_VANTAGE_SECRET_REF=${ALPHA_VANTAGE_SECRET_REF}" >> "${GITHUB_ENV}"
 
       - name: Deploy API image
+        env:
+          ENTRA_CLIENT_ID: ${{ vars.ENV_PROD_ENTRA_CLIENT_ID || vars.AZURE_ENTRA_CLIENT_ID }}
+          ENTRA_TENANT_ID: ${{ vars.ENV_PROD_ENTRA_TENANT_ID || vars.AZURE_ENTRA_TENANT_ID }}
+          ALLOWED_EMAIL: ${{ vars.ENV_PROD_ALLOWED_EMAIL || vars.AZURE_ALLOWED_EMAIL }}
         uses: azure/cli@v3
         with:
           inlineScript: |
+            set -euo pipefail
+            test -n "${ENTRA_CLIENT_ID}" || { echo "Configure ENV_PROD_ENTRA_CLIENT_ID or AZURE_ENTRA_CLIENT_ID." >&2; exit 1; }
+            test -n "${ENTRA_TENANT_ID}" || { echo "Configure ENV_PROD_ENTRA_TENANT_ID or AZURE_ENTRA_TENANT_ID." >&2; exit 1; }
+            test -n "${ALLOWED_EMAIL}" || { echo "Configure ENV_PROD_ALLOWED_EMAIL or AZURE_ALLOWED_EMAIL." >&2; exit 1; }
             az containerapp update \
               --name "${API_CONTAINER_APP_NAME}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
@@ -159,11 +249,16 @@ jobs:
                 FINANCE_COMPANION_COSMOS_TABLE_CONNECTION_STRING=secretref:cosmos-table-connection-string \
                 FINANCE_COMPANION_COSMOS_TABLE_NAME="${COSMOS_TABLE_NAME}" \
                 FINANCE_COMPANION_SESSION_SECRET=secretref:session-secret \
-                FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY=secretref:alpha-vantage-api-key \
-                FINANCE_COMPANION_ENTRA_CLIENT_ID="${{ vars.ENV_PROD_ENTRA_CLIENT_ID }}" \
-                FINANCE_COMPANION_ENTRA_TENANT_ID="${{ vars.ENV_PROD_ENTRA_TENANT_ID }}" \
-                FINANCE_COMPANION_ALLOWED_EMAIL="${{ vars.ENV_PROD_ALLOWED_EMAIL }}" \
+                FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY="${ALPHA_VANTAGE_SECRET_REF:-}" \
+                FINANCE_COMPANION_ENTRA_CLIENT_ID="${ENTRA_CLIENT_ID}" \
+                FINANCE_COMPANION_ENTRA_TENANT_ID="${ENTRA_TENANT_ID}" \
+                FINANCE_COMPANION_ALLOWED_EMAIL="${ALLOWED_EMAIL}" \
                 FINANCE_COMPANION_ENVIRONMENT="production" \
-                FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER="stub" \
-                FINANCE_COMPANION_CORS_ORIGINS='${{ env.CORS_ORIGINS }}' \
+                FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER="${DIVIDEND_RESEARCH_PROVIDER}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT="${AZURE_FOUNDRY_ENDPOINT}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT="${AZURE_FOUNDRY_DEPLOYMENT}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT="${AZURE_FOUNDRY_REASONING_EFFORT}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE="${AZURE_FOUNDRY_AUTH_MODE}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID="${AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID:-}" \
+                FINANCE_COMPANION_CORS_ORIGINS="${CORS_ORIGINS}" \
               --only-show-errors

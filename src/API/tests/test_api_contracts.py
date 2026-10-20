@@ -113,7 +113,7 @@ def build_test_client() -> TestClient:
         app.state.container.create_holding._repository,
         details_provider,
     )
-    return TestClient(app)
+    return TestClient(app, headers={"Origin": "http://localhost:5173"})
 
 
 def authenticate(client: TestClient) -> str:
@@ -798,6 +798,21 @@ def test_holding_corporate_actions_round_trip_through_api():
     assert updated.status_code == 200
     assert updated.json()["security"]["corporateActions"] == holding["security"]["corporateActions"]
 
+
+def test_holding_quantity_edit_round_trips_a_researched_future_split():
+    from datetime import date
+    client = build_test_client()
+    authenticate(client)
+    security = client.get("/api/v1/securities/search?q=vti").json()[0]
+    created = client.post("/api/v1/holdings", json={"security": security, "accountPositions": [{"accountId": "acc-taxable-brokerage", "quantity": 10, "costBasis": None}]}).json()
+    future = f"{date.today().year + 1}-01-15"
+    created["security"]["corporateActions"] = [{"id": "future-research-split", "effectiveDate": future, "type": "stock_split", "oldShares": 1, "newShares": 4}]
+    created["accountPositions"][0]["quantity"] = 11
+    updated = client.put(f"/api/v1/holdings/{created['id']}", json={"security": created["security"], "accountPositions": created["accountPositions"]})
+    assert updated.status_code == 200
+    assert updated.json()["accountPositions"][0]["quantity"] == 11
+    assert updated.json()["security"]["corporateActions"][0]["effectiveDate"] == future
+
 def test_corporate_action_import_is_removed_and_generic_writes_remain_validated():
     client = build_test_client()
     authenticate(client)
@@ -867,11 +882,11 @@ def test_dividend_refresh_requires_auth_and_persists_stub_data_without_overwriti
     assert refreshed["dividendResearchAuthoritative"] is False
     assert refreshed["dividendResearchAdjustmentBasis"] == "current_share_basis"
     assert refreshed["dividendGrowthRate"] == 0.075
-    assert len(refreshed["payoutDetails"]) == 13
+    assert len(refreshed["payoutDetails"]) == len(refreshed["sourcePayoutDetails"]) + 1
     assert any(item["amount"] == 9.99 for item in refreshed["payoutDetails"])
     assert any(item.get("source") == "stub" for item in refreshed["payoutDetails"])
-    assert len(refreshed["sourcePayoutDetails"]) == 12
-    assert {item["status"] for item in refreshed["sourcePayoutDetails"]} == {"completed", "announced"}
+    assert {item["status"] for item in refreshed["sourcePayoutDetails"]} >= {"completed", "projected"}
+    assert len([item for item in refreshed["sourcePayoutDetails"] if item["status"] == "projected" and item["exDividendDate"][:4] == str(int(refreshed["dividendResearchAsOf"][:4]) + 1)]) == 4
     assert refreshed["corporateActions"]
 
     manually_saved = client.put(
@@ -880,7 +895,7 @@ def test_dividend_refresh_requires_auth_and_persists_stub_data_without_overwriti
     )
     assert manually_saved.status_code == 200
     saved_security = manually_saved.json()["security"]
-    assert len(saved_security["payoutDetails"]) == 13
+    assert len(saved_security["payoutDetails"]) == len(refreshed["payoutDetails"])
     assert any(item.get("source") == "stub" for item in saved_security["payoutDetails"])
     assert any(item["amount"] == 9.99 for item in saved_security["payoutDetails"])
 

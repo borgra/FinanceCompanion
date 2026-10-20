@@ -353,7 +353,9 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const openPayoutEditor = (holding: Holding) => {
     setEditingPayoutHolding(holding);
     setPayoutDrafts(
-      (holding.security.payoutDetails ?? []).map((payout) => ({ ...payout, mode: 'manual' })),
+      (holding.security.manualPayoutDetails ?? (holding.security.payoutDetails ?? []).filter((payout) =>
+        payout.mode !== 'source' && payout.status !== 'projected' && payout.status !== 'superseded',
+      )).map((payout) => ({ ...payout, mode: 'manual' })),
     );
     setError(null);
   };
@@ -713,6 +715,20 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           ? {
               ...payout,
               [field]: field === 'amount' ? Number(value) || 0 : value,
+              ...(field === 'amount' ? {
+                amountPerShare: null,
+                rawAmount: null,
+                shareBasis: null,
+                appliedActionIds: [],
+                forecastMethod: null,
+                forecastRange: null,
+                forecastInputEventIds: [],
+                forecastAsOf: null,
+                supersedesEventId: null,
+                evidenceRef: null,
+                sourceUrl: null,
+                source: 'user',
+              } : {}),
             }
           : payout,
       ),
@@ -733,7 +749,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         editingPayoutHolding.id,
         validPayouts.map((payout) => ({ ...payout, mode: 'manual' })),
       );
-      setHoldings((current) => mergeRefreshedSecurityDetails(current, [updated]));
+      setHoldings((current) => current.map((holding) => holding.id === updated.id ? {
+        ...holding,
+        security: { ...holding.security, payoutDetails: updated.security.payoutDetails, manualPayoutDetails: updated.security.manualPayoutDetails },
+        updatedAt: updated.updatedAt,
+      } : holding));
       setSuccessMessage(`${updated.security.symbol} payment data was saved.`);
       setEditingPayoutHolding(null);
       setPayoutDrafts([]);

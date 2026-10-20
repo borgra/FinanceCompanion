@@ -3,9 +3,10 @@ import type { CorporateAction, Holding, SecurityPayoutDetails } from '../../doma
 export type DividendPaymentKind = 'actual' | 'announced' | 'projected';
 
 export type DividendPayment = {
+  id: string;
   amount: number;
   date: string;
-  growthRate: number;
+  paymentDate?: string | null;
   holdingName: string;
   isEstimate: boolean;
   isSplitAdjusted: boolean;
@@ -14,6 +15,14 @@ export type DividendPayment = {
   perShareAmount: number;
   quantity: number;
   symbol: string;
+  currency: string;
+  distributionType: string;
+  regularityBasis?: string | null;
+  isManual: boolean;
+  sourceUrl?: string | null;
+  shareBasis?: string | null;
+  forecastMethod?: string | null;
+  forecastRange?: { min: string; max: string } | null;
 };
 
 export type DividendMonth = {
@@ -26,123 +35,91 @@ export type DividendMonth = {
 
 export const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const payoutDate = (payout: SecurityPayoutDetails) => payout.paymentDate || payout.exDividendDate;
+// Initial research coverage uses US exchanges. Match the API market date at year boundaries.
+export const distributionMarketDate = (now = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value;
+  return `${part('year')}-${part('month')}-${part('day')}`;
+};
 
 export const normalizePayoutAmount = (
   payout: SecurityPayoutDetails,
   corporateActions: CorporateAction[] = [],
-) => corporateActions
-  .filter((action) => action.effectiveDate > payout.exDividendDate)
-  .reduce((amount, action) => amount * action.oldShares / action.newShares, payout.amount);
+  asOf = distributionMarketDate(),
+) => {
+  if (payout.amountPerShare != null) return Number(payout.amountPerShare);
+  if (payout.shareBasis?.startsWith('as_of:')) return payout.amount;
+  return corporateActions
+    .filter((action) => action.effectiveDate > payout.exDividendDate && action.effectiveDate <= asOf)
+    .reduce((amount, action) => amount * action.oldShares / action.newShares, payout.amount);
+};
 
 export const totalQuantity = (holding: Holding) =>
   holding.accountPositions.reduce((sum, position) => sum + position.quantity, 0);
 
-export const growthRateForHolding = (holding: Holding) => {
-  const rate = holding.security.dividendGrowthRate;
-  return rate == null ? 0 : rate;
-};
+export const growthRateForHolding = (holding: Holding) => holding.security.dividendGrowthRate ?? 0;
 
 export const hasInvalidGrowthRate = (holding: Holding) => {
   const rate = holding.security.dividendGrowthRate;
   return rate != null && (!Number.isFinite(rate) || rate < -1);
 };
 
-const paymentYear = (payment: SecurityPayoutDetails) => {
-  const year = Number(payoutDate(payment).slice(0, 4));
-  return Number.isInteger(year) ? year : null;
+const effectivePayoutAmount = (holding: Holding, payout: SecurityPayoutDetails, asOf: string) => {
+  if (payout.amountPerShare != null) return Number(payout.amountPerShare);
+  if (payout.mode !== 'manual' && holding.security.dividendResearchAdjustmentBasis === 'current_share_basis') return payout.amount;
+  return normalizePayoutAmount(payout, holding.security.corporateActions, asOf);
 };
 
-const monthIndex = (value: string) => {
-  const index = Number(value.slice(5, 7)) - 1;
-  return index >= 0 && index < 12 ? index : null;
+export const safeSourceUrl = (value?: string | null) => {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : undefined;
+  } catch { return undefined; }
 };
 
-const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-
-const estimatedDate = (targetYear: number, originalDate: string) => {
-  const monthDay = originalDate.slice(5, 10);
-  return `${targetYear}-${monthDay === '02-29' && !isLeapYear(targetYear) ? '02-28' : monthDay}`;
-};
-
-const effectivePayoutAmount = (holding: Holding, payout: SecurityPayoutDetails) =>
-  holding.security.dividendResearchAdjustmentBasis === 'current_share_basis'
-    ? payout.amount
-    : normalizePayoutAmount(payout, holding.security.corporateActions);
-
-const toPayment = (
-  holding: Holding,
-  payout: SecurityPayoutDetails,
-  kind: DividendPaymentKind,
-  date = payoutDate(payout),
-  perShareAmount = effectivePayoutAmount(holding, payout),
-): DividendPayment => {
-  const quantity = totalQuantity(holding);
-  const rawPerShareAmount = payout.amount;
-  return {
-    amount: perShareAmount * quantity,
-    date,
-    growthRate: growthRateForHolding(holding),
-    holdingName: holding.security.name,
-    isEstimate: kind !== 'actual',
-    isSplitAdjusted: perShareAmount !== rawPerShareAmount,
-    kind,
-    rawPerShareAmount,
-    perShareAmount,
-    quantity,
-    symbol: holding.security.symbol,
-  };
-};
-
-const paymentKind = (payout: SecurityPayoutDetails, selectedYear: number, currentYear: number, todayKey: string): DividendPaymentKind => {
-  if (selectedYear < currentYear) return 'actual';
-  if (payout.status === 'announced' || payoutDate(payout) > todayKey) return 'announced';
-  return 'actual';
-};
-
+// Income renders researched events. Growth assumptions belong only to Future Forecast.
 export const buildPaymentsForYear = (
   holdings: Holding[],
   selectedYear: number,
   currentYear: number,
   todayKey: string,
 ): DividendPayment[] => holdings.flatMap((holding) => {
-  if (totalQuantity(holding) <= 0) return [];
-  const payouts = holding.security.payoutDetails ?? [];
-  const defined = payouts.filter((payout) => paymentYear(payout) === selectedYear);
-  const definedPayments = defined.map((payout) =>
-    toPayment(holding, payout, paymentKind(payout, selectedYear, currentYear, todayKey)));
-
-  if (selectedYear < currentYear) return definedPayments;
-  if (hasInvalidGrowthRate(holding)) return definedPayments;
-
-  const sourceYear = selectedYear === currentYear ? currentYear - 1 : currentYear;
-  const sourcePayments = selectedYear === currentYear
-    ? payouts
-        .filter((payout) => paymentYear(payout) === sourceYear)
-        .map((payout) => toPayment(holding, payout, 'actual'))
-    : buildPaymentsForYear([holding], currentYear, currentYear, todayKey);
-  const growthRate = growthRateForHolding(holding);
-  const projected = sourcePayments
-    .map((payment) => ({
-      payment,
-      date: estimatedDate(selectedYear, payment.date),
-    }))
-    .filter(({ date }) => {
-      if (selectedYear === currentYear && date <= todayKey) return false;
-      const targetMonth = monthIndex(date);
-      return !defined.some((payout) => monthIndex(payoutDate(payout)) === targetMonth);
-    })
-    .map(({ payment, date }) => ({
-      ...payment,
-      amount: payment.perShareAmount * (1 + growthRate) * payment.quantity,
-      date,
-      growthRate,
-      isEstimate: true,
-      kind: 'projected' as const,
-      perShareAmount: payment.perShareAmount * (1 + growthRate),
-    }));
-
-  return [...definedPayments, ...projected];
+  const quantity = totalQuantity(holding);
+  if (quantity <= 0 || holding.security.assetType === 'Cash') return [];
+  return (holding.security.payoutDetails ?? []).flatMap((payout, index) => {
+    if (payout.excludedFromTotals || payout.status === 'superseded' || Number(payout.exDividendDate.slice(0, 4)) !== selectedYear) return [];
+    const kind: DividendPaymentKind = payout.status === 'projected' ? 'projected'
+      : payout.status === 'announced' || payout.exDividendDate > todayKey ? 'announced' : 'actual';
+    // An expired forecast is not an actual, and missing history cannot be backfilled.
+    if (selectedYear < currentYear && kind !== 'actual') return [];
+    if (kind === 'projected' && payout.exDividendDate <= todayKey) return [];
+    const perShareAmount = effectivePayoutAmount(holding, payout, holding.security.dividendResearchAsOf ?? todayKey);
+    if (!Number.isFinite(perShareAmount) || perShareAmount <= 0) return [];
+    const rawPerShareAmount = payout.rawAmount != null ? Number(payout.rawAmount) : payout.amount;
+    return [{
+      id: `${holding.id}-${payout.eventId ?? index}`,
+      amount: perShareAmount * quantity,
+      date: payout.exDividendDate,
+      paymentDate: payout.paymentDate,
+      holdingName: holding.security.name,
+      isEstimate: kind !== 'actual',
+      isSplitAdjusted: perShareAmount !== rawPerShareAmount,
+      kind,
+      rawPerShareAmount,
+      perShareAmount,
+      quantity,
+      symbol: holding.security.symbol,
+      currency: payout.currency || holding.security.currency,
+      distributionType: payout.distributionType ?? 'income',
+      regularityBasis: payout.regularityBasis,
+      isManual: payout.mode === 'manual',
+      sourceUrl: safeSourceUrl(payout.sourceUrl),
+      shareBasis: payout.shareBasis,
+      forecastMethod: payout.forecastMethod,
+      forecastRange: payout.forecastRange,
+    }];
+  });
 });
 
 export const buildMonthlyIncome = (
@@ -154,7 +131,7 @@ export const buildMonthlyIncome = (
   const payments = buildPaymentsForYear(holdings, selectedYear, currentYear, todayKey);
   return monthLabels.map((label, index) => {
     const monthPayments = payments
-      .filter((payment) => monthIndex(payment.date) === index)
+      .filter((payment) => Number(payment.date.slice(5, 7)) - 1 === index)
       .sort((left, right) => left.date.localeCompare(right.date) || left.symbol.localeCompare(right.symbol));
     return {
       index,

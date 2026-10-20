@@ -27,7 +27,7 @@ _REQUIRED_COLLECTIONS = ('users', 'income_sources', 'budget_categories', 'accoun
 def _camel(value):
     if isinstance(value, dict):
         return {
-            ''.join(part if index == 0 else part[:1].upper() + part[1:] for index, part in enumerate(key.split('_'))): _camel(item)
+            ''.join(part if index == 0 else part[:1].upper() + part[1:] for index, part in enumerate(key.split('_'))): item if key == 'dividend_research_snapshot' else _camel(item)
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -126,6 +126,17 @@ class LocalJsonDataStore(InMemoryDataStore):
                 key: _retirement_plan_from_dict(item)
                 for key, item in data.get('retirement_plans', {}).items()
             }
+            # Persist repaired active/audit records once during single-writer
+            # startup, rather than requiring another billable research refresh.
+            repaired = any(
+                len(holding.security.source_payout_details) < len(raw['security'].get('sourcePayoutDetails', raw['security'].get('payoutDetails', [])))
+                or len(holding.security.payout_audit_details) > len(raw['security'].get('payoutAuditDetails', []))
+                or holding.security.dividend_research_warnings != raw['security'].get('dividendResearchWarnings', [])
+                for owner, holdings in self.holdings.items()
+                for holding, raw in zip(holdings, data['holdings'][owner])
+            )
+            if repaired:
+                self.save()
         except (OSError, json.JSONDecodeError) as exc:
             raise ValueError(f'Invalid local JSON data at {path}: {exc}') from exc
         except (AttributeError, IndexError, KeyError, TypeError, ValueError, OverflowError) as exc:

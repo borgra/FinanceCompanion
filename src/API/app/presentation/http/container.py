@@ -164,10 +164,24 @@ def build_container(
         issuer=settings.session_issuer,
         audience=settings.session_audience,
     )
-    security_details = StubSecurityDetailsProvider() if settings.data_backend == "json" else AlphaVantageSecurityDetailsProvider(settings.alpha_vantage_api_key)
-    if settings.dividend_research_provider != "stub":
+    local_fixture_security = settings.data_backend == "json" and settings.dividend_research_provider == "stub"
+    security_details = StubSecurityDetailsProvider() if local_fixture_security else AlphaVantageSecurityDetailsProvider(settings.alpha_vantage_api_key)
+    security_search = StubSecuritySearchProvider() if local_fixture_security else AlphaVantageSecuritySearchProvider(settings.alpha_vantage_api_key)
+    if settings.dividend_research_provider == "azure_foundry":
+        from app.infrastructure.foundry_web_research import FoundryWebDividendResearchProvider, FoundrySecuritySearchProvider, UnavailableMarketDetailsProvider
+        dividend_research = FoundryWebDividendResearchProvider(
+            endpoint=settings.azure_foundry_endpoint, deployment=settings.azure_foundry_deployment,
+            reasoning_effort=settings.azure_foundry_reasoning_effort,
+            auth_mode=settings.azure_foundry_auth_mode, api_key=settings.azure_foundry_api_key,
+            environment=settings.environment,
+            managed_identity_client_id=settings.azure_foundry_managed_identity_client_id,
+        )
+        security_search = FoundrySecuritySearchProvider(dividend_research)
+        security_details = UnavailableMarketDetailsProvider()
+    elif settings.dividend_research_provider == "stub":
+        dividend_research = StubDividendResearchProvider()
+    else:
         raise ValueError("A dividend research provider must be configured.")
-    dividend_research = StubDividendResearchProvider()
 
     return Container(
         settings=settings,
@@ -209,7 +223,7 @@ def build_container(
         delete_holding=DeleteHolding(holdings),
         update_manual_payout_details=UpdateManualPayoutDetails(holdings),
         search_securities=SearchSecurities(
-            StubSecuritySearchProvider() if settings.data_backend == "json" else AlphaVantageSecuritySearchProvider(settings.alpha_vantage_api_key)
+            security_search
         ),
         refresh_holding_security_details=RefreshHoldingSecurityDetails(
             holdings,

@@ -12,6 +12,7 @@ The active deployment creates:
 - An Azure Container Registry.
 - An Azure Container Apps environment.
 - An Azure Container App for the API.
+- A dedicated Foundry account, project and GPT-6 Luna deployment when Foundry provisioning is enabled.
 - Optional blob storage when explicitly enabled.
 
 ## Files
@@ -24,6 +25,9 @@ The active deployment creates:
 | `data.bicep` | Data tranche for Cosmos Table API resources. |
 | `runtime-base.bicep` | Runtime base tranche for ACR and Container Apps environment. |
 | `runtime-api.bicep` | Runtime API tranche for the Container App and app configuration. |
+| `foundry.bicep` | Entra-only Foundry account, research project, pinned GPT-6 Luna model and project service identity access. |
+| `scripts/deploy-foundry.ps1` | Deploy only Foundry; optionally authorize the API identity and signed-in developer. Supports `-WhatIf`. |
+| `scripts/test-foundry.ps1` | Opt-in live web-search and structured-output capability checks. |
 | `storage.bicep` | Optional storage tranche. |
 | `parameters/dev.subscription.bicepparam` | Example subscription-scoped development parameters. |
 | `scripts/up.ps1` | Local deployment helper. |
@@ -53,14 +57,26 @@ Deploy:
 .\infra\scripts\up.ps1 -SubscriptionId "<subscription-id>"
 ```
 
+Add `-EnableFoundry` to create and wire the dedicated Foundry deployment. Its default model is `gpt-6-luna`, version `2026-09-22`, on Global Standard with 100 quota units (100k TPM for this model). Quota allocation does not reserve paid provisioned throughput; model/search calls incur usage charges. The operator also needs `Microsoft.Authorization/roleAssignments/write` at the relevant Foundry scopes. `-FoundryCapacity` changes quota allocation.
+
+To provision only Foundry against the existing application, without replacing its running image:
+
+```powershell
+./infra/scripts/deploy-foundry.ps1 -SubscriptionId '<subscription-id>' -ContainerAppName '<api-container-app-name>' -GrantCurrentUser
+./infra/scripts/test-foundry.ps1 -SubscriptionId '<subscription-id>' -Endpoint '<returned-project-endpoint>'
+```
+
+The first command creates the account/project/model and assigns scoped inference roles. The second makes two live, billable calls to prove web search and strict JSON output. Use `-WhatIf` on the first command for a local preview; use `az deployment group what-if --template-file infra/foundry.bicep --parameters appName=finance-companion` for an Azure resource preview. No Azure/model keys are created or needed.
+
 The script now runs staged deployments in observable tranches:
 
 1. `resource-group`
 2. `frontend`
 3. `data`
 4. `runtime-base`
-5. `runtime-api`
-6. `storage` if enabled
+5. `foundry` if enabled
+6. `runtime-api`, followed by Foundry API identity authorization when a new project was provisioned
+7. `storage` if enabled
 
 Each tranche prints its own elapsed time so you can see where Azure provisioning is spending time.
 
@@ -100,6 +116,13 @@ Or split client IDs for stronger least-privilege separation:
 
 See [SECURITY.md](SECURITY.md) for the recommended OIDC and RBAC setup.
 
+For live distribution retrieval and API-to-Foundry managed identity access, see
+[Foundry Entra RBAC](../Docs/Foundry%20Entra%20RBAC.md). `DIVIDEND_RESEARCH_PROVIDER`
+in the GitHub Environment `deployment` selects `stub` (default) or
+`azure_foundry` in both Backend Deploy and Infra Up. When `azure_foundry` is selected and no endpoint is configured, Infra Up creates the dedicated Foundry tranche and authorizes the API identity. Backend Deploy discovers its endpoint/deployment from the persisted `${APP_NAME}-foundry` ARM deployment outputs. Supplying an existing endpoint/deployment bypasses creation; use `scripts/configure-foundry-access.ps1` to grant access to that existing project.
+
+The Infra Up identity needs resource creation plus scoped role-assignment permissions for the Foundry tranche. Backend Deploy still needs no permission to grant inference roles. `AZURE_FOUNDRY_CAPACITY` defaults to `100` in Infra Up. Model availability, quota and tool policy are validated by Azure; unsupported regions or exhausted quota fail explicitly.
+
 ### Additional Variables And Secrets
 
 For the runtime API tranche, set these repository values:
@@ -111,7 +134,7 @@ For the runtime API tranche, set these repository values:
 | `AZURE_ALLOWED_EMAIL` | Variable | Primary allowed user email for the placeholder seeded user. |
 | `AZURE_API_ENVIRONMENT` | Variable | API environment string, typically `production`. |
 | `AZURE_API_SESSION_SECRET` | Secret | Session signing secret for the API cookie/JWT. |
-| `ALPHA_VANTAGE_API_KEY` | Secret | Alpha Vantage key used by the API to refresh security details. |
+| `ALPHA_VANTAGE_API_KEY` | Optional secret | Legacy market-data adapter only; not needed for Foundry web research or security search. |
 
 ### Workflow Defaults
 

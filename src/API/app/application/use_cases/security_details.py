@@ -56,7 +56,7 @@ def merge_security_details(
 ) -> SecurityMetadata:
     if not _has_valid_price(details.price):
         return current
-    return SecurityMetadata(
+    return replace(current,
         symbol=current.symbol,
         name=details.name or current.name,
         exchange=details.exchange or current.exchange,

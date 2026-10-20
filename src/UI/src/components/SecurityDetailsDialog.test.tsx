@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -102,6 +102,47 @@ describe('SecurityDetailsDialog', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('-100% or greater');
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(onSaveDividendGrowthRate).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes active distributions and exposes their source, basis, and forecast details', () => {
+    render(<SecurityDetailsDialog security={{
+      ...security,
+      dividendResearchProvider: 'stub',
+      dividendResearchRetrievedAt: '2026-10-19T12:00:00Z',
+      dividendResearchStatus: 'partial',
+      dividendResearchWarnings: ['Limited source coverage.'],
+      payoutDetails: [
+        { eventId: 'actual', exDividendDate: '2026-06-01', paymentDate: '2026-06-07', amount: 0.5, status: 'completed', mode: 'manual' },
+        { eventId: 'announced', exDividendDate: '2026-12-01', amount: 0.6, status: 'announced', source: 'Issuer', sourceUrl: 'https://example.com/distributions', shareBasis: 'as_of:2026-10-19', rawAmount: '1.8', distributionType: 'return_of_capital' },
+        { eventId: 'projected', exDividendDate: '2027-03-01', amount: 0.55, status: 'projected', currency: 'CAD', forecastMethod: 'seasonal_median_v1', forecastRange: { min: '0.5', max: '0.6' } },
+        { eventId: 'old', exDividendDate: '2026-11-30', amount: 9, status: 'superseded' },
+        { eventId: 'conflict', exDividendDate: '2026-12-02', amount: 0.7, status: 'announced', excludedFromTotals: true },
+      ],
+    }} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendGrowthRate={vi.fn()} />);
+
+    const distributions = screen.getByRole('region', { name: 'Distributions' });
+    expect(within(distributions).getByText('2026-06-01 · Actual · $0.50 USD per share')).toBeInTheDocument();
+    expect(within(distributions).getByText('2026-12-01 · Announced · $0.60 USD per share')).toBeInTheDocument();
+    expect(within(distributions).getByText(/2027-03-01 · Projected · .* CAD per share/)).toBeInTheDocument();
+    expect(within(distributions).queryByText(/2026-11-30/)).not.toBeInTheDocument();
+    expect(within(distributions).getByText(/2026-12-02 · Announced · Conflicting event · excluded from totals/)).toBeInTheDocument();
+    expect(within(distributions).getByText('User-entered')).toBeInTheDocument();
+    expect(within(distributions).getByRole('link', { name: 'Issuer (opens in new tab)', hidden: true })).toHaveAttribute('href', 'https://example.com/distributions');
+    expect(within(distributions).getByText('Split-adjusted to 2026-10-19')).toBeInTheDocument();
+    expect(within(distributions).getByText(/Original amount: 1.8 USD/)).toBeInTheDocument();
+    expect(within(distributions).getByText('seasonal median v1')).toBeInTheDocument();
+    expect(within(distributions).getByText(/not a confidence interval/)).toBeInTheDocument();
+    expect(within(distributions).getByText('Limited source coverage.')).toBeInTheDocument();
+  });
+
+  it('does not render unsafe source links and gives unavailable distributions an empty state', () => {
+    const { rerender } = render(<SecurityDetailsDialog security={{ ...security, payoutDetails: [
+      { exDividendDate: '2026-06-01', amount: 1, sourceUrl: 'javascript:alert(1)' },
+    ] }} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendGrowthRate={vi.fn()} />);
+    expect(screen.queryByRole('link', { hidden: true })).not.toBeInTheDocument();
+    expect(screen.getByText('Source unavailable')).toBeInTheDocument();
+    rerender(<SecurityDetailsDialog security={security} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendGrowthRate={vi.fn()} />);
+    expect(screen.getByText('No distribution events are available.')).toBeInTheDocument();
   });
 });
 

@@ -6,9 +6,12 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /service
 
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --upgrade "pip>=26.2" && pip install --no-cache-dir .
 
 COPY app ./app
+
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /service
+USER appuser
 
 EXPOSE 8000
 

@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+import base64
+import gzip
+import io
 from copy import deepcopy
-from dataclasses import asdict, replace
+from dataclasses import asdict, fields, replace
 from datetime import UTC, datetime
 
 from azure.core.exceptions import ResourceNotFoundError
 from azure.data.tables import TableClient, UpdateMode
 
-from app.domain.exceptions import NotFoundError
+from app.application.dividend_payouts import merge_dividend_payouts, normalize_distribution_metadata
+from app.domain.exceptions import NotFoundError, ValidationError as DomainValidationError
 from app.domain.models import (
     Account,
     AccountColumn,
@@ -268,7 +272,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         replace(_security_payout_details_from_dict(item), mode="manual")
         for item in manual_payouts_data
     ]
-    return normalize_security_metadata(SecurityMetadata(
+    return normalize_distribution_metadata(normalize_security_metadata(SecurityMetadata(
         symbol=data["symbol"],
         name=data["name"],
         exchange=data["exchange"],
@@ -315,48 +319,49 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         dividend_research_schema_version=dividends.get("schemaVersion"),
         dividend_research_adjustment_basis=dividends.get("adjustmentBasis"),
         dividend_research_warnings=list(dividends.get("warnings", [])),
+        dividend_research_as_of=dividends.get("asOf"),
+        dividend_research_status=dividends.get("researchStatus"),
+        dividend_research_history_start=dividends.get("historyStart"),
+        dividend_research_forecast_end=dividends.get("forecastEnd"),
+        dividend_research_snapshot_id=dividends.get("snapshotId"),
+        dividend_research_cache_key=dividends.get("cacheKey"),
+        dividend_research_snapshot=dividends.get("snapshot") or {},
+        payout_audit_details=[_security_payout_details_from_dict(item) for item in dividends.get("auditPayouts", [])],
         sma20=_optional_float(data.get("sma20")),
         sma50=_optional_float(data.get("sma50")),
         sma200=_optional_float(data.get("sma200")),
         details_updated_at=data.get("detailsUpdatedAt"),
         details_status=data.get("detailsStatus"),
-        payout_details=manual_payout_details or source_payout_details,
+        payout_details=merge_dividend_payouts(source_payout_details, manual_payout_details),
         source_payout_details=source_payout_details,
         manual_payout_details=manual_payout_details,
         corporate_actions=[
             CorporateAction(id=item["id"], effective_date=item["effectiveDate"], type=item["type"], old_shares=float(item["oldShares"]), new_shares=float(item["newShares"]))
             for item in corporate_actions_data
         ],
-    ))
+    )))
 
 
 def _security_payout_details_from_dict(data: dict) -> SecurityPayoutDetails:
-    return SecurityPayoutDetails(
-        ex_dividend_date=data["exDividendDate"],
-        amount=float(data["amount"]),
-        declaration_date=data.get("declarationDate"),
-        record_date=data.get("recordDate"),
-        payment_date=data.get("paymentDate"),
-        source=data.get("source"),
-        source_url=data.get("sourceUrl"),
-        status=data.get("status", "completed"),
-    )
+    values = {}
+    for item in fields(SecurityPayoutDetails):
+        key = item.name.split("_")[0] + "".join(part.title() for part in item.name.split("_")[1:])
+        if key in data:
+            values[item.name] = data[key]
+    values["amount"] = float(data["amount"])
+    return SecurityPayoutDetails(**values)
 
 
 def _security_payout_details_to_dict(payout: SecurityPayoutDetails) -> dict:
-    data = {
-        "exDividendDate": payout.ex_dividend_date,
-        "amount": payout.amount,
-        "declarationDate": payout.declaration_date,
-        "recordDate": payout.record_date,
-        "paymentDate": payout.payment_date,
-        "source": payout.source,
-        "mode": payout.mode,
-    }
-    if payout.source_url is not None:
-        data["sourceUrl"] = payout.source_url
-    if payout.status != "completed":
-        data["status"] = payout.status
+    data = {"exDividendDate": payout.ex_dividend_date, "amount": payout.amount,
+            "declarationDate": payout.declaration_date, "recordDate": payout.record_date,
+            "paymentDate": payout.payment_date, "source": payout.source, "mode": payout.mode}
+    defaults = {"status": "completed", "distribution_type": "income", "is_regular": True, "excluded_from_totals": False}
+    for key, value in asdict(payout).items():
+        camel = key.split("_")[0] + "".join(part.title() for part in key.split("_")[1:])
+        # Keep legacy storage compact while round-tripping all new provenance.
+        if camel not in data and value is not None and value != [] and (key not in defaults or value != defaults[key]):
+            data[camel] = value
     return data
 
 
@@ -432,8 +437,16 @@ def _security_dividends_to_dict(security: SecurityMetadata) -> dict | None:
         "authoritative": security.dividend_research_authoritative,
         "schemaVersion": security.dividend_research_schema_version,
         "adjustmentBasis": security.dividend_research_adjustment_basis,
+        "asOf": security.dividend_research_as_of,
+        "researchStatus": security.dividend_research_status,
+        "historyStart": security.dividend_research_history_start,
+        "forecastEnd": security.dividend_research_forecast_end,
+        "snapshotId": security.dividend_research_snapshot_id,
+        "cacheKey": security.dividend_research_cache_key,
+        "snapshot": security.dividend_research_snapshot,
+        "auditPayouts": [_security_payout_details_to_dict(item) for item in security.payout_audit_details],
     }
-    data.update({key: value for key, value in research_values.items() if value is not None})
+    data.update({key: value for key, value in research_values.items() if value is not None and value != {} and value != []})
     if security.dividend_research_warnings:
         data["warnings"] = security.dividend_research_warnings
     optional_values = {
@@ -472,7 +485,7 @@ def _security_metadata_from_entity(entity: dict) -> SecurityMetadata:
         return _security_metadata_from_dict(json.loads(entity["securityJson"]))
 
     security_details = json.loads(entity.get("securityDetails", "{}"))
-    dividends = json.loads(entity.get("dividendsJson", "{}"))
+    dividends = _read_dividends_properties(entity)
     data = {
         "symbol": entity["securitySymbol"],
         "name": entity["securityName"],
@@ -516,6 +529,37 @@ def _holding_from_entity(entity: dict) -> Holding:
     )
 
 
+def _write_dividends_properties(dividends: dict | None) -> dict:
+    """Keep legacy JSON for small rows; bounded compressed columns support research/audit."""
+    raw = json.dumps(dividends)
+    if len(raw.encode("utf-8")) > 8_000_000:
+        raise DomainValidationError("Distribution history exceeds the storage read/write limit.")
+    if len(raw.encode("utf-16-le")) <= 32_000:
+        return {"dividendsJson": raw}
+    encoded = base64.b64encode(gzip.compress(raw.encode("utf-8"), mtime=0)).decode("ascii")
+    chunks = [encoded[index:index + 16_000] for index in range(0, len(encoded), 16_000)]
+    if len(chunks) > 50:
+        raise DomainValidationError("Distribution history exceeds holding storage capacity; archive it in a dedicated distribution repository before saving.")
+    properties = {"dividendsJsonEncoding": "gzip-base64-v1", "dividendsJsonPartCount": len(chunks)}
+    for index, chunk in enumerate(chunks):
+        properties["dividendsJson" if index == 0 else f"dividendsJsonPart{index}"] = chunk
+    return properties
+
+
+def _read_dividends_properties(entity: dict) -> dict | None:
+    if entity.get("dividendsJsonEncoding") != "gzip-base64-v1":
+        return json.loads(entity.get("dividendsJson", "{}"))
+    count = entity.get("dividendsJsonPartCount", 0)
+    if not isinstance(count, int) or not 1 <= count <= 50:
+        raise DomainValidationError("Stored distribution history has invalid encoding metadata.")
+    encoded = "".join(entity["dividendsJson" if index == 0 else f"dividendsJsonPart{index}"] for index in range(count))
+    with gzip.GzipFile(fileobj=io.BytesIO(base64.b64decode(encoded, validate=True))) as stream:
+        raw = stream.read(8_000_001)
+    if len(raw) > 8_000_000:
+        raise DomainValidationError("Stored distribution history exceeds the read limit.")
+    return json.loads(raw)
+
+
 def _holding_to_entity(user_id: str, holding: Holding) -> dict:
     holding = replace(holding, security=normalize_security_metadata(holding.security))
     entity = {
@@ -530,15 +574,14 @@ def _holding_to_entity(user_id: str, holding: Holding) -> dict:
         "createdAt": holding.created_at,
         "updatedAt": holding.updated_at,
         "securityDetails": json.dumps(_security_details_to_dict(holding.security)),
-        "dividendsJson": json.dumps(_security_dividends_to_dict(holding.security)),
         "accountPositionsJson": json.dumps([
             _holding_account_position_to_dict(item)
             for item in holding.account_positions
         ]),
     }
-    dividends = _security_dividends_to_dict(holding.security)
-    if dividends is not None:
-        entity["dividendsJson"] = json.dumps(dividends)
+    entity.update(_write_dividends_properties(_security_dividends_to_dict(holding.security)))
+    if len(entity) > 250 or sum(len(str(value).encode("utf-16-le")) + len(key.encode("utf-16-le")) for key, value in entity.items()) > 900_000:
+        raise DomainValidationError("Holding distribution history exceeds the storage entity limit.")
     return entity
 
 
@@ -877,7 +920,7 @@ class CosmosHoldingRepository:
             raise NotFoundError("Holding not found.") from exc
         holding = replace(holding, security=normalize_security_metadata(holding.security))
         entity = _holding_to_entity(user_id, holding)
-        self._client.upsert_entity(entity)
+        self._client.upsert_entity(entity, mode=UpdateMode.REPLACE)
         return deepcopy(holding)
 
     def update_batch_for_user(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
@@ -891,10 +934,10 @@ class CosmosHoldingRepository:
         if any(holding.id not in existing_ids for holding in holdings):
             raise NotFoundError("Holding not found.")
         if holdings:
-            self._client.submit_transaction([
-                ("upsert", _holding_to_entity(user_id, holding))
-                for holding in holdings
-            ])
+            entities = [_holding_to_entity(user_id, holding) for holding in holdings]
+            if sum(len(json.dumps(entity).encode("utf-8")) for entity in entities) > 3_500_000:
+                raise DomainValidationError("Holding batch exceeds the distribution storage transaction limit.")
+            self._client.submit_transaction([("upsert", entity, {"mode": UpdateMode.REPLACE}) for entity in entities])
         return deepcopy(holdings)
     def delete_for_user(self, user_id: str, holding_id: str) -> None:
         try:

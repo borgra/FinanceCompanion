@@ -228,6 +228,11 @@ export function createWorkspaceSession(
   const holdingRepository: HoldingRepository = {
     searchSecurities: holdingApi.searchSecurities,
     listHoldings: readHoldings,
+    reloadHoldings: async () => {
+      const holdings = await holdingApi.listHoldings();
+      state.holdings = clone(holdings);
+      return clone(holdings);
+    },
     createHolding: async (draft) => reconcileHolding(await holdingApi.createHolding(draft)),
     updateHolding: async (id, draft) => reconcileHolding(await holdingApi.updateHolding(id, draft)),
     updateHoldingsBatch: async (changes) => reconcileHoldings(await holdingApi.updateHoldingsBatch(changes)),

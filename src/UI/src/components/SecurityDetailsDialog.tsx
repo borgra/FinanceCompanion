@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { CorporateAction, SecurityMetadata } from '../domain/holding';
+import type { CorporateAction, SecurityMetadata, SecurityPayoutDetails } from '../domain/holding';
 
 type SecurityDetailsDialogProps = {
   security: SecurityMetadata;
@@ -19,6 +19,27 @@ const formatOptional = (value: number | null | undefined, formatter = numberForm
 const cloneActions = (actions: CorporateAction[] = []) => actions.map((action) => ({ ...action }));
 const toPercentDraft = (value: number | null | undefined) => value == null ? '' : String(value * 100);
 
+const distributionStatus = (payout: SecurityPayoutDetails) =>
+  payout.status === 'projected' ? 'Projected' : payout.status === 'announced' ? 'Announced' : 'Actual';
+
+const distributionAmount = (payout: SecurityPayoutDetails, currency: string) => {
+  const amount = payout.amountPerShare == null ? payout.amount : Number(payout.amountPerShare);
+  if (!Number.isFinite(amount)) return 'Not available';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: payout.currency || currency, maximumFractionDigits: 8,
+  }).format(amount);
+};
+
+const sourceLink = (value?: string | null) => {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return ['https:', 'http:'].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
+};
+
 const isValidAction = (action: CorporateAction) =>
   Boolean(action.effectiveDate) && action.oldShares > 0 && action.newShares > 0 && action.oldShares !== action.newShares &&
   (action.type === 'stock_split' ? action.newShares > action.oldShares : action.newShares < action.oldShares);
@@ -35,6 +56,9 @@ export function SecurityDetailsDialog({ security, onClose, onSaveCorporateAction
   const [dividendGrowthRateError, setDividendGrowthRateError] = useState<string | null>(null);
   const savedActions = useMemo(() => cloneActions(security.corporateActions), [security.corporateActions]);
   const savedDividendGrowthRateDraft = useMemo(() => toPercentDraft(security.dividendGrowthRate), [security.dividendGrowthRate]);
+  const distributions = useMemo(() => (security.payoutDetails ?? [])
+    .filter((payout) => payout.status !== 'superseded')
+    .sort((left, right) => right.exDividendDate.localeCompare(left.exDividendDate)), [security.payoutDetails]);
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -117,6 +141,30 @@ export function SecurityDetailsDialog({ security, onClose, onSaveCorporateAction
               <button className="secondary-action" type="button" disabled={!dividendGrowthRateChanged || isSavingDividendGrowthRate} onClick={() => { setDividendGrowthRateDraft(savedDividendGrowthRateDraft); setDividendGrowthRateBadInput(false); setDividendGrowthRateError(null); }}>Reset</button>
               <button className="primary-action" type="submit" disabled={!dividendGrowthRateChanged || isSavingDividendGrowthRate}>{isSavingDividendGrowthRate ? 'Saving...' : 'Save changes'}</button>
             </div>
+            <section aria-labelledby="security-distributions-heading">
+              <h3 id="security-distributions-heading">Distributions</h3>
+              <p className="status-copy">Events use ex-dates. Projected amounts and dates are estimates.</p>
+              {security.dividendResearchRetrievedAt ? <p className="status-copy">{security.dividendResearchProvider === 'stub' ? 'Stub data' : 'Last researched'}: {security.dividendResearchRetrievedAt}{security.dividendResearchStatus ? ` · ${security.dividendResearchStatus}` : ''}</p> : null}
+              {security.dividendResearchWarnings?.length ? <ul>{security.dividendResearchWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}</ul> : null}
+              {distributions.length === 0 ? <p className="status-copy">No distribution events are available.</p> : distributions.map((payout, index) => {
+                const currency = payout.currency || security.currency;
+                const sourceUrl = sourceLink(payout.sourceUrl);
+                const basis = payout.shareBasis || (payout.mode !== 'manual' ? security.dividendResearchAdjustmentBasis : undefined);
+                return <details key={payout.eventId || `${payout.exDividendDate}-${index}`}>
+                  <summary>{payout.exDividendDate} · {distributionStatus(payout)}{payout.excludedFromTotals ? ' · Conflicting event · excluded from totals' : ''} · {distributionAmount(payout, security.currency)} {currency} per share</summary>
+                  <dl className="security-details-grid">
+                    <div><dt>Ex-date</dt><dd>{payout.exDividendDate}</dd></div>
+                    <div><dt>Payment date</dt><dd>{payout.paymentDate || 'Not available'}</dd></div>
+                    <div><dt>Distribution type</dt><dd>{(payout.distributionType || 'income').replace(/_/g, ' ')}{payout.isRegular === false ? ' · excluded from recurring forecasts' : ''}</dd></div>
+                    {payout.regularityBasis === 'inferred_cadence_v1' ? <div><dt>Schedule basis</dt><dd>Recurring cadence inferred from history; tax classification is unavailable.</dd></div> : null}
+                    <div><dt>Source</dt><dd>{payout.mode === 'manual' || payout.source === 'user' ? 'User-entered' : sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer">{payout.source || 'Source'} (opens in new tab)</a> : payout.status === 'projected' ? 'Deterministic forecast' : 'Source unavailable'}</dd></div>
+                    <div><dt>Share basis</dt><dd>{basis?.startsWith('as_of:') ? `Split-adjusted to ${basis.slice(6)}` : basis === 'current_share_basis' ? 'Split-adjusted to current shares' : basis === 'raw' ? 'Original share basis' : 'Not available'}{payout.rawAmount != null ? <small> · Original amount: {payout.rawAmount} {currency} per share</small> : null}</dd></div>
+                    {payout.forecastMethod ? <div><dt>Forecast method</dt><dd>{payout.forecastMethod.replace(/_/g, ' ')}</dd></div> : null}
+                    {payout.forecastRange ? <div><dt>Historical estimate range</dt><dd>{payout.forecastRange.min}–{payout.forecastRange.max} {currency} per share; not a confidence interval.</dd></div> : null}
+                  </dl>
+                </details>;
+              })}
+            </section>
           </form>
         ) : (
           <form id="security-actions-panel" role="tabpanel" aria-labelledby="security-actions-tab" onSubmit={(event) => void saveActions(event)}>
