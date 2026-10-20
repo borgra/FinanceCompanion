@@ -15,6 +15,7 @@ export function DistributionResearchPanel({ holdings, repository, onRefreshed }:
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState('');
   const [failures, setFailures] = useState<string[]>([]);
+  const [unavailable, setUnavailable] = useState<string[]>([]);
   const [failureDetails, setFailureDetails] = useState<string[]>([]);
   const [reloadError, setReloadError] = useState(false);
   const securities = holdings.filter((holding, index, all) =>
@@ -25,20 +26,21 @@ export function DistributionResearchPanel({ holdings, repository, onRefreshed }:
   const refresh = async (targets = securities) => {
     setRefreshing(true);
     setFailures([]);
+    setUnavailable([]);
     setFailureDetails([]);
     setReloadError(false);
     setMessage(`Researching 0 of ${targets.length} securities…`);
     // Web research can take longer than a normal API call. Keep requests bounded
     // and announce progress as each security completes.
-    const results: PromiseSettledResult<void>[] = new Array(targets.length);
+    const results: PromiseSettledResult<Holding>[] = new Array(targets.length);
     let next = 0;
     let completed = 0;
     const worker = async () => {
       while (next < targets.length) {
         const index = next++;
         try {
-          await repository.refreshHoldingDividends(targets[index].id);
-          results[index] = { status: 'fulfilled', value: undefined };
+          const holding = await repository.refreshHoldingDividends(targets[index].id);
+          results[index] = { status: 'fulfilled', value: holding };
         } catch (reason) { results[index] = { status: 'rejected', reason }; }
         completed++;
         setMessage(`Researched ${completed} of ${targets.length} securities…`);
@@ -46,21 +48,24 @@ export function DistributionResearchPanel({ holdings, repository, onRefreshed }:
     };
     await Promise.all(Array.from({ length: Math.min(2, targets.length) }, worker));
     const failed = results.flatMap((result, index) => result.status === 'rejected' ? [targets[index].security.symbol] : []);
+    const missing = results.flatMap((result, index) => result.status === 'fulfilled' && result.value.security.dividendResearchStatus === 'unavailable' ? [targets[index].security.symbol] : []);
     setFailures(failed);
+    setUnavailable(missing);
     setFailureDetails(results.flatMap((result, index) => result.status === 'rejected' && result.reason instanceof ApiError ? [`${targets[index].security.symbol}: ${result.reason.message}`] : []));
     try { onRefreshed(await (repository.reloadHoldings ?? repository.listHoldings)()); }
     catch { setReloadError(true); }
-    setMessage(`${results.length - failed.length} of ${results.length} securities refreshed.`);
+    setMessage(`${results.length - failed.length - missing.length} of ${results.length} securities refreshed.`);
     setRefreshing(false);
   };
 
   return <section className="distribution-research" aria-label="Distribution research">
     <div className="passive-income-section-heading">
       <p>Ex-date calendar. Income uses today’s share quantities; historical ownership is unavailable. Forecasts are estimates and are not guaranteed.</p>
-      <button type="button" className="secondary-action" onClick={() => void refresh()} disabled={refreshing || !securities.length} aria-busy={refreshing}>{refreshing ? 'Refreshing distribution data…' : failures.length || reloadError ? 'Retry distribution refresh' : 'Refresh distribution data'}</button>
+      <button type="button" className="secondary-action" onClick={() => void refresh()} disabled={refreshing || !securities.length} aria-busy={refreshing}>{refreshing ? 'Refreshing distribution data…' : failures.length || unavailable.length || reloadError ? 'Retry distribution refresh' : 'Refresh distribution data'}</button>
     </div>
     <p className="status-copy" role="status">{message}</p>
     {failures.length ? <p className="form-error" role="alert">Distribution refresh failed for {failures.join(', ')}. Existing data is still shown. Retry to check the provider or configuration again.</p> : null}
+    {unavailable.length ? <p className="form-error" role="alert">No distributions were imported for {unavailable.join(', ')}. Review Research status and sources for coverage warnings and saved AI research, then retry. Existing records are still shown.</p> : null}
     {failureDetails.length ? <ul className="form-error" aria-label="Distribution provider errors">{failureDetails.map((detail) => <li key={detail}>{detail}</li>)}</ul> : null}
     {reloadError ? <p className="form-error" role="alert">Refreshed distributions could not be loaded. Existing data is still shown. Retry to load the latest records.</p> : null}
     {holdings.some(({ security }) => security.payoutDetails?.some((payout) => payout.excludedFromTotals)) ? <p className="status-copy">Conflicting or unverified distribution events are excluded from totals. Check research warnings and sources before relying on these totals.</p> : null}
@@ -73,6 +78,9 @@ export function DistributionResearchPanel({ holdings, repository, onRefreshed }:
         const retrieved = security.dividendResearchRetrievedAt;
         const stale = retrieved && Date.now() - new Date(retrieved).getTime() > 7 * 86400000;
         const url = safeSourceUrl(security.dividendResearchSourceUrl);
+        const distributionSources = [...new Set((security.sourcePayoutDetails ?? security.payoutDetails ?? [])
+          .filter((payout) => payout.mode !== 'manual' && payout.status !== 'projected' && payout.status !== 'superseded')
+          .flatMap((payout) => { const source = safeSourceUrl(payout.sourceUrl); return source ? [source] : []; }))];
         return <li key={id}>
           <strong>{security.symbol} · {security.exchange}</strong>
           <button type="button" className="secondary-action" disabled={refreshing} onClick={() => void refresh([holding])}>Refresh {security.symbol} distributions</button>
@@ -83,7 +91,8 @@ export function DistributionResearchPanel({ holdings, repository, onRefreshed }:
           {security.dividendResearchStatus === 'unsupported' ? <span>This security is not supported by the research provider.</span> : null}
           {security.dividendResearchStatus === 'unavailable' ? <span>Distribution research is unavailable. Existing records may be incomplete.</span> : null}
           {security.dividendResearchStatus === 'partial' ? <span>Partial coverage; totals may be incomplete.</span> : null}
-          {url ? <a href={url} target="_blank" rel="noreferrer">{security.symbol} research source</a> : null}
+          {url ? <a href={url} target="_blank" rel="noreferrer">{security.symbol} identity source</a> : null}
+          {distributionSources.map((source, index) => <a key={source} href={source} target="_blank" rel="noreferrer">{security.symbol} distribution history source {index + 1}</a>)}
           {(security.dividendResearchWarnings ?? []).map((warning, index) => <span key={index}>{warning}</span>)}
           <SavedWebResearch evidence={security.dividendResearchSnapshot?.evidence} />
         </li>;

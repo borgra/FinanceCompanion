@@ -5,6 +5,7 @@ import {
   FinanceMoneyCellValue,
   FinanceTable,
   FinanceTableHeaderCell,
+  useFinanceTableRowRetention,
 } from '../components/FinanceTable';
 import type { Account } from '../domain/account';
 import type { AccountRepository } from '../domain/accountRepository';
@@ -206,6 +207,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [isImporting, setIsImporting] = useState(false);
   const [isImportingPayments, setIsImportingPayments] = useState(false);
   const [selectedHoldingId, setSelectedHoldingId] = useState<string | null>(null);
+  const {
+    activeRowKey: editingHoldingId,
+    clearRetention: clearEditingHolding,
+    tableProps: rowRetentionTableProps,
+  } = useFinanceTableRowRetention();
   const importInputRef = useRef<HTMLInputElement>(null);
   const paymentInputRef = useRef<HTMLInputElement>(null);
   const [refreshingHoldingIds, setRefreshingHoldingIds] = useState<Set<string>>(() => new Set());
@@ -296,14 +302,14 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
 
   const orderedHoldings = useMemo(
     () => [...holdings]
-      .filter((holding) => !selectedAccountFilterId || holding.accountPositions.some((position) => position.accountId === selectedAccountFilterId && position.quantity > 0))
+      .filter((holding) => !selectedAccountFilterId || holding.id === editingHoldingId || holding.accountPositions.some((position) => position.accountId === selectedAccountFilterId && position.quantity > 0))
       .sort((a, b) => {
         const comparison = sort
           ? a.security[sort.key].localeCompare(b.security[sort.key])
           : a.security.assetType.localeCompare(b.security.assetType) || a.security.name.localeCompare(b.security.name);
         return sort?.direction === 'desc' ? -comparison : comparison;
       }),
-    [holdings, selectedAccountFilterId, sort],
+    [editingHoldingId, holdings, selectedAccountFilterId, sort],
   );
 
   const investmentValues = useMemo(() => {
@@ -398,6 +404,10 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const updatePrice = (holdingId: string, rawValue: string) => {
+    if (rawValue.trim() === '') {
+      setError(null);
+      return;
+    }
     const price = parsePrice(rawValue);
     if (!Number.isFinite(price) || price <= 0) {
       setError('Price must be greater than $0.00.');
@@ -793,11 +803,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           <p>{selectedAccount ? `Viewing holdings in ${selectedAccount.name}.` : 'Manage share quantities by investment account.'}</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <label htmlFor="holdings-account-filter">Account</label>
-            <select id="holdings-account-filter" aria-label="Filter holdings by account" value={selectedAccountFilterId} onChange={(event) => setSelectedAccountFilterId(event.target.value)}>
+            <select id="holdings-account-filter" aria-label="Filter holdings by account" value={selectedAccountFilterId} onChange={(event) => { setSelectedAccountFilterId(event.target.value); clearEditingHolding(); }}>
               <option value="">All accounts</option>
               {managedAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
             </select>
-            {selectedAccountFilterId ? <button className="link-button" type="button" onClick={() => setSelectedAccountFilterId('')}>Show all accounts</button> : null}
+            {selectedAccountFilterId ? <button className="link-button" type="button" onClick={() => { setSelectedAccountFilterId(''); clearEditingHolding(); }}>Show all accounts</button> : null}
           </div>
         </div>
         <div className="funding-section-actions">
@@ -854,7 +864,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           <p>Turn on Manage Holdings for at least one investment account.</p>
         </div>
       ) : (
-        <FinanceTable wrapperClassName="holdings-finance-table" wrapperStyle={{ marginTop: 0 }}>
+        <FinanceTable wrapperClassName="holdings-finance-table" wrapperStyle={{ marginTop: 0 }} {...rowRetentionTableProps}>
           <thead>
             <tr>
               <FinanceTableHeaderCell icon="show_chart" aria-sort={sort?.key === 'name' ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}><button className="link-button" type="button" onClick={() => toggleSort('name')} aria-label="Sort by Security Name">Security {sort?.key === 'name' ? (sort.direction === 'asc' ? '↑' : '↓') : ''}</button></FinanceTableHeaderCell>
@@ -886,7 +896,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                 const price = isCashSecurity(holding.security) ? 1 : holding.security.price ?? 0;
 
                 return (
-                  <tr key={holding.id} className={selectedHoldingId === holding.id ? 'holdings-row-selected' : undefined} onClick={() => setSelectedHoldingId(holding.id)}>
+                  <tr key={holding.id} data-row-key={holding.id} className={selectedHoldingId === holding.id ? 'holdings-row-selected' : undefined} onClick={() => setSelectedHoldingId(holding.id)} onFocusCapture={() => setSelectedHoldingId(holding.id)}>
                     <td className="holdings-security-cell">
                       {isCashSecurity(holding.security) ? (
                         <span className="excel-cell-val">{holding.security.name}</span>
@@ -911,7 +921,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                           formatValue={formatMoney}
                           onValueChange={(value) => updatePrice(holding.id, value)}
                           focusId={`holding-${holding.id}-price`}
-                          onFocus={() => setSelectedHoldingId(holding.id)}
+
                           aria-label={`${holding.security.symbol} price`}
                         />}
                     </td>
@@ -928,7 +938,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                           formatValue={formatQuantity}
                           onValueChange={(value) => updateQuantity(holding.id, account.id, value)}
                           focusId={`holding-${holding.id}-${account.id}`}
-                          onFocus={() => setSelectedHoldingId(holding.id)}
+
                           aria-label={`${holding.security.symbol} quantity for ${account.name}`}
                         />
                       </td>

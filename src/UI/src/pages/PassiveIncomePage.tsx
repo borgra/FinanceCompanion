@@ -1,4 +1,5 @@
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FinanceTable } from '../components/FinanceTable';
 import type { Holding } from '../domain/holding';
 import type { HoldingRepository } from '../domain/holdingRepository';
 import { buildAnnualDividendForecast } from '../features/passiveIncome/dividendForecast';
@@ -186,7 +187,7 @@ export function PassiveIncomePage({ holdingRepository }: PassiveIncomePageProps)
             {!targetYearError && !invalidGrowthSymbols.length && (forecast[0]?.amount ?? 0) <= 0 ? <div className="investment-account-empty"><p>Add positive holding quantities and current-year dividend data to create a forecast.</p></div> : null}
             {!targetYearError && !invalidGrowthSymbols.length && (forecast[0]?.amount ?? 0) > 0 ? <>
               <AnnualForecastChart values={forecast} formatMoney={money} />
-              <table className="future-dividend-table"><caption>Annual dividend forecast values</caption><thead><tr><th scope="col">Year</th><th scope="col">Dividend income</th></tr></thead><tbody>{forecast.map((item) => <tr key={item.year}><th scope="row">{item.year}</th><td>{money(item.amount)}</td></tr>)}</tbody></table>
+              <FinanceTable variant="plain" className="future-dividend-table"><caption>Annual dividend forecast values</caption><thead><tr><th scope="col">Year</th><th scope="col">Dividend income</th></tr></thead><tbody>{forecast.map((item) => <tr key={item.year}><th scope="row">{item.year}</th><td>{money(item.amount)}</td></tr>)}</tbody></FinanceTable>
             </> : null}
           </section>
         </div>

@@ -106,4 +106,25 @@ describe('MortgageSchedulePanel', () => {
     expect(container.querySelectorAll('tbody tr')).toHaveLength(50);
     expect(screen.getByLabelText('Principal Mar 2025')).toBeInTheDocument();
   });
+
+  it('keeps schedule rows visible when clearing starting balance until the cell blurs', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = render(
+      <MortgageSchedulePanel
+        initial={initial}
+        repository={{ putMortgageSchedule: vi.fn() }}
+        onSaved={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelectorAll('tbody tr').length).toBeGreaterThan(1);
+    const startingBalance = screen.getByLabelText('Starting balance');
+    await user.click(startingBalance);
+    await user.clear(startingBalance);
+    expect(container.querySelectorAll('tbody tr').length).toBeGreaterThan(1);
+    expect(startingBalance).toHaveFocus();
+
+    await user.click(screen.getByRole('heading', { name: 'Mortgage Schedule' }));
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
+  });
 });

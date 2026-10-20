@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react';
+import type { FocusEvent, KeyboardEvent, MouseEvent } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 const CELL_FOCUSABLE_SELECTOR = [
@@ -55,6 +55,7 @@ const selectTextLikeValue = (element: HTMLElement) => {
 
 const isEditableControl = (element: HTMLElement) => (
   element instanceof HTMLTextAreaElement
+  || element instanceof HTMLSelectElement
   || element.isContentEditable
   || (element instanceof HTMLInputElement
     && !['button', 'checkbox', 'file', 'radio', 'reset', 'submit'].includes(element.type))
@@ -97,16 +98,25 @@ const buildBodyGrid = (table: HTMLTableElement) => {
   return { grid, orderedCells, positions };
 };
 
+export type TableBodyCellNavigationOptions = {
+  onActiveRowKeyChange?: (rowKey: string | null) => void;
+  onCellEditStateChange?: (isEditing: boolean) => void;
+};
+
 /**
- * Makes each visible table-body cell one navigation stop. Tab traverses cells
- * in reading order; arrow keys follow the visual grid, including spans.
- * Enter/F2 enters controls within a cell and Escape returns to the cell.
+ * Makes each visible table-body cell one navigation stop. Tab, Shift+Tab,
+ * Enter, and arrow keys navigate the grid, immediately entering primary
+ * editable inputs and highlighting their full value on a single key press.
  */
-export function useTableBodyCellTabNavigation() {
+export function useTableBodyCellTabNavigation(options?: TableBodyCellNavigationOptions) {
+  const onActiveRowKeyChange = options?.onActiveRowKeyChange;
+  const onCellEditStateChange = options?.onCellEditStateChange;
   const tableRef = useRef<HTMLTableElement | null>(null);
   const [table, setTable] = useState<HTMLTableElement | null>(null);
   const managedTabIndexes = useRef(new Map<HTMLElement, string | null>());
   const interactionCell = useRef<HTMLTableCellElement | null>(null);
+  const isCaretEditing = useRef(false);
+  const justFocusedTarget = useRef<HTMLElement | null>(null);
 
   const setTableRef = useCallback((element: HTMLTableElement | null) => {
     tableRef.current = element;
@@ -119,10 +129,27 @@ export function useTableBodyCellTabNavigation() {
     restoreManagedTabIndexes(managedTabIndexes.current);
 
     for (const cell of buildBodyGrid(currentTable).orderedCells) {
-      manageTabIndex(cell, 0, managedTabIndexes.current);
       const focusables = [...cell.querySelectorAll<HTMLElement>(CELL_FOCUSABLE_SELECTOR)]
-        .filter((element) => element.tabIndex >= 0 && isVisibleWithinTable(element, currentTable));
-      for (const focusable of focusables) manageTabIndex(focusable, -1, managedTabIndexes.current);
+        .filter((element) =>
+          element.getAttribute('data-cell-auxiliary') !== 'true'
+          && element.tabIndex >= 0
+          && isVisibleWithinTable(element, currentTable),
+        );
+      const editable = focusables.find(isEditableControl);
+      if (editable) {
+        manageTabIndex(cell, -1, managedTabIndexes.current);
+        manageTabIndex(editable, 0, managedTabIndexes.current);
+        for (const focusable of focusables) {
+          if (focusable !== editable) {
+            manageTabIndex(focusable, -1, managedTabIndexes.current);
+          }
+        }
+      } else {
+        manageTabIndex(cell, 0, managedTabIndexes.current);
+        for (const focusable of focusables) {
+          manageTabIndex(focusable, -1, managedTabIndexes.current);
+        }
+      }
     }
   }, []);
 
@@ -147,6 +174,7 @@ export function useTableBodyCellTabNavigation() {
     return [...managedTabIndexes.current.entries()]
       .filter(([element, original]) =>
         element !== cell
+        && element.getAttribute('data-cell-auxiliary') !== 'true'
         && original !== '-1'
         && element.closest('td, th') === cell
         && element.closest('table') === currentTable
@@ -155,10 +183,75 @@ export function useTableBodyCellTabNavigation() {
       .map(([element]) => element);
   }, []);
 
-  const focusCell = useCallback((cell: HTMLTableCellElement) => {
+  const focusCellContainer = useCallback((cell: HTMLTableCellElement) => {
     interactionCell.current = null;
+    isCaretEditing.current = false;
     cell.focus();
   }, []);
+
+  const focusCell = useCallback((cell: HTMLTableCellElement) => {
+    const editable = cellControls(cell).find(isEditableControl);
+    isCaretEditing.current = false;
+    if (editable) {
+      interactionCell.current = cell;
+      editable.focus();
+      selectTextLikeValue(editable);
+      return;
+    }
+    interactionCell.current = null;
+    cell.focus();
+  }, [cellControls]);
+
+  const onFocusCapture = useCallback((event: FocusEvent<HTMLTableElement>) => {
+    const currentTable = tableRef.current;
+    const eventTarget = event.target;
+    if (!currentTable || !(eventTarget instanceof HTMLElement)) return;
+    const sourceCell = eventTarget.closest<HTMLTableCellElement>('td, th');
+    if (!sourceCell || !isTableBodyCell(sourceCell, currentTable)) return;
+    if (isEditableControl(eventTarget)) {
+      const rowKey = sourceCell.closest<HTMLTableRowElement>('tr')?.getAttribute('data-row-key') ?? null;
+      onActiveRowKeyChange?.(rowKey);
+      onCellEditStateChange?.(true);
+      justFocusedTarget.current = eventTarget;
+      selectTextLikeValue(eventTarget);
+    }
+  }, [onActiveRowKeyChange, onCellEditStateChange]);
+
+  const onBlurCapture = useCallback((event: FocusEvent<HTMLTableElement>) => {
+    const currentTable = tableRef.current;
+    const eventTarget = event.target;
+    if (!currentTable || !(eventTarget instanceof HTMLElement)) return;
+    const sourceCell = eventTarget.closest<HTMLTableCellElement>('td, th');
+    if (!sourceCell || !isTableBodyCell(sourceCell, currentTable)) return;
+    if (isEditableControl(eventTarget)) {
+      onActiveRowKeyChange?.(null);
+      onCellEditStateChange?.(false);
+    }
+  }, [onActiveRowKeyChange, onCellEditStateChange]);
+
+  const onMouseUpCapture = useCallback((event: MouseEvent<HTMLTableElement>) => {
+    const eventTarget = event.target;
+    if (eventTarget instanceof HTMLElement && justFocusedTarget.current === eventTarget) {
+      justFocusedTarget.current = null;
+      selectTextLikeValue(eventTarget);
+    }
+  }, []);
+
+  const onClickCapture = useCallback((event: MouseEvent<HTMLTableElement>) => {
+    const currentTable = tableRef.current;
+    const eventTarget = event.target;
+    if (!currentTable || !(eventTarget instanceof HTMLElement)) return;
+    const sourceCell = eventTarget.closest<HTMLTableCellElement>('td, th');
+    if (!sourceCell || !isTableBodyCell(sourceCell, currentTable)) return;
+    if (eventTarget === sourceCell || eventTarget.classList.contains('excel-editable-cell')) {
+      const editable = cellControls(sourceCell).find(isEditableControl);
+      if (editable) {
+        isCaretEditing.current = false;
+        editable.focus();
+        selectTextLikeValue(editable);
+      }
+    }
+  }, [cellControls]);
 
   const onKeyDownCapture = useCallback((event: KeyboardEvent<HTMLTableElement>) => {
     if (event.defaultPrevented) return;
@@ -170,29 +263,70 @@ export function useTableBodyCellTabNavigation() {
 
     const isInsideControl = eventTarget !== sourceCell;
     const controls = cellControls(sourceCell);
+    const editableControl = controls.find(isEditableControl);
 
     if (event.key === 'Escape' && isInsideControl) {
       event.preventDefault();
-      focusCell(sourceCell);
+      focusCellContainer(sourceCell);
       return;
     }
 
-    if ((event.key === 'Enter' || event.key === 'F2') && !isInsideControl) {
-      const firstControl = controls[0];
-      if (!firstControl) return;
-      event.preventDefault();
-      interactionCell.current = sourceCell;
-      firstControl.focus();
-      selectTextLikeValue(firstControl);
-      return;
+    if (event.key === 'F2') {
+      if (!isInsideControl) {
+        const firstControl = editableControl ?? controls[0];
+        if (!firstControl) return;
+        event.preventDefault();
+        interactionCell.current = sourceCell;
+        isCaretEditing.current = true;
+        firstControl.focus();
+        selectTextLikeValue(firstControl);
+        return;
+      }
+      if (isEditableControl(eventTarget)) {
+        event.preventDefault();
+        isCaretEditing.current = true;
+        return;
+      }
     }
 
     const { grid, orderedCells, positions } = buildBodyGrid(currentTable);
     const position = positions.get(sourceCell);
     if (!position) return;
 
+    if (event.key === 'Enter') {
+      if (!isInsideControl) {
+        const firstControl = editableControl ?? controls[0];
+        if (firstControl) {
+          event.preventDefault();
+          interactionCell.current = sourceCell;
+          isCaretEditing.current = Boolean(editableControl);
+          firstControl.focus();
+          selectTextLikeValue(firstControl);
+          return;
+        }
+      }
+      if (!isInsideControl || isEditableControl(eventTarget)) {
+        event.preventDefault();
+        let nextCell: HTMLTableCellElement | undefined;
+        for (let row = position.row + 1; row < grid.length; row += 1) {
+          const candidate = grid[row]?.[position.startColumn];
+          if (candidate && candidate !== sourceCell) {
+            nextCell = candidate;
+            break;
+          }
+        }
+        if (nextCell) {
+          focusCell(nextCell);
+        } else if (isEditableControl(eventTarget)) {
+          selectTextLikeValue(eventTarget);
+        }
+        return;
+      }
+      return;
+    }
+
     if (event.key === 'Tab') {
-      if (interactionCell.current === sourceCell && isInsideControl) {
+      if (!editableControl && interactionCell.current === sourceCell && isInsideControl) {
         const controlIndex = controls.indexOf(eventTarget);
         const nextControl = controls[controlIndex + (event.shiftKey ? -1 : 1)];
         if (nextControl) {
@@ -211,18 +345,15 @@ export function useTableBodyCellTabNavigation() {
       return;
     }
 
-    if (event.key === 'Enter' && isInsideControl && isEditableControl(eventTarget)) {
-      event.preventDefault();
-      const nextCell = grid[position.row + 1]?.[position.startColumn];
-      if (nextCell && nextCell !== sourceCell) focusCell(nextCell);
-      else focusCell(sourceCell);
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
+    if (isInsideControl && !isEditableControl(eventTarget)) return;
+    if (
+      isInsideControl
+      && isCaretEditing.current
+      && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
+    ) {
       return;
     }
-
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
-    // Once a control has focus (through Enter/F2 or a pointer), its arrow-key
-    // behavior belongs to that native control. Escape returns to cell browsing.
-    if (isInsideControl) return;
 
     event.preventDefault();
     let destination: HTMLTableCellElement | undefined;
@@ -239,7 +370,14 @@ export function useTableBodyCellTabNavigation() {
       }
     }
     if (destination) focusCell(destination);
-  }, [cellControls, focusCell]);
+  }, [cellControls, focusCell, focusCellContainer]);
 
-  return { ref: setTableRef, onKeyDownCapture };
+  return {
+    ref: setTableRef,
+    onBlurCapture,
+    onClickCapture,
+    onFocusCapture,
+    onKeyDownCapture,
+    onMouseUpCapture,
+  };
 }

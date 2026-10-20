@@ -459,12 +459,16 @@ describe('InvestingPage', () => {
     const zebraRetirement = screen.getByLabelText('ZBRA quantity for Fidelity 401k');
     const alphaTaxableCell = alphaTaxable.closest('td')!;
     const alphaRetirementCell = alphaRetirement.closest('td')!;
-    const zebraRetirementCell = zebraRetirement.closest('td')!;
     alphaTaxableCell.focus();
     fireEvent.keyDown(alphaTaxableCell, { key: 'ArrowRight' });
-    await waitFor(() => expect(alphaRetirementCell).toHaveFocus());
+    await waitFor(() => expect(alphaRetirement).toHaveFocus());
+    expect(alphaRetirement).toHaveSelection('2');
     fireEvent.keyDown(alphaRetirementCell, { key: 'ArrowUp' });
-    await waitFor(() => expect(zebraRetirementCell).toHaveFocus());
+    await waitFor(() => expect(zebraRetirement).toHaveFocus());
+    expect(zebraRetirement).toHaveSelection('1');
+    fireEvent.keyDown(zebraRetirement, { key: 'Enter' });
+    await waitFor(() => expect(alphaRetirement).toHaveFocus());
+    expect(alphaRetirement).toHaveSelection('2');
   });
 
   it('filters holdings to a selected account and restores all holdings', async () => {
@@ -510,6 +514,14 @@ describe('InvestingPage', () => {
     expect(screen.getByText('$400.00')).toBeInTheDocument();
     expect(screen.getByLabelText('SHARED quantity for Fidelity 401k')).toBeInTheDocument();
     expect(screen.queryByLabelText('SHARED quantity for Fidelity Taxable Brokerage')).not.toBeInTheDocument();
+
+    const retQtyInput = screen.getByLabelText('RET quantity for Fidelity 401k');
+    await user.click(retQtyInput);
+    await user.clear(retQtyInput);
+    expect(screen.getByText('Retirement Security')).toBeInTheDocument();
+    expect(retQtyInput).toHaveFocus();
+    await user.tab();
+    expect(screen.queryByText('Retirement Security')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Show all accounts' }));
     expect(await screen.findByText('Taxable Security')).toBeInTheDocument();
