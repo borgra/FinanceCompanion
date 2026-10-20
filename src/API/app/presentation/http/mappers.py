@@ -138,12 +138,17 @@ def to_monthly_record(item: MonthlyRecordPayload) -> MonthlyRecord:
     )
 
 
-def to_account(account_id: str, payload: AccountUpsertRequest, created_at: str, updated_at: str) -> Account:
+def to_account(account_id: str, payload: AccountUpsertRequest, created_at: str, updated_at: str, existing: Account | None = None) -> Account:
     return Account(
         id=account_id,
         name=payload.name,
         type=payload.type,
         starting_balance=payload.starting_balance,
+        minimum_amount=(
+            existing.minimum_amount
+            if existing is not None and "minimum_amount" not in payload.model_fields_set
+            else payload.minimum_amount
+        ),
         start_date=payload.start_date,
         yield_rate=payload.yield_rate,
         assigned_income_source_ids=payload.assigned_income_source_ids,
@@ -176,6 +181,7 @@ def to_account_payload(item: Account) -> AccountPayload:
         name=item.name,
         type=item.type,
         starting_balance=item.starting_balance,
+        minimum_amount=item.minimum_amount,
         start_date=item.start_date,
         yield_rate=item.yield_rate,
         assigned_income_source_ids=item.assigned_income_source_ids,

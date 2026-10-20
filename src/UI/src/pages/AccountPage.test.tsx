@@ -702,7 +702,7 @@ describe('AccountPage', () => {
     expect(updatedSavingsAcc?.monthlyRecords[0].savings).toBe(200);
   });
 
-  it('renders Bank Dashboard by default with emergency fund configs and chart', async () => {
+  it('renders Bank Dashboard with a derived account minimum and coverage chart', async () => {
     vi.setSystemTime(new Date(2026, 6, 1, 12));
     const mockAccounts: Account[] = [
       {
@@ -763,16 +763,11 @@ describe('AccountPage', () => {
     expect(screen.getByText('Total')).toBeInTheDocument();
     expect(screen.getAllByText('56.9 months')).toHaveLength(2);
 
-    // 3. Verify emergency fund threshold input
-    const thresholdInput = screen.getByLabelText('Minimum threshold');
-    expect(thresholdInput).toHaveValue('20,000');
-
-    // Update threshold and verify update
-    await userEvent.clear(thresholdInput);
-    await userEvent.type(thresholdInput, '40000');
-    await userEvent.tab();
-    expect(thresholdInput).toHaveValue('40,000');
-    expect(localStorage.getItem('finance-companion-emergency-threshold')).toBe('40000');
+    // Minimums are derived from saved accounts; legacy thresholds have no default.
+    expect(screen.queryByLabelText('Minimum threshold')).not.toBeInTheDocument();
+    const minimumTotal = screen.getByRole('region', { name: 'Total Account Minimum' });
+    expect(minimumTotal).toHaveTextContent('$0.00');
+    expect(minimumTotal).toHaveTextContent('No account minimums configured');
 
     // 4. Verify Account Breakdown table has the accounts
     expect(screen.getByText('Chase Checking')).toBeInTheDocument();

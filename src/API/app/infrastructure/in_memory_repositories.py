@@ -108,6 +108,7 @@ def _account_from_dict(data: dict) -> Account:
         name=data["name"],
         type=data["type"],
         starting_balance=float(data["startingBalance"]),
+        minimum_amount=data.get("minimumAmount"),
         start_date=data["startDate"],
         yield_rate=float(data["yieldRate"]),
         assigned_income_source_ids=list(data.get("assignedIncomeSourceIds", [])),

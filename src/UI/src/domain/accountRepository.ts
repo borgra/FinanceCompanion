@@ -1,4 +1,5 @@
 import { type Account, type AccountDraft, defaultMonthlyRecords } from './account';
+import { parseMinimumAmount } from './accountMinimum';
 
 export type AccountRepository = {
   listAccounts: () => Promise<Account[]>;
@@ -30,6 +31,7 @@ const draftToAccountFields = (draft: AccountDraft) => ({
   name: draft.name.trim(),
   type: draft.type,
   startingBalance: Number(draft.startingBalance) || 0,
+  ...(draft.minimumAmount !== undefined ? { minimumAmount: parseMinimumAmount(draft.minimumAmount) } : {}),
   startDate: draft.startDate || '2026-01-01',
   yieldRate: Number(draft.yieldRate) || 0,
   assignedIncomeSourceIds: [...draft.assignedIncomeSourceIds],

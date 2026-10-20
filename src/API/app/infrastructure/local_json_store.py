@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from decimal import Decimal
 from pathlib import Path
 
 from app.domain.models import (
@@ -25,6 +26,8 @@ _REQUIRED_COLLECTIONS = ('users', 'income_sources', 'budget_categories', 'accoun
 
 
 def _camel(value):
+    if isinstance(value, Decimal):
+        return str(value)
     if isinstance(value, dict):
         return {
             ''.join(part if index == 0 else part[:1].upper() + part[1:] for index, part in enumerate(key.split('_'))): item if key == 'dividend_research_snapshot' else _camel(item)

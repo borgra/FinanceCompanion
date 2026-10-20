@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  currentMinimumBalance, localMonthCode, minimumAmountError, minimumPercentage,
+  moneyCents, parseMinimumAmount, sumMoney, totalAccountMinimum,
+} from '../domain/accountMinimum';
 import type { IncomeSourceRepository } from '../domain/incomeSourceRepository';
 import type { BudgetRepository } from '../domain/budgetRepository';
 import type { AccountRepository } from '../domain/accountRepository';
@@ -70,16 +74,6 @@ const formatMoney = (amount: number) => {
 
 const parseMoneyInput = (value: string) => Number(value.replace(/[$,\s]/g, '')) || 0;
 
-const formatAmountInput = (value: number) =>
-  new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
-
-const parseValidatedAmount = (value: string) => {
-  const normalized = value.replace(/,/g, '');
-  if (!/^\d*(?:\.\d{0,2})?$/.test(normalized) || normalized === '') return undefined;
-  const amount = Number(normalized);
-  return Number.isFinite(amount) && amount >= 0 && amount <= maxAccountBalance ? amount : undefined;
-};
-
 const getMonthlyNetIncomeForMonth = (
   sources: IncomeSource[],
   monthCode: string,
@@ -130,9 +124,7 @@ type ProjectionMonth = {
 
 type ColumnModalMode = 'custom' | 'budget';
 
-const getCurrentProjectionMonth = (projectionMonths: ProjectionMonth[]) => {
-  const now = new Date();
-  const currentDateCode = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+const getCurrentProjectionMonth = (projectionMonths: ProjectionMonth[], currentDateCode: string) => {
   return projectionMonths.find((month) => month.dateCode === currentDateCode) ?? projectionMonths[0];
 };
 
@@ -189,15 +181,15 @@ const computeAccountRecords = (
     account.columns.forEach((col) => {
       const val = Number(record.outflows[col.id]) || 0;
       outflows[col.id] = val;
-      expenses += val;
+      expenses = sumMoney(expenses, val);
     });
 
     invest = Number(record.invest) || 0;
     savings = Number(record.savings) || 0;
     if (account.type === 'Savings') {
-      net = start + credit + additionalIncome - expenses - invest + savings;
+      net = sumMoney(start, credit, additionalIncome, -expenses, -invest, savings);
     } else {
-      net = start + credit + additionalIncome - expenses - invest - savings;
+      net = sumMoney(start, credit, additionalIncome, -expenses, -invest, -savings);
     }
     currentStart = net;
 
@@ -209,7 +201,7 @@ const computeAccountRecords = (
       outflows,
       expenses,
       subtotal:
-        start + credit + additionalIncome - expenses + (account.type === 'Savings' ? savings : 0),
+        sumMoney(start, credit, additionalIncome, -expenses, account.type === 'Savings' ? savings : 0),
       invest,
       savings,
       net,
@@ -229,35 +221,33 @@ export function AccountPage({
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>();
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [currentMonthCode, setCurrentMonthCode] = useState(localMonthCode);
 
   const [viewMode, setViewMode] = useState<'aggregate' | 'account'>(defaultViewMode);
   const [hoveredMonth, setHoveredMonth] = useState<string | null>(null);
-  const [threshold, setThreshold] = useState<number>(() => {
-    const saved = localStorage.getItem('finance-companion-emergency-threshold');
-    return saved ? Number(saved) : 20000;
+  const [showMinimumMigration, setShowMinimumMigration] = useState(() => {
+    try { return localStorage.getItem('finance-companion-emergency-threshold') !== null; }
+    catch { return false; }
   });
-  const [thresholdInput, setThresholdInput] = useState(() => formatAmountInput(threshold));
-  const [thresholdError, setThresholdError] = useState<string | undefined>();
+  const threshold = useMemo(() => totalAccountMinimum(accounts), [accounts]);
+  const hasMinimum = threshold > 0;
 
   useEffect(() => {
-    localStorage.setItem('finance-companion-emergency-threshold', String(threshold));
-  }, [threshold]);
-
-  const updateThreshold = (value: string) => {
-    setThresholdInput(value);
-    const amount = parseValidatedAmount(value);
-    if (amount === undefined) {
-      setThresholdError('Enter a non-negative amount with no more than two decimal places.');
-      return;
-    }
-    setThreshold(amount);
-    setThresholdError(undefined);
-  };
-
-  const formatThresholdOnBlur = () => {
-    const amount = parseValidatedAmount(thresholdInput);
-    if (amount !== undefined) setThresholdInput(formatAmountInput(amount));
-  };
+    // Retire the legacy setting without consuming or distributing its value.
+    try { localStorage.removeItem('finance-companion-emergency-threshold'); } catch { /* Storage may be disabled. */ }
+    const refreshMonth = () => setCurrentMonthCode(localMonthCode());
+    const timer = window.setInterval(refreshMonth, 30_000);
+    window.addEventListener('focus', refreshMonth);
+    window.addEventListener('pageshow', refreshMonth);
+    document.addEventListener('visibilitychange', refreshMonth);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshMonth);
+      window.removeEventListener('pageshow', refreshMonth);
+      document.removeEventListener('visibilitychange', refreshMonth);
+    };
+  }, []);
 
   // Draft editing states
   const [draftAccount, setDraftAccount] = useState<Account>();
@@ -269,6 +259,12 @@ export function AccountPage({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalAccountId, setModalAccountId] = useState<string | null>(null);
   const [modalDraft, setModalDraft] = useState<AccountDraft>(() => emptyAccountDraft());
+  const [modalSaveError, setModalSaveError] = useState<string>();
+  const modalOpener = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!isModalOpen) return;
+    return () => modalOpener.current?.focus();
+  }, [isModalOpen]);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [columnModalMode, setColumnModalMode] = useState<ColumnModalMode>('custom');
   const [newColumnName, setNewColumnName] = useState('');
@@ -327,29 +323,41 @@ export function AccountPage({
     !Number.isNaN(parsedModalBalance) &&
     parsedModalBalance >= 0 &&
     parsedModalBalance <= maxAccountBalance;
+  const modalMinimumError = useMemo(() => {
+    try { parseMinimumAmount(modalDraft.minimumAmount); return undefined; }
+    catch { return minimumAmountError; }
+  }, [modalDraft.minimumAmount]);
   const isModalAccountValid =
     modalDraft.name.trim().length > 0 &&
     modalDraft.name.trim().length <= maxAccountNameLength &&
-    isModalBalanceValid;
+    isModalBalanceValid && !modalMinimumError;
 
   const openCreateAccountModal = () => {
+    modalOpener.current = document.activeElement as HTMLElement;
     setModalAccountId(null);
     setModalDraft(emptyAccountDraft());
+    setModalSaveError(undefined);
     setSaveError(undefined);
     setIsModalOpen(true);
   };
 
   const openEditAccountModal = (account: Account) => {
+    modalOpener.current = document.activeElement as HTMLElement;
     setModalAccountId(account.id);
     setModalDraft(toAccountDraft(account));
+    setModalSaveError(undefined);
     setSaveError(undefined);
     setIsModalOpen(true);
   };
 
-  const closeAccountModal = () => {
+  const resetAccountModal = () => {
     setModalAccountId(null);
     setModalDraft(emptyAccountDraft());
+    setModalSaveError(undefined);
     setIsModalOpen(false);
+  };
+  const closeAccountModal = () => {
+    if (!isSaving) resetAccountModal();
   };
 
   const openColumnModal = () => {
@@ -397,7 +405,7 @@ export function AccountPage({
         setAccounts(sorted);
         setIncomeSources(sources);
         setBudgetCategories(categories);
-        setSelectedAccountId((prev) => prev ?? sorted[0]?.id);
+        setSelectedAccountId((prev) => prev ?? sorted.find((account) => account.type !== 'Investment')?.id);
       } catch {
         setLoadError('Failed to load required finance data. Try again.');
       } finally {
@@ -406,11 +414,11 @@ export function AccountPage({
     };
 
     void loadAllData();
-  }, [accountRepository, incomeRepository, budgetRepository]);
+  }, [accountRepository, incomeRepository, budgetRepository, loadAttempt]);
 
   const selectedAccount = useMemo(
-    () => accounts.find((a) => a.id === selectedAccountId),
-    [accounts, selectedAccountId],
+    () => sortedAccounts.find((a) => a.id === selectedAccountId),
+    [sortedAccounts, selectedAccountId],
   );
 
   // Sync draft state on account switch
@@ -426,18 +434,6 @@ export function AccountPage({
     setSaveError(undefined);
   }, [selectedAccount]);
 
-  const refreshAccounts = async (preferredSelectedId?: string) => {
-    const list = await accountRepository.listAccounts();
-    const sorted = sortAccounts(list);
-    setAccounts(sorted);
-    setSelectedAccountId((prev) => {
-      const nextSelectedId = preferredSelectedId ?? prev;
-      return nextSelectedId && sorted.some((a) => a.id === nextSelectedId)
-        ? nextSelectedId
-        : sorted[0]?.id;
-    });
-  };
-
   // Check unsaved changes
   const ensureSavedBeforeSwitch = async (nextId: string) => {
     if (nextId === selectedAccountId) return;
@@ -447,12 +443,63 @@ export function AccountPage({
     }
     const ok = window.confirm('You have unsaved account changes. Save before switching?');
     if (!ok) return;
-    await saveAccountChanges();
-    setSelectedAccountId(nextId);
+    if (await saveAccountChanges()) setSelectedAccountId(nextId);
+  };
+
+  const applySavedAccounts = (savedAccounts: Account[], targetAccountId: string) => {
+    const savedIds = new Set(savedAccounts.map((account) => account.id));
+    setAccounts((previous) => sortAccounts([
+      ...previous.filter((account) => !savedIds.has(account.id)), ...savedAccounts,
+    ]));
+    setSelectedAccountId(targetAccountId);
+  };
+
+  const persistAccountDraft = async (draft: AccountDraft, accountId: string | null) => {
+    const savingsAccount = draft.type === 'Checking' && draft.savingsAccountId
+      ? accounts.find((account) => account.id === draft.savingsAccountId)
+      : undefined;
+    const savingsDraft = savingsAccount ? {
+      ...toAccountDraft(savingsAccount),
+      monthlyRecords: savingsAccount.monthlyRecords.map((record) => ({
+        ...record,
+        savings: sumMoney(
+          draft.monthlyRecords.find((item) => item.month === record.month)?.savings ?? 0,
+          ...accounts.filter((account) => account.id !== accountId && account.type === 'Checking' && account.savingsAccountId === savingsAccount.id)
+            .map((account) => account.monthlyRecords.find((item) => item.month === record.month)?.savings ?? 0),
+        ),
+      })),
+    } : undefined;
+    if (accountId) {
+      // The existing batch endpoint commits both linked ledgers together.
+      const savedAccounts = savingsAccount && savingsDraft
+        ? await accountRepository.updateAccountsBatch([
+          { id: accountId, draft }, { id: savingsAccount.id, draft: savingsDraft },
+        ])
+        : [await accountRepository.updateAccount(accountId, draft)];
+      return { savedAccounts, targetAccountId: accountId };
+    }
+    // For a linked creation, publish its minimum only with the linked batch.
+    const created = await accountRepository.createAccount(savingsAccount ? { ...draft, minimumAmount: '' } : draft);
+    if (!savingsAccount || !savingsDraft) return { savedAccounts: [created], targetAccountId: created.id };
+    try {
+      const savedAccounts = await accountRepository.updateAccountsBatch([
+        { id: created.id, draft }, { id: savingsAccount.id, draft: savingsDraft },
+      ]);
+      return { savedAccounts, targetAccountId: created.id };
+    } catch (error) {
+      try { await accountRepository.deleteAccount(created.id); }
+      catch {
+        // Keep a failed compensation visible and retry it as an edit, avoiding duplicates.
+        setModalAccountId(created.id);
+        applySavedAccounts([created], created.id);
+        throw new Error('Account was created without a minimum, but linked savings could not be saved. Retry Save Account to finish.');
+      }
+      throw error;
+    }
   };
 
   const saveAccountChanges = async () => {
-    if (!draftAccount || !selectedAccountId) return;
+    if (!draftAccount || !selectedAccountId) return false;
     setIsSaving(true);
     setSaveError(undefined);
     try {
@@ -486,6 +533,7 @@ export function AccountPage({
         name: draftAccount.name,
         type: draftAccount.type,
         startingBalance: String(draftAccount.startingBalance),
+        minimumAmount: toAccountDraft(draftAccount).minimumAmount,
         startDate: draftAccount.startDate,
         yieldRate: String(draftAccount.yieldRate),
         assignedIncomeSourceIds: draftAccount.assignedIncomeSourceIds || [],
@@ -503,45 +551,13 @@ export function AccountPage({
         columns: columnsPayload,
         monthlyRecords: recordsPayload,
       };
-      await accountRepository.updateAccount(selectedAccountId, draftInput);
-
-      if (draftInput.type === 'Checking' && draftInput.savingsAccountId) {
-        const targetSavingsAccountId = draftInput.savingsAccountId;
-        const savingsAcc = accounts.find((a) => a.id === targetSavingsAccountId);
-        if (savingsAcc) {
-          const checkingAccounts = accounts.filter(
-            (a) => a.id !== selectedAccountId && a.type === 'Checking' && a.savingsAccountId === targetSavingsAccountId
-          );
-
-          const updatedSavingsRecords = savingsAcc.monthlyRecords.map((savRecord) => {
-            const currentCheckingRecord = recordsPayload.find((r) => r.month === savRecord.month);
-            let sum = currentCheckingRecord ? (Number(currentCheckingRecord.savings) || 0) : 0;
-
-            checkingAccounts.forEach((checkingAcc) => {
-              const matchingRecord = checkingAcc.monthlyRecords.find((r) => r.month === savRecord.month);
-              if (matchingRecord) {
-                sum += Number(matchingRecord.savings) || 0;
-              }
-            });
-
-            return {
-              ...savRecord,
-              savings: sum,
-            };
-          });
-
-          const savingsDraft: AccountDraft = {
-            ...toAccountDraft(savingsAcc),
-            monthlyRecords: updatedSavingsRecords,
-          };
-          await accountRepository.updateAccount(savingsAcc.id, savingsDraft);
-        }
-      }
-
+      const result = await persistAccountDraft(draftInput, selectedAccountId);
+      applySavedAccounts(result.savedAccounts, result.targetAccountId);
       setIsDirty(false);
-      await refreshAccounts();
+      return true;
     } catch {
       setSaveError('Failed to save account configurations. Try again.');
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -557,13 +573,13 @@ export function AccountPage({
       Number.isNaN(balanceNum) ||
       modalDraft.startingBalance === '' ||
       balanceNum < 0 ||
-      balanceNum > maxAccountBalance
+      balanceNum > maxAccountBalance || modalMinimumError
     ) {
       return;
     }
 
     setIsSaving(true);
-    setSaveError(undefined);
+    setModalSaveError(undefined);
 
     try {
       const modalColumns = modalDraft.columns.filter((col) => !col.isDeleted);
@@ -597,6 +613,7 @@ export function AccountPage({
         name,
         type: modalDraft.type,
         startingBalance: String(balanceNum),
+        minimumAmount: modalDraft.minimumAmount,
         startDate: modalDraft.startDate || '2026-01-01',
         yieldRate: String(Number(modalDraft.yieldRate) || 0),
         assignedIncomeSourceIds:
@@ -630,55 +647,13 @@ export function AccountPage({
         monthlyRecords: recordsPayload,
       };
 
-      let targetAccountId = '';
-      if (isEditingAccount && modalAccountId) {
-        await accountRepository.updateAccount(modalAccountId, draftInput);
-        targetAccountId = modalAccountId;
-      } else {
-        const createdAccount = await accountRepository.createAccount(draftInput);
-        targetAccountId = createdAccount.id;
-      }
-
-      if (draftInput.type === 'Checking' && draftInput.savingsAccountId) {
-        const targetSavingsAccountId = draftInput.savingsAccountId;
-        const savingsAcc = accounts.find((a) => a.id === targetSavingsAccountId);
-        if (savingsAcc) {
-          const checkingAccounts = accounts.filter(
-            (a) => a.id !== targetAccountId && a.type === 'Checking' && a.savingsAccountId === targetSavingsAccountId
-          );
-
-          const updatedSavingsRecords = savingsAcc.monthlyRecords.map((savRecord) => {
-            const currentCheckingRecord = recordsPayload.find((r) => r.month === savRecord.month);
-            let sum = currentCheckingRecord ? (Number(currentCheckingRecord.savings) || 0) : 0;
-
-            checkingAccounts.forEach((checkingAcc) => {
-              const matchingRecord = checkingAcc.monthlyRecords.find((r) => r.month === savRecord.month);
-              if (matchingRecord) {
-                sum += Number(matchingRecord.savings) || 0;
-              }
-            });
-
-            return {
-              ...savRecord,
-              savings: sum,
-            };
-          });
-
-          const savingsDraft: AccountDraft = {
-            ...toAccountDraft(savingsAcc),
-            monthlyRecords: updatedSavingsRecords,
-          };
-          await accountRepository.updateAccount(savingsAcc.id, savingsDraft);
-        }
-      }
-
-      await refreshAccounts(targetAccountId);
-
-      closeAccountModal();
-    } catch {
-      setSaveError(
-        isEditingAccount ? 'Failed to update account. Try again.' : 'Failed to create account. Try again.',
-      );
+      const result = await persistAccountDraft(draftInput, modalAccountId);
+      applySavedAccounts(result.savedAccounts, result.targetAccountId);
+      resetAccountModal();
+    } catch (error) {
+      setModalSaveError(error instanceof Error && error.message.startsWith('Account was created')
+        ? error.message
+        : isEditingAccount ? 'Failed to update account. Try again.' : 'Failed to create account. Try again.');
     } finally {
       setIsSaving(false);
     }
@@ -687,13 +662,20 @@ export function AccountPage({
   const deleteAccount = async (id: string) => {
     if (id === selectedAccountId && isDirty) {
       const ok = window.confirm('Unsaved changes will be lost. Save before deleting?');
-      if (ok) await saveAccountChanges();
+      if (ok) { if (!await saveAccountChanges()) return; }
       else return;
     }
     const ok = window.confirm('Are you sure you want to delete this account?');
     if (!ok) return;
-    await accountRepository.deleteAccount(id);
-    await refreshAccounts();
+    try {
+      await accountRepository.deleteAccount(id);
+      setAccounts((previous) => previous.filter((account) => account.id !== id));
+      setSelectedAccountId((previous) => previous === id
+        ? sortedAccounts.find((account) => account.id !== id)?.id
+        : previous);
+    } catch {
+      setSaveError('Failed to delete account. Try again.');
+    }
   };
 
   const updateCell = (index: number, field: 'credit' | 'additionalIncome' | 'invest' | 'savings', value: string) => {
@@ -883,9 +865,15 @@ export function AccountPage({
   }, [draftAccount, projectionMonths, incomeSources]);
 
   const currentProjectionMonth = useMemo(
-    () => getCurrentProjectionMonth(projectionMonths),
-    [projectionMonths],
+    () => getCurrentProjectionMonth(projectionMonths, currentMonthCode),
+    [projectionMonths, currentMonthCode],
   );
+  // Use saved monthly records for an empty legacy ledger; auto-created draft rows
+  // must not turn missing current-month data into an invented balance.
+  const minimumCurrentAmount = selectedAccount && draftAccount?.id === selectedAccount.id
+    ? currentMinimumBalance(selectedAccount, computedRecords, projectionMonths, currentMonthCode)
+    : undefined;
+  const currentMonthLabel = new Date(`${currentMonthCode}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   const currentBalanceByAccountId = useMemo(() => {
     return new Map(
@@ -975,7 +963,7 @@ export function AccountPage({
       const total = sortedAccounts.reduce((sum, account) => {
         const records = computeAccountRecords(account, incomeSources, projectionMonths);
         const record = records.find((r) => r.month === month.name);
-        return sum + (record?.net ?? 0);
+        return sumMoney(sum, record?.net ?? 0);
       }, 0);
       return {
         name: month.name,
@@ -1000,10 +988,18 @@ export function AccountPage({
         <div className="alert error-alert" role="alert">
           <span className="material-symbols-outlined" aria-hidden="true">error</span>
           <span>{loadError}</span>
+          <button type="button" className="secondary-action" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry</button>
         </div>
       ) : null}
 
-      {saveError ? (
+      {showMinimumMigration ? (
+        <div className="alert" role="status">
+          <p>Minimums are now configured per account. Set Account Minimum in each account’s settings; your previous emergency fund setting has not been applied.</p>
+          <button type="button" className="secondary-action" aria-label="Dismiss account minimum notice" onClick={() => setShowMinimumMigration(false)}>Dismiss</button>
+        </div>
+      ) : null}
+
+      {saveError && !isModalOpen ? (
         <div className="alert error-alert" role="alert">
           <span className="material-symbols-outlined" aria-hidden="true">error</span>
           <span>{saveError}</span>
@@ -1018,7 +1014,7 @@ export function AccountPage({
             className="filter-tab"
             role="tab"
             type="button"
-            onClick={() => setViewMode('aggregate')}
+            onClick={() => { setCurrentMonthCode(localMonthCode()); setViewMode('aggregate'); }}
           >
             Bank Dashboard
           </button>
@@ -1027,14 +1023,14 @@ export function AccountPage({
             className="filter-tab"
             role="tab"
             type="button"
-            onClick={() => setViewMode('account')}
+            onClick={() => { setCurrentMonthCode(localMonthCode()); setViewMode('account'); }}
           >
             Single Account View
           </button>
         </div>
       </section>
 
-      {viewMode === 'aggregate' ? (
+      {isLoading ? <p role="status">Loading accounts...</p> : loadError ? null : viewMode === 'aggregate' ? (
         <section className="aggregate-dashboard-workspace" aria-labelledby="bank-dashboard-heading" style={{ maxWidth: '100%', margin: '0 auto 40px auto' }}>
           <div className="bank-dashboard-header">
             <div>
@@ -1045,24 +1041,12 @@ export function AccountPage({
                 Combined view of all checking and savings accounts.
               </p>
             </div>
-            <label className="bank-emergency-control">
-              <span>Emergency fund minimum</span>
-              <div className="input-wrapper">
-                <span className="input-prefix" aria-hidden="true">$</span>
-                <input
-                  aria-label="Minimum threshold"
-                  aria-describedby={thresholdError ? 'minimum-threshold-error' : undefined}
-                  aria-invalid={Boolean(thresholdError)}
-                  inputMode="decimal"
-                  pattern="[0-9,]*[.]?[0-9]{0,2}"
-                  value={thresholdInput}
-                  onChange={(e) => updateThreshold(e.target.value)}
-                  onBlur={formatThresholdOnBlur}
-                  placeholder="0.00"
-                />
-              </div>
-              {thresholdError ? <span id="minimum-threshold-error" role="alert">{thresholdError}</span> : null}
-            </label>
+            <section className="bank-minimum-total" aria-labelledby="total-account-minimum-heading">
+              <h3 id="total-account-minimum-heading">Total Account Minimum</h3>
+              <strong>{currencyFormatter.format(threshold)}</strong>
+              <p>Combined minimums for your checking and savings accounts. Edit minimums in account settings.</p>
+              {!hasMinimum ? <p>No account minimums configured</p> : null}
+            </section>
           </div>
 
           {/* Square Cards Grid */}
@@ -1157,10 +1141,13 @@ export function AccountPage({
             <div className="passive-income-section-heading">
               <h3 id="aggregate-chart-heading">Bank Monthly Projections</h3>
               <span>
-                Bars are colored <span style={{ color: '#34d399', fontWeight: 'bold' }}>Green</span> when &gt;= threshold, and <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>Amber</span> when below.
+                {hasMinimum
+                  ? 'Green: meets Total Account Minimum. Amber: below Total Account Minimum. Combined coverage does not mean each account meets its minimum.'
+                  : 'No account minimums configured. Bars show projected balances without a minimum target.'}
               </span>
             </div>
-            <div className="passive-income-chart" role="img" aria-label={`Aggregate bank balance projection by month. Current month: ${currentProjectionMonth.name}`}>
+            <div className="passive-income-chart" role="img" aria-label={`Aggregate bank balance projection by month. Current month: ${currentProjectionMonth.name}`} aria-describedby="aggregate-minimum-description">
+              <span className="sr-only" id="aggregate-minimum-description">{hasMinimum ? `Total Account Minimum: ${currencyFormatter.format(threshold)}. ${monthlyAggregates.map((month) => `${month.name}: ${moneyCents(month.total) >= moneyCents(threshold) ? 'meets' : 'below'} Total Account Minimum`).join('. ')}. Combined coverage does not mean each account meets its minimum.` : 'No account minimums configured. No minimum target is applied.'}</span>
               <div className="passive-income-y-axis">
                 <span>{formatMoney(maxAggregateMonthTotal)}</span>
                 <span>{formatMoney(maxAggregateMonthTotal / 2)}</span>
@@ -1168,7 +1155,7 @@ export function AccountPage({
               </div>
               <div className="passive-income-bars" style={{ overflow: 'visible' }}>
                 {monthlyAggregates.map((month) => {
-                  const isAbove = month.total >= threshold;
+                  const isAbove = moneyCents(month.total) >= moneyCents(threshold);
                   
                   // Compute checking + savings account contributions for this month
                   const contributions = sortedAccounts.map((account) => {
@@ -1183,10 +1170,10 @@ export function AccountPage({
                   const greenShades = ['#059669', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0'];
                   const amberShades = ['#d97706', '#f59e0b', '#fbbf24', '#fcd34d', '#fde68a'];
 
-                  const trackBorderColor = isAbove
+                  const trackBorderColor = !hasMinimum ? 'var(--md-sys-color-outline-variant)' : isAbove
                     ? 'rgba(52, 211, 153, 0.42)'
                     : 'rgba(251, 191, 36, 0.42)';
-                  const trackBgColor = isAbove
+                  const trackBgColor = !hasMinimum ? 'transparent' : isAbove
                     ? 'rgba(52, 211, 153, 0.04)'
                     : 'rgba(251, 191, 36, 0.04)';
 
@@ -1200,7 +1187,7 @@ export function AccountPage({
                       aria-current={isCurrentMonth ? 'date' : undefined}
                       onMouseEnter={() => setHoveredMonth(month.name)}
                       onMouseLeave={() => setHoveredMonth(null)}
-                      style={{ display: 'grid', gridTemplateRows: 'minmax(150px, 1fr) 20px 20px', gap: '4px', textAlign: 'center', position: 'relative' }}
+                      style={{ display: 'grid', gridTemplateRows: hasMinimum ? 'minmax(150px, 1fr) 20px 20px 32px' : 'minmax(150px, 1fr) 20px 20px', gap: '4px', textAlign: 'center', position: 'relative' }}
                     >
                       {/* Hover Tooltip Breakdown */}
                       {isHovered && (
@@ -1254,7 +1241,7 @@ export function AccountPage({
                           const segmentHeight = maxAggregateMonthTotal > 0
                             ? (contrib.amount / maxAggregateMonthTotal) * 100
                             : 0;
-                          const segmentColor = isAbove
+                          const segmentColor = !hasMinimum ? 'var(--md-sys-color-on-surface-variant)' : isAbove
                             ? greenShades[idx % greenShades.length]
                             : amberShades[idx % amberShades.length];
 
@@ -1280,6 +1267,7 @@ export function AccountPage({
                       >
                         {month.name}
                       </span>
+                      {hasMinimum ? <small className="bank-minimum-month-status">{isAbove ? 'Meets minimum' : 'Below minimum'}</small> : null}
                     </div>
                   );
                 })}
@@ -1408,6 +1396,7 @@ export function AccountPage({
                       <button
                         className="link-button link-button-danger"
                         type="button"
+                        aria-label={`Delete ${acc.name}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           void deleteAccount(acc.id);
@@ -1428,9 +1417,20 @@ export function AccountPage({
       {/* POP-UP MODAL: ADD ACCOUNT */}
       {isModalOpen && (
         <div className="modal-overlay" onClick={closeAccountModal}>
-          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
-            <h2>{isEditingAccount ? 'Edit Account' : 'Add New Account'}</h2>
+          <div className="modal-container" role="dialog" aria-modal="true" aria-labelledby="account-modal-heading" aria-describedby={modalSaveError ? 'account-modal-error' : undefined} onClick={(e) => e.stopPropagation()} onKeyDown={(event) => {
+            if (event.key === 'Escape') { event.stopPropagation(); closeAccountModal(); }
+            if (event.key === 'Tab') {
+              event.stopPropagation();
+              const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('input:not(:disabled), select:not(:disabled), button:not(:disabled), [tabindex="0"]'));
+              const first = controls[0];
+              const last = controls[controls.length - 1];
+              if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+              if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+            }
+          }}>
+            <h2 id="account-modal-heading">{isEditingAccount ? 'Edit Account' : 'Add New Account'}</h2>
             <p>Configure starting details for a checking or savings account.</p>
+            {modalSaveError ? <p id="account-modal-error" role="alert">{modalSaveError}</p> : null}
             <div className="modal-form">
               <label className="field">
                 <span>Account Name</span>
@@ -1479,6 +1479,22 @@ export function AccountPage({
                   />
                 </div>
               </label>
+
+              <div className="field">
+                <label htmlFor="account-minimum-input">Account Minimum (optional)</label>
+                <div className="input-wrapper">
+                  <span className="input-prefix" aria-hidden="true">$</span>
+                  <input id="account-minimum-input" inputMode="decimal" data-has-prefix="true"
+                    value={modalDraft.minimumAmount ?? ''}
+                    onChange={(event) => setModalDraft({ ...modalDraft, minimumAmount: event.target.value })}
+                    aria-invalid={Boolean(modalMinimumError)}
+                    aria-describedby={`account-minimum-help${modalMinimumError ? ' account-minimum-error' : ''}`}
+                    placeholder="No minimum"
+                  />
+                </div>
+                <small id="account-minimum-help">The minimum amount you want to keep in this account. Leave blank for no minimum.</small>
+                {modalMinimumError ? <small id="account-minimum-error" role="alert">{modalMinimumError}</small> : null}
+              </div>
 
               {modalDraft.type === 'Savings' && (
                 <label className="field">
@@ -1567,7 +1583,7 @@ export function AccountPage({
             </div>
 
             <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={closeAccountModal}>
+              <button className="secondary-action" type="button" onClick={closeAccountModal} disabled={isSaving}>
                 Cancel
               </button>
               <button
@@ -1695,8 +1711,8 @@ export function AccountPage({
         </div>
       )}
 
-      {viewMode === 'account' && (
-        draftAccount ? (
+      {!isLoading && !loadError && viewMode === 'account' && (
+        draftAccount && draftAccount.id === selectedAccount?.id ? (
           <>
             {/* WORKSPACE DETAIL WORKSPACE WITH INLINE SPENDING COLUMN CONFIGURATOR */}
             <section className="budget-right" style={{ padding: '20px', width: '100%' }}>
@@ -1723,7 +1739,8 @@ export function AccountPage({
               </div>
 
               {/* Account totals keep the savings APY beside the related annual summary. */}
-              <div style={{ border: '1.5px solid var(--md-sys-color-outline-variant)', borderRadius: 'var(--md-sys-shape-corner-m)', padding: '16px', display: 'grid', gridTemplateColumns: `repeat(${draftAccount.type === 'Savings' ? 5 : 4}, minmax(0, 1fr))`, gap: '16px', marginBottom: '8px', backgroundColor: 'rgba(255, 255, 255, 0.015)' }}>
+              <div className="account-summary-grid">
+              <div className="account-year-summary">
                 {draftAccount.type === 'Savings' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Yield / APY</span>
@@ -1750,6 +1767,19 @@ export function AccountPage({
                   <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--md-sys-color-on-surface-variant)' }}>Total Savings (Year)</span>
                   <strong style={{ fontSize: '1.1rem', fontWeight: 800, color: '#38bdf8' }}>{formatMoney(summaryTotals.savingsSum)}</strong>
                 </div>
+              </div>
+              {(selectedAccount.minimumAmount ?? 0) > 0 ? (
+                <section className="account-minimum-card" aria-labelledby="account-minimum-heading" aria-live="polite">
+                  <h3 id="account-minimum-heading">Account Minimum</h3>
+                  <p>Current-month projected ending balance{isDirty ? ' · Unsaved preview' : ''}</p>
+                  <dl>
+                    <div><dt>Minimum Amount</dt><dd>{currencyFormatter.format(selectedAccount.minimumAmount!)}</dd></div>
+                    <div><dt>Current Amount <small>({currentMonthLabel})</small></dt><dd>{minimumCurrentAmount === undefined ? 'Unavailable' : currencyFormatter.format(minimumCurrentAmount)}</dd></div>
+                    <div><dt>% of Minimum</dt><dd>{minimumCurrentAmount === undefined ? 'Unavailable' : minimumPercentage(minimumCurrentAmount, selectedAccount.minimumAmount!)}</dd></div>
+                  </dl>
+                  {minimumCurrentAmount !== undefined ? <p>{moneyCents(minimumCurrentAmount) >= moneyCents(selectedAccount.minimumAmount!) ? 'Meets account minimum' : 'Below account minimum'}</p> : null}
+                </section>
+              ) : null}
               </div>
 
 

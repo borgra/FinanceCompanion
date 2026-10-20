@@ -418,7 +418,7 @@ def update_accounts_batch(request: AccountBatchRequest, user=Depends(require_ses
     if any(account_id not in existing_by_id for account_id in requested_ids):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found.")
     timestamp = now_iso()
-    changed = [to_account(item.id, item, existing_by_id[item.id].created_at, timestamp) for item in request.accounts]
+    changed = [to_account(item.id, item, existing_by_id[item.id].created_at, timestamp, existing_by_id[item.id]) for item in request.accounts]
     changed_by_id = {item.id: item for item in changed}
     proposed = [changed_by_id.get(item.id, item) for item in existing_accounts]
     owner_by_source_id: dict[str, str] = {}
@@ -440,6 +440,7 @@ def update_account(account_id: str, request: AccountUpsertRequest, user=Depends(
         payload=request,
         created_at=existing.created_at,
         updated_at=now_iso(),
+        existing=existing,
     )
     _ensure_income_sources_are_unassigned(account, container.list_accounts.execute(user.user_id), current_account_id=account_id)
     return to_account_payload(container.update_account.execute(user.user_id, account_id, account))

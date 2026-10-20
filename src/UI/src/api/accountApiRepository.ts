@@ -1,11 +1,13 @@
 import type { Account, AccountDraft } from '../domain/account';
 import type { AccountRepository } from '../domain/accountRepository';
+import { parseMinimumAmount } from '../domain/accountMinimum';
 import { HttpClient } from './httpClient';
 
 const draftToPayload = (draft: AccountDraft) => ({
   name: draft.name.trim(),
   type: draft.type,
   startingBalance: Number(draft.startingBalance) || 0,
+  ...(draft.minimumAmount !== undefined ? { minimumAmount: parseMinimumAmount(draft.minimumAmount) } : {}),
   startDate: draft.startDate,
   yieldRate: Number(draft.yieldRate) || 0,
   assignedIncomeSourceIds: draft.assignedIncomeSourceIds,

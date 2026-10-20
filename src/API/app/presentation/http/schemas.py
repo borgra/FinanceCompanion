@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, field_validator, model_validator
 from pydantic.alias_generators import to_camel
+
+from app.domain.models.account import normalize_minimum_amount
 
 
 class CamelModel(BaseModel):
@@ -135,6 +138,7 @@ class AccountPayload(CamelModel):
     name: str
     type: str
     starting_balance: float = Field(serialization_alias="startingBalance")
+    minimum_amount: float | None = Field(default=None, serialization_alias="minimumAmount")
     start_date: str = Field(serialization_alias="startDate")
     yield_rate: float = Field(serialization_alias="yieldRate")
     assigned_income_source_ids: list[str] = Field(default_factory=list, serialization_alias="assignedIncomeSourceIds")
@@ -160,6 +164,7 @@ class AccountUpsertRequest(CamelModel):
     name: str
     type: str
     starting_balance: float = Field(serialization_alias="startingBalance")
+    minimum_amount: Decimal | None = Field(default=None, serialization_alias="minimumAmount")
     start_date: str = Field(serialization_alias="startDate")
     yield_rate: float = Field(serialization_alias="yieldRate")
     assigned_income_source_ids: list[str] = Field(default_factory=list, serialization_alias="assignedIncomeSourceIds")
@@ -177,6 +182,11 @@ class AccountUpsertRequest(CamelModel):
     employer_name: str | None = Field(default=None, serialization_alias="employerName")
     columns: list[AccountColumnPayload] = Field(default_factory=list)
     monthly_records: list[MonthlyRecordPayload] = Field(default_factory=list, serialization_alias="monthlyRecords")
+
+    @field_validator("minimum_amount", mode="before")
+    @classmethod
+    def validate_minimum_amount(cls, value: object) -> Decimal | None:
+        return normalize_minimum_amount(value)
 
 
 class AccountBatchItemRequest(AccountUpsertRequest):

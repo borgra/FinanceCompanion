@@ -183,6 +183,7 @@ def _account_from_entity(entity: dict) -> Account:
         name=entity["name"],
         type=entity["type"],
         starting_balance=float(entity["startingBalance"]),
+        minimum_amount=entity.get("minimumAmount"),
         start_date=entity["startDate"],
         yield_rate=float(entity["yieldRate"]),
         assigned_income_source_ids=json.loads(entity.get("assignedIncomeSourceIdsJson", "[]")),
@@ -233,6 +234,7 @@ def _account_to_entity(user_id: str, account: Account) -> dict:
         "name": account.name,
         "type": account.type,
         "startingBalance": account.starting_balance,
+        "minimumAmount": str(account.minimum_amount) if account.minimum_amount is not None else None,
         "startDate": account.start_date,
         "yieldRate": account.yield_rate,
         "assignedIncomeSourceIdsJson": json.dumps(account.assigned_income_source_ids),
@@ -803,7 +805,8 @@ class CosmosAccountRepository:
             raise NotFoundError("Account not found.") from exc
 
         entity = _account_to_entity(user_id, account)
-        self._client.upsert_entity(entity)
+        # Table merge ignores null properties; replacement is required to clear a minimum.
+        self._client.upsert_entity(entity, mode=UpdateMode.REPLACE)
         return deepcopy(account)
 
     def update_batch_for_user(self, user_id: str, accounts: list[Account]) -> list[Account]:
@@ -814,7 +817,7 @@ class CosmosAccountRepository:
             raise NotFoundError("Account not found.")
         if accounts:
             self._client.submit_transaction([
-                ("upsert", _account_to_entity(user_id, account))
+                ("upsert", _account_to_entity(user_id, account), {"mode": UpdateMode.REPLACE})
                 for account in accounts
             ])
         return deepcopy(accounts)

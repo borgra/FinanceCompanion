@@ -24,6 +24,7 @@ export type Account = {
   name: string;
   type: AccountType;
   startingBalance: number;
+  minimumAmount?: number | null;
   startDate: string; // YYYY-MM-DD
   yieldRate: number; // APY percentage
   assignedIncomeSourceIds: string[];
@@ -49,6 +50,7 @@ export type AccountDraft = {
   name: string;
   type: AccountType;
   startingBalance: string;
+  minimumAmount?: string;
   startDate: string;
   yieldRate: string;
   assignedIncomeSourceIds: string[];
@@ -97,6 +99,7 @@ export const emptyAccountDraft = (): AccountDraft => ({
   name: '',
   type: 'Checking',
   startingBalance: '',
+  minimumAmount: '',
   startDate: '2026-01-01',
   yieldRate: '',
   assignedIncomeSourceIds: [],
@@ -120,6 +123,7 @@ export const toAccountDraft = (account: Account): AccountDraft => ({
   name: account.name,
   type: account.type,
   startingBalance: String(account.startingBalance),
+  minimumAmount: account.minimumAmount ? String(account.minimumAmount) : '',
   startDate: account.startDate ?? '2026-01-01',
   yieldRate: account.yieldRate !== undefined ? String(account.yieldRate) : '',
   assignedIncomeSourceIds: [...(account.assignedIncomeSourceIds || [])],
