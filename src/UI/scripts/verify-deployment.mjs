@@ -90,9 +90,9 @@ export async function verifyWithRetry(rawOrigin, options = {}) {
   const maxDelayMs = positiveInteger(options.maxDelayMs, defaultRetryOptions.maxDelayMs);
   const clock = options.now ?? Date.now;
   const wait = options.sleep ?? sleep;
-  const monotonicNow = () => globalThis.performance?.now?.() ?? Date.now();
+  const monotonicNow = options.monotonicNow ?? (() => globalThis.performance?.now?.() ?? Date.now());
   const startedAt = monotonicNow();
-  let scheduledWaitMs = 0;
+  let accountedElapsedMs = 0;
   let attempt = 0;
   let delayMs = initialDelayMs;
 
@@ -109,7 +109,7 @@ export async function verifyWithRetry(rawOrigin, options = {}) {
     } catch (error) {
       if (!(error instanceof AssetNotFoundError)) throw error;
       const message = error instanceof Error ? error.message : String(error);
-      const elapsedMs = Math.max(scheduledWaitMs, monotonicNow() - startedAt);
+      const elapsedMs = Math.max(accountedElapsedMs, monotonicNow() - startedAt);
       const remainingMs = timeoutMs - elapsedMs;
       if (remainingMs <= 0) {
         throw new Error('Deployment verification failed after ' + attempt + ' attempt(s) over ' + timeoutMs + 'ms: ' + message, { cause: error });
@@ -117,7 +117,10 @@ export async function verifyWithRetry(rawOrigin, options = {}) {
       const waitMs = Math.min(delayMs, remainingMs);
       console.warn('Deployment verification attempt ' + attempt + ' failed: ' + message + '. Retrying in ' + waitMs + 'ms.');
       await wait(waitMs);
-      scheduledWaitMs += waitMs;
+      // Include verification time already observed before this delay, even if
+      // the injected sleep/clock does not advance. A shortened final delay must
+      // consume the remaining budget instead of scheduling it repeatedly.
+      accountedElapsedMs = elapsedMs + waitMs;
       delayMs = Math.min(delayMs * 2, maxDelayMs);
     }
   }
