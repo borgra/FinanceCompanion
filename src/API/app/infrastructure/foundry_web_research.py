@@ -31,7 +31,7 @@ from app.infrastructure.alpha_vantage_security_search import SecuritySearchUnava
 
 MAX_SOURCE_BYTES = 500_000
 
-PROMPT_VERSION = "cited-web-distributions-v4"
+PROMPT_VERSION = "cited-web-distributions-v5"
 SUPPORTED_EXCHANGES = {"NASDAQ", "NYSE", "NYSE ARCA", "AMEX", "NYSE AMERICAN", "BATS", "CBOE"}
 UNKNOWN_EXCHANGES = {"", "UNKNOWN", "US", "USA", "UNITED STATES"}
 ALIASES = {"XNAS": "NASDAQ", "XNYS": "NYSE", "NYSEARCA": "NYSE ARCA", "ARCX": "NYSE ARCA", "NYSE MKT": "NYSE AMERICAN", "NASDAQ GLOBAL SELECT": "NASDAQ"}
@@ -434,6 +434,35 @@ class FoundryWebDividendResearchProvider:
                 return source
         return None
 
+    def _has_distribution_rows(self, evidence: dict, request: DividendResearchRequest) -> bool:
+        """Decide whether discovery needs another source, not whether to import.
+
+        Identity pages, yields and date-only calendars are not distribution
+        history. The extraction and validation passes still check every field.
+        """
+        for line in evidence['answer'].splitlines():
+            text = _field_text(line)
+            if (re.search(r"\b(?:ticker|symbol)\s*[:=]\s*" + re.escape(request.symbol) + r"(?![\w.-])", text, re.I)
+                    and re.search(r"\bex[- ](?:dividend[- ]?)?(?:date)?\s*[:=]?\s*\d{4}-\d{2}-\d{2}\b", text, re.I)
+                    and re.search(r"\bUSD\s*\$?\s*\d+(?:\.\d+)?\b", text)
+                    and any(self._supported_claim(evidence, line, citation['url']) for citation in evidence['citations'])):
+                return True
+        return False
+
+    @staticmethod
+    def _merge_evidence(original: dict, supplemental: dict) -> dict:
+        offset = len(original['answer']) + 1
+        answer = original['answer'] + '\n' + supplemental['answer']
+        if len(answer) > 100000:
+            raise DividendResearchProviderError("Combined web research exceeded its size limit.")
+        return {**original, 'answer': answer,
+            'citations': [*original['citations'], *[{**citation,
+                'start_index': citation['start_index'] + offset,
+                'end_index': citation['end_index'] + offset} for citation in supplemental['citations']]],
+            'sources': list({source['url']: source for source in [*original['sources'], *supplemental['sources']]}.values()),
+            'searches': [*original['searches'], *supplemental['searches']],
+            'response_ids': [value for value in (original.get('response_id'), supplemental.get('response_id')) if value]}
+
     def research(self, request: DividendResearchRequest) -> DividendResearchResult:
         timestamp = datetime.now(UTC).isoformat().replace("+00:00", "Z")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-]{0,23}", request.symbol.strip()):
@@ -443,10 +472,30 @@ class FoundryWebDividendResearchProvider:
             return DividendResearchResult(request.schema_version, request.symbol, timestamp, "raw", [], [], ["AI web research currently supports US-listed USD stocks and ETFs."], DividendResearchProvenance("azure_foundry", None, False), exchange=request.exchange, status="unsupported")
         deadline = time.monotonic() + 90
         research_task = "Find distribution history and split/reverse-split actions for this exact security. Resolve and cite identity, full fund/company name, listed exchange, USD currency and ETF/Stock asset type first. Do not mix other listings with the same ticker. Prioritize complete trailing 24 calendar months of actual distributions and any declared future distributions; include older observations up to the input start where available. Search and open exchange dividend-history pages (for example https://www.nasdaq.com/market-activity/etf/<symbol>/dividend-history or https://www.nasdaq.com/market-activity/stocks/<symbol>/dividend-history) and complete unrounded dividend tables rather than date-only PDF calendars or JS-only product pages. Check for months with two ex-dividend dates (such as ETFs with both an early-December and a year-end December 31 ex-dividend date paid in January) and report every distinct ex-dividend date with its exact unrounded per-share amount. Each payment claim line must explicitly label Ticker, Exchange, Ex-date, Amount with currency, payment/declaration/record dates if known, paid/completed versus announced, regular versus special only when supported, type only when supported, and share basis if known. Each split claim needs ticker/exchange, effective date and explicit new-for-old ratio, including whether reverse. Cite EACH fact line. State source gaps; do not invent missing months or dates."
-        evidence = self._search(json.dumps({
+        symbol = request.symbol.lower()
+        is_etf = request.asset_type.lower() == 'etf'
+        history_pages = [
+            f"https://www.nasdaq.com/market-activity/{'etf' if is_etf else 'stocks'}/{symbol}/dividend-history",
+            f"https://stockanalysis.com/{'etf' if is_etf else 'stocks'}/{symbol}/dividend/",
+        ]
+        research_task += " If an issuer profile (including investor.vanguard.com ETF profiles) renders no distribution table, use it only for identity and immediately switch to an accessible history table. A dividend yield, date-only schedule, or estimated year-end distribution is not a paid per-share history. Try the supplied history_pages and other reputable tables; these are discovery hints, not evidence until searched, opened and cited."
+        prompt = json.dumps({
             "symbol": request.symbol, "exchange": request.exchange, "currency": request.currency,
             "input_start": request.retrieval_start.isoformat(), "history_start": request.history_start.isoformat(),
-            "as_of": request.retrieval_end.isoformat(), "declared_through": request.forecast_end.isoformat()}), deadline, task=research_task)
+            "as_of": request.retrieval_end.isoformat(), "declared_through": request.forecast_end.isoformat(),
+            "history_pages": history_pages})
+        evidence = self._search(prompt, deadline, task=research_task)
+        search_warnings = []
+        # One optional discovery retry, leaving at least 30 seconds for extraction
+        # inside the original budget. Never retry merely because identity came
+        # from an issuer profile: its actual distribution rows may be elsewhere.
+        if not self._has_distribution_rows(evidence, request) and deadline - time.monotonic() >= 45:
+            try:
+                supplemental = self._search(prompt, min(deadline - 30, time.monotonic() + 25),
+                    task=research_task + " The first search found no usable cited distribution rows. Search alternative dividend-history tables now; do not revisit empty issuer profiles or date-only calendars. Report exact historical amounts with ex-dates and payment status; never substitute estimates or another listing. Include corporate actions if found.")
+                evidence = self._merge_evidence(evidence, supplemental)
+            except DividendResearchProviderError:
+                search_warnings.append("Alternative distribution-history research did not complete; coverage may be incomplete.")
         extracted = self._extract(evidence, WebResearch, deadline)
         identity = self._identity_from_evidence(evidence, request) or extracted.identity
         identity = identity.model_copy(update={"source_url": self._cited_source_url(evidence, identity.evidence_excerpt, identity.source_url) or identity.source_url})
@@ -463,6 +512,7 @@ class FoundryWebDividendResearchProvider:
             resolved = exchange
         evidence['identityVerification'] = {'method': 'cited_identity' if full_identity else 'cited_distribution_listing', 'symbol': request.symbol, 'exchange': resolved, 'source_url': identity_source}
         warnings = ["AI web research imports cited model-extracted claims, not independently verified publisher quotations. Coverage may be incomplete; review the saved research and linked sources."]
+        warnings.extend(search_warnings)
         # Retain model coverage warnings as bounded plain text, never instructions.
         warnings.extend(warning[:1000] for warning in extracted.warnings)
         payments, actions, facts = [], [], []
@@ -476,6 +526,13 @@ class FoundryWebDividendResearchProvider:
             supported = supported and _exchange_in_excerpt(resolved, field_text)
             ref = "sha256:" + hashlib.sha256((fact.source_url + "\n" + excerpt).encode()).hexdigest()
             if isinstance(fact, WebAction):
+                if (supported and _date_role_in_excerpt(fact.effective_date, "effective", excerpt)
+                        and (fact.effective_date < request.retrieval_start.isoformat() or fact.effective_date > request.forecast_end.isoformat())):
+                    # An evidenced action outside the entire input/forecast
+                    # window cannot adjust any payment in this request. Do not
+                    # quarantine current amounts for an old split (e.g. VOO 2013).
+                    warnings.append("Corporate actions outside the requested research window were ignored.")
+                    continue
                 supported = supported and _date_role_in_excerpt(fact.effective_date, "effective", excerpt) and _split_ratio_in_excerpt(fact) and "split" in excerpt.lower()
                 if supported:
                     candidate = DividendResearchAction(**fact.model_dump(exclude={"evidence_excerpt"}), evidence_ref=ref)
@@ -486,6 +543,7 @@ class FoundryWebDividendResearchProvider:
                         supported = False
             else:
                 basis = fact.share_basis
+                distribution_type = fact.distribution_type
                 dates = [(fact.ex_dividend_date, "ex"), (fact.payment_date, "payment"), (fact.declaration_date, "declaration"), (fact.record_date, "record")]
                 supported = supported and all(_date_role_in_excerpt(value, role, excerpt) for value, role in dates if value)
                 supported = supported and _amount_in_excerpt(fact.amount_per_share, fact.currency, excerpt) and fact.currency == request.currency
@@ -495,7 +553,10 @@ class FoundryWebDividendResearchProvider:
                 type_words = {"income": r"\b(income|dividend)\b", "capital_gain": r"\bcapital gain\b", "return_of_capital": r"\breturn of capital\b", "other": r"\b(distribution|dividend|other|type\s*:\s*(?:not (?:identified|stated|specified|found)|unknown|unclassified))\b"}
                 # Other is the unclassified fallback, not a claimed tax type.
                 # Labeled ex-date/amount/payment evidence is enough for it.
-                supported = supported and (fact.distribution_type == "other" or bool(re.search(type_words[fact.distribution_type], excerpt, re.I)))
+                if fact.distribution_type != "other" and not re.search(type_words[fact.distribution_type], excerpt, re.I):
+                    # Tax classification is optional. An extraction guess must
+                    # not discard an otherwise cited amount/date/payment claim.
+                    distribution_type = "other"
                 if fact.is_regular is True:
                     supported = supported and bool(re.search(r"\b(regular|monthly|quarterly|semiannual|annual)\s+(income\s+)?(distribution|dividend)\b|\b(?:frequency|cadence|regularity|classification)(?:/type)?\s*:\s*(?:regular\b|monthly\b|quarterly\b|semiannual\b|annual\b)", field_text, re.I)) and not bool(re.search(r"\bspecial\b", field_text, re.I))
                 if fact.is_regular is False:
@@ -513,6 +574,7 @@ class FoundryWebDividendResearchProvider:
                 if supported:
                     values = fact.model_dump(exclude={"evidence_excerpt", "is_regular"})
                     values["share_basis"] = basis
+                    values["distribution_type"] = distribution_type
                     if basis == "unverified" and not rejected_action and not any((fact.ex_dividend_date < action.effective_date <= request.retrieval_end.isoformat()) or (request.retrieval_end.isoformat() < action.effective_date <= fact.ex_dividend_date) for action in actions):
                         values["share_basis"] = "current_share_basis"
                     candidate = DividendResearchPayment(**values, is_regular=fact.is_regular is True, evidence_ref=ref, source_authority=_source_authority(fact.source_url),
@@ -520,6 +582,8 @@ class FoundryWebDividendResearchProvider:
                     try:
                         validate_dividend_research_result(DividendResearchResult(request.schema_version, request.symbol, timestamp, "raw", [candidate], [], [], DividendResearchProvenance("azure_foundry", identity_source, False), exchange=request.exchange), request)
                         payments.append(candidate)
+                        if distribution_type != fact.distribution_type:
+                            warnings.append("Unsupported distribution tax classification was retained as Other; amounts and dates remain as cited.")
                     except DividendResearchValidationError:
                         supported = False
             if supported:

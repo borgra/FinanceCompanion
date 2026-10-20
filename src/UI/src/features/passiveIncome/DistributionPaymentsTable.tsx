@@ -1,10 +1,11 @@
+import { FinanceTable } from '../../components/FinanceTable';
 import type { DividendPayment } from './dividendSchedule';
 
 const statusLabels = { actual: 'Actual', announced: 'Announced', projected: 'Projected' };
 const typeLabels: Record<string, string> = { income: 'Income', capital_gain: 'Capital gain', return_of_capital: 'Return of capital', other: 'Other' };
 
 export function DistributionPaymentsTable({ payments, month }: { payments: DividendPayment[]; month: string }) {
-  return <div className="distribution-table-scroll"><table className="distribution-payments-table">
+  return <FinanceTable variant="plain" wrapperClassName="distribution-table-scroll" className="distribution-payments-table">
     <caption>{month} distribution details</caption>
     <thead><tr><th scope="col">Ex-date</th><th scope="col">Holding / distribution</th><th scope="col">Per share</th><th scope="col">Shares</th><th scope="col">Holding income</th></tr></thead>
     <tbody>{payments.map((payment) => {
@@ -25,5 +26,5 @@ export function DistributionPaymentsTable({ payments, month }: { payments: Divid
         <td>{income}</td>
       </tr>;
     })}</tbody>
-  </table></div>;
+  </FinanceTable>;
 }

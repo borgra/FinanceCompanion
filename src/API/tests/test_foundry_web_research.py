@@ -108,6 +108,284 @@ def test_compressed_azure_responses_are_not_decompressed_twice():
     assert len(instance.research(request()).payments) == 9
 
 
+def voo_research():
+    """Quarterly rows from the 2026-10-20 live VOO research reproduction."""
+    identity = dict(symbol="VOO", exchange="NYSE Arca", name="Vanguard S&P 500 ETF",
+        asset_type="ETF", currency="USD", source_url=SOURCE,
+        evidence_excerpt="Ticker: VOO; Exchange: NYSE Arca; Name: Vanguard S&P 500 ETF; Asset type: ETF; Currency: USD.")
+    rows = [
+        ("2024-12-23", "2024-12-26", "1.7385"),
+        ("2025-03-27", "2025-03-31", "1.8121"),
+        ("2025-06-30", "2025-07-02", "1.7447"),
+        ("2025-09-29", "2025-10-01", "1.740"),
+        ("2025-12-22", "2025-12-24", "1.771"),
+        ("2026-03-27", "2026-03-31", "1.8724"),
+        ("2026-06-26", "2026-06-30", "1.9622"),
+        ("2026-09-28", "2026-09-30", "1.8226"),
+    ]
+    payments = [dict(ex_dividend_date=ex_date, amount_per_share=amount, currency="USD",
+        status="completed", distribution_type="other", is_regular=None, share_basis="unverified",
+        payment_date=pay_date, declaration_date=None, record_date=ex_date, source_url=SOURCE,
+        evidence_excerpt=f"Ticker: VOO; Exchange: NYSE Arca; Ex-date: {ex_date}; Amount: USD {amount} per share; Record date: {ex_date}; Payment date: {pay_date}; Status: paid/completed; Classification/type: not specified in the cited history; Share basis: not specified.")
+        for ex_date, pay_date, amount in rows]
+    return dict(identity=identity, payments=payments, corporate_actions=[], warnings=[])
+
+
+@pytest.mark.parametrize("exchange", ["NYSE ARCA", "NYSE Arca", "ARCX", "United States"])
+def test_voo_quarterly_history_imports_with_exact_amounts_and_forecasts(exchange):
+    req = DividendResearchRequest("VOO", exchange, "USD", date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    result = provider(voo_research()).research(req)
+    assert result.resolved_exchange == "NYSE ARCA"
+    assert len(result.payments) == 8
+    assert result.payments[-1].amount_per_share == "1.8226"
+    assert all(item.regularity_basis == "inferred_cadence_v1" for item in result.payments)
+    assert all(item.distribution_type == "other" for item in result.payments)
+    events, _ = normalize_research(result, req)
+    forecasts, _ = forecast_distributions(events, req)
+    assert all(not item.excluded_from_totals for item in events)
+    assert len(forecasts) == 5
+    assert len([item for item in forecasts if item.ex_dividend_date.startswith("2027")]) == 4
+
+
+def test_voo_cannot_import_a_different_listing_or_similarly_named_fund():
+    for symbol, exchange in [("VOO", "NYSE"), ("VOOG", "NYSE ARCA")]:
+        req = DividendResearchRequest(symbol, exchange, "USD", date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+        with pytest.raises(DividendResearchValidationError, match="ticker and exchange"):
+            provider(voo_research()).research(req)
+
+
+def test_voo_refresh_persists_quarterly_income_and_preserves_it_on_failure(monkeypatch, tmp_path):
+    from app.infrastructure import foundry_web_research as module
+    instance = provider(voo_research())
+    monkeypatch.setattr(module, "FoundryWebDividendResearchProvider", lambda **options: instance)
+    settings = Settings(_env_file=None, data_backend="json", local_json_path=str(tmp_path / "voo.json"),
+        disable_auth_for_local_development=True, dividend_research_provider="azure_foundry",
+        azure_foundry_endpoint=PROJECT, azure_foundry_deployment="web-model")
+    app = create_app(settings)
+    app.state.container.refresh_holding_dividends._today = lambda: date(2026, 10, 20)
+    app.state.container.refresh_holding_dividends._freshness_seconds = 0
+    with TestClient(app) as client:
+        account = next(item for item in client.get("/api/v1/accounts").json() if item.get("manageHoldings"))
+        added = client.post("/api/v1/holdings", json={"security": {
+            "symbol": "VOO", "exchange": "NYSE ARCA", "name": "Vanguard S&P 500 ETF",
+            "assetType": "ETF", "currency": "USD"},
+            "accountPositions": [{"accountId": account["id"], "quantity": 10}]})
+        assert added.status_code == 201, added.text
+        holding_id = added.json()["id"]
+        url = f"/api/v1/holdings/{holding_id}/dividends/refresh"
+        refreshed = client.post(url)
+        assert refreshed.status_code == 200, refreshed.text
+        saved = refreshed.json()["security"]
+        actuals = [item for item in saved["payoutDetails"] if item["status"] == "completed"]
+        assert len(actuals) == 8
+        assert len([item for item in actuals if item["exDividendDate"].startswith("2026")]) == 3
+        assert next(item for item in actuals if item["exDividendDate"] == "2025-09-29")["paymentDate"] == "2025-10-01"
+        assert actuals[-1]["amountPerShare"] == "1.8226"
+        assert len([item for item in saved["payoutDetails"] if item["status"] == "projected"]) == 5
+        assert saved["dividendResearchStatus"] == "partial"
+        assert saved["dividendResearchSnapshot"]["evidence"]["citations"]
+        instance._client = httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(403)))
+        assert client.post(url).status_code == 503
+        assert next(item["security"] for item in client.get("/api/v1/holdings").json() if item["id"] == holding_id) == saved
+    with TestClient(create_app(settings)) as client:
+        restored = next(item["security"] for item in client.get("/api/v1/holdings").json() if item["id"] == holding_id)
+        assert restored["payoutDetails"] == saved["payoutDetails"]
+        assert restored["dividendResearchSnapshotId"] == saved["dividendResearchSnapshotId"]
+
+
+def vym_research():
+    """Quarterly rows from the live VYM reproduction, with optional fields absent."""
+    data = voo_research()
+    data['identity'].update(symbol='VYM', name='Vanguard High Dividend Yield ETF',
+        evidence_excerpt='Ticker: VYM; Exchange: NYSE Arca; Name: Vanguard High Dividend Yield ETF; Asset type: ETF; Currency: USD.')
+    rows = [
+        ('2024-12-20', '2024-12-24', '0.9642'), ('2025-03-21', '2025-03-25', '0.85'),
+        ('2025-06-20', '2025-06-24', '0.8617'), ('2025-09-19', '2025-09-23', '0.8417'),
+        ('2025-12-19', '2025-12-23', '0.9474'), ('2026-03-20', '2026-03-24', '0.8617'),
+        ('2026-06-18', '2026-06-23', '0.9795'), ('2026-09-18', '2026-09-22', '0.8869'),
+    ]
+    data['payments'] = [{**data['payments'][0], 'ex_dividend_date': ex_date, 'amount_per_share': amount,
+        'payment_date': pay_date, 'record_date': None, 'is_regular': True,
+        'evidence_excerpt': f'Ticker: VYM; Exchange: NYSE Arca; Ex-date: {ex_date}; Amount: USD {amount} per share; Payment date: {pay_date}; Status: paid/completed; Classification: regular; Share basis: not found.'}
+        for ex_date, pay_date, amount in rows]
+    return data
+
+
+def fallback_provider(initial, supplemental, extracted, calls, *, fail_fallback=False):
+    instance = provider()
+    def handle(req):
+        body = json.loads(req.content)
+        calls.append(body)
+        if 'tools' in body:
+            number = sum('tools' in call for call in calls)
+            assert number <= 2, 'Discovery must not retry indefinitely'
+            if number == 2 and fail_fallback:
+                raise httpx.ReadTimeout('private-timeout-message')
+            response = grounded(initial if number == 1 else supplemental)
+            response['id'] = f'research-{number}'
+            return httpx.Response(200, json=response)
+        return httpx.Response(200, json={'status': 'completed', 'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': json.dumps(extracted)}]}]})
+    instance._client = httpx.Client(transport=httpx.MockTransport(handle))
+    return instance
+
+
+@pytest.mark.parametrize('data_factory', [voo_research, vym_research])
+def test_empty_vanguard_profile_uses_cited_alternative_history_before_extracting(data_factory):
+    data = data_factory()
+    symbol = data['identity']['symbol']
+    initial = deepcopy(data)
+    initial['payments'] = []
+    # Corporate-action evidence discovered on the first search must survive.
+    split = dict(effective_date='2026-05-15', type='stock_split', old_shares=1.0, new_shares=2.0,
+        source_url=SOURCE, evidence_excerpt=f'Ticker: {symbol}; Exchange: NYSE Arca; Effective date: 2026-05-15; 2-for-1 forward stock split; not reverse.')
+    initial['corporate_actions'] = [split]
+    extracted = deepcopy(data)
+    extracted['corporate_actions'] = [split]
+    calls = []
+    req = DividendResearchRequest(symbol, 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    instance = fallback_provider(initial, data, extracted, calls)
+    result = instance.research(req)
+    assert len(calls) == 3 and 'tools' in calls[0] and 'tools' in calls[1] and 'text' in calls[2]
+    prompt = json.loads(calls[0]['input'][1]['content'][0]['text'])
+    assert prompt['history_pages'] == [
+        f'https://www.nasdaq.com/market-activity/etf/{symbol.lower()}/dividend-history',
+        f'https://stockanalysis.com/etf/{symbol.lower()}/dividend/',
+    ]
+    assert 'do not revisit empty issuer profiles' in calls[1]['input'][0]['content'][0]['text']
+    assert len(result.payments) == 8 and len(result.corporate_actions) == 1
+    evidence = result.evidence_snapshot
+    assert evidence['response_ids'] == ['research-1', 'research-2']
+    assert len(evidence['searches']) == 2
+    assert split['evidence_excerpt'] in evidence['answer']
+    for fact in evidence['facts']:
+        assert instance._supported_claim(evidence, fact['excerpt'], fact['source_url'])
+    for citation in evidence['citations']:
+        assert evidence['answer'][citation['start_index']:citation['end_index']]
+
+
+@pytest.mark.parametrize('data_factory', [voo_research, vym_research])
+def test_readable_quarterly_history_needs_only_one_search(data_factory):
+    data = data_factory()
+    calls = []
+    req = DividendResearchRequest(data['identity']['symbol'], 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    result = provider(data, calls=calls).research(req)
+    events, _ = normalize_research(result, req)
+    assert len(result.payments) == 8 and len(calls) == 2
+    assert len(forecast_distributions(events, req)[0]) == 5
+
+
+@pytest.mark.parametrize('claimed_type', ['income', 'capital_gain', 'return_of_capital'])
+@pytest.mark.parametrize('data_factory', [voo_research, vym_research])
+def test_unsourced_tax_classification_does_not_discard_cited_vanguard_payments(data_factory, claimed_type):
+    data = data_factory()
+    def classify(extracted):
+        for item in extracted['payments']:
+            item['distribution_type'] = claimed_type
+    req = DividendResearchRequest(data['identity']['symbol'], 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    result = provider(data, change_extracted=classify).research(req)
+    assert len(result.payments) == len(data['payments'])
+    assert all(item.distribution_type == 'other' for item in result.payments)
+    assert {item.amount_per_share for item in result.payments} == {item['amount_per_share'] for item in data['payments']}
+    assert any('classification' in warning and 'Other' in warning for warning in result.warnings)
+    events, _ = normalize_research(result, req)
+    assert len(forecast_distributions(events, req)[0]) == 5
+
+
+@pytest.mark.parametrize('effective_date', ['2013-10-24', '2028-01-01'])
+def test_out_of_window_split_does_not_quarantine_current_voo_distributions(effective_date):
+    data = voo_research()
+    for item in data['payments']:
+        item['distribution_type'] = 'income'
+    data['corporate_actions'] = [dict(effective_date=effective_date, type='reverse_stock_split',
+        old_shares=2.0, new_shares=1.0, source_url=SOURCE,
+        evidence_excerpt=f'Ticker: VOO; Exchange: NYSE Arca; Split effective date: {effective_date}; Ratio: 1 new share for 2 old shares; Type: reverse split.')]
+    req = DividendResearchRequest('VOO', 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    result = provider(data).research(req)
+    assert len(result.payments) == 8 and not result.corporate_actions
+    assert all(item.distribution_type == 'other' for item in result.payments)
+    assert all(item.share_basis == 'current_share_basis' for item in result.payments)
+    events, _ = normalize_research(result, req)
+    assert all(not item.excluded_from_totals for item in events)
+    assert len(forecast_distributions(events, req)[0]) == 5
+
+
+def test_uncited_or_misdated_old_split_cannot_bypass_split_uncertainty():
+    data = voo_research()
+    data['corporate_actions'] = [dict(effective_date='2013-10-24', type='reverse_stock_split',
+        old_shares=2.0, new_shares=1.0, source_url=SOURCE,
+        evidence_excerpt='Ticker: VOO; Exchange: NYSE Arca; Split effective date: 2026-05-15; Ratio: 1 new share for 2 old shares; Type: reverse split.')]
+    req = DividendResearchRequest('VOO', 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    result = provider(data).research(req)
+    assert all(item.share_basis == 'unverified' for item in result.payments)
+
+
+@pytest.mark.parametrize('line', [
+    'Ticker: VYM; Exchange: NYSE Arca; Ex-date: 2026-09-18; Amount: not announced; Yield: 2.5%.',
+    'Ticker: VYM; Exchange: NYSE Arca; Ex-date: 2026-09-18; Currency: USD; Payment date: 2026-09-22.',
+    'Ticker: VOO; Exchange: NYSE Arca; Ex-date: 2026-09-18; Amount: USD 0.8869.',
+])
+def test_yield_date_calendar_and_other_ticker_do_not_count_as_history(line):
+    instance = provider()
+    req = DividendResearchRequest('VYM', 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    evidence = instance._parse_search(grounded(vym_research()))
+    evidence['answer'] = line
+    evidence['citations'] = [{'url': SOURCE, 'start_index': 0, 'end_index': len(line)}]
+    assert not instance._has_distribution_rows(evidence, req)
+
+
+def test_uncited_history_does_not_suppress_fallback_or_become_importable():
+    data = vym_research()
+    instance = provider()
+    req = DividendResearchRequest('VYM', 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    evidence = instance._parse_search(grounded(data))
+    evidence['citations'] = evidence['citations'][:1]
+    assert not instance._has_distribution_rows(evidence, req)
+    assert not instance._supported_claim(evidence, data['payments'][0]['evidence_excerpt'], SOURCE)
+
+
+@pytest.mark.parametrize('fail_fallback', [False, True])
+def test_empty_or_failed_fallback_remains_unavailable_without_invented_payments(fail_fallback):
+    data = vym_research()
+    data['payments'] = []
+    calls = []
+    req = DividendResearchRequest('VYM', 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    result = fallback_provider(data, data, data, calls, fail_fallback=fail_fallback).research(req)
+    assert result.status == 'unavailable' and not result.payments
+    assert len(calls) == 3
+    assert ('Alternative distribution-history research did not complete' in ' '.join(result.warnings)) == fail_fallback
+    assert 'private-timeout-message' not in json.dumps(result.evidence_snapshot)
+
+
+def test_fallback_reserves_extraction_time_inside_original_deadline(monkeypatch):
+    from app.infrastructure import foundry_web_research as module
+    instance = provider()
+    data = vym_research()
+    data['payments'] = []
+    evidence = instance._parse_search(grounded(data))
+    deadlines = []
+    clock = [100.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+    def search(prompt, deadline, **kwargs):
+        deadlines.append(deadline)
+        clock[0] += 20
+        return deepcopy(evidence)
+    def extract(evidence, schema, deadline):
+        deadlines.append(deadline)
+        return schema.model_validate(data)
+    instance._search, instance._extract = search, extract
+    req = DividendResearchRequest('VYM', 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2)
+    assert instance.research(req).status == 'unavailable'
+    assert deadlines == [190, 145, 190]
+
+
+def test_stock_discovery_hints_use_stock_history_paths():
+    calls = []
+    req = DividendResearchRequest('JEPQ', 'NASDAQ', 'USD', date(2021, 9, 4), date(2026, 9, 4), schema_version=2, asset_type='Stock')
+    provider(calls=calls).research(req)
+    prompt = json.loads(calls[0]['input'][1]['content'][0]['text'])
+    assert all('/stocks/jepq/' in url for url in prompt['history_pages'])
+
+
 def test_labeled_history_rows_with_unknown_tax_type_remain_other():
     data = research()
     for item in data["payments"]:

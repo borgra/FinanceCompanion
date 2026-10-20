@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type KeyboardEvent } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { FinanceTable } from './FinanceTable';
+import { FinanceMoneyCellInput, FinanceTable } from './FinanceTable';
 
 function TableFixture() {
   return (
@@ -25,24 +25,83 @@ function TableFixture() {
 }
 
 describe('FinanceTable', () => {
-  it('uses exactly one Tab stop per visible body cell', async () => {
+  it('uses one Tab stop per visible body cell and enters inputs directly with full selection on 1 press', async () => {
     const user = userEvent.setup();
     render(<TableFixture />);
     const opening = screen.getByText('Opening balance').closest('td')!;
-    const amountCell = screen.getByRole('textbox', { name: 'Opening amount' }).closest('td')!;
+    const amountInput = screen.getByRole('textbox', { name: 'Opening amount' }) as HTMLInputElement;
     const closing = screen.getByText('Closing balance').closest('td')!;
     const final = screen.getByText('Final cell').closest('td')!;
 
     opening.focus();
     await user.keyboard('{Tab}');
-    expect(amountCell).toHaveFocus();
+    expect(amountInput).toHaveFocus();
+    expect(amountInput).toHaveSelection('123.45');
     await user.keyboard('{Tab}');
     expect(closing).toHaveFocus();
     await user.keyboard('{Shift>}{Tab}{/Shift}');
-    expect(amountCell).toHaveFocus();
+    expect(amountInput).toHaveFocus();
+    expect(amountInput).toHaveSelection('123.45');
     final.focus();
     await user.keyboard('{Tab}');
     expect(screen.getByRole('button', { name: 'After table' })).toHaveFocus();
+  });
+
+  it('uses Enter and arrows to navigate between editable cells and select the full value on 1 press', async () => {
+    function EditableGridFixture() {
+      const [first, setFirst] = useState(120);
+      const [second, setSecond] = useState(450);
+      const fmt = (value: number) => `$${value.toFixed(2)}`;
+      return (
+        <FinanceTable aria-label="Editable grid">
+          <tbody>
+            <tr>
+              <td>Row 1</td>
+              <td>
+                <FinanceMoneyCellInput
+                  aria-label="Row 1 amount"
+                  value={first}
+                  formatValue={fmt}
+                  onValueChange={(val) => setFirst(Number(val) || 0)}
+                />
+              </td>
+            </tr>
+            <tr>
+              <td>Row 2</td>
+              <td>
+                <FinanceMoneyCellInput
+                  aria-label="Row 2 amount"
+                  value={second}
+                  formatValue={fmt}
+                  onValueChange={(val) => setSecond(Number(val) || 0)}
+                />
+              </td>
+            </tr>
+          </tbody>
+        </FinanceTable>
+      );
+    }
+
+    const user = userEvent.setup();
+    render(<EditableGridFixture />);
+    const row1Input = screen.getByRole('textbox', { name: 'Row 1 amount' }) as HTMLInputElement;
+    const row2Input = screen.getByRole('textbox', { name: 'Row 2 amount' }) as HTMLInputElement;
+
+    await user.click(row1Input);
+    expect(row1Input).toHaveFocus();
+    expect(row1Input).toHaveSelection('120');
+
+    await user.keyboard('{Enter}');
+    expect(row2Input).toHaveFocus();
+    expect(row2Input).toHaveSelection('450');
+
+    await user.keyboard('{ArrowUp}');
+    expect(row1Input).toHaveFocus();
+    expect(row1Input).toHaveSelection('120');
+
+    await user.keyboard('{ArrowDown}');
+    expect(row2Input).toHaveFocus();
+    expect(row2Input).toHaveSelection('450');
   });
 
   it('uses arrows to navigate the visual grid without wrapping', async () => {

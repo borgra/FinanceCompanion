@@ -949,11 +949,6 @@ export function FundingSchedulePage({
                           aria-label={`${selectedPension.name} ${row.month} contribution`}
                           focusId={`pension-${selectedPension.id}-${monthIndex}`}
                           formatValue={formatMoney}
-                          nextFocusId={
-                            monthIndex < pensionProjectionRows.length - 1
-                              ? `pension-${selectedPension.id}-${monthIndex + 1}`
-                              : undefined
-                          }
                           value={row.contribution}
                           onValueChange={(nextValue) =>
                             updatePensionContribution(selectedPension.id, row.month, nextValue)
@@ -1082,11 +1077,6 @@ export function FundingSchedulePage({
                                 fillDownLabel={`Auto-populate ${account.name} from ${month} down`}
                                 focusId={`investment-${account.id}-${monthIndex}`}
                                 formatValue={formatMoney}
-                                nextFocusId={
-                                  monthIndex < projectionMonthsList.length - 1
-                                    ? `investment-${account.id}-${monthIndex + 1}`
-                                    : undefined
-                                }
                                 value={value}
                                 onFillDown={(nextValue) =>
                                   fillDownNonPayrollAllocation(

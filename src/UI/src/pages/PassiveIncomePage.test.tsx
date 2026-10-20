@@ -77,6 +77,46 @@ describe('PassiveIncomePage distribution research', () => {
   beforeEach(() => vi.setSystemTime(new Date('2026-09-04T12:00:00')));
   afterEach(() => vi.useRealTimers());
 
+  it('loads VOO quarterly distributions after retry and shows income across all three years', async () => {
+    vi.setSystemTime(new Date('2026-10-20T12:00:00'));
+    const user = userEvent.setup();
+    const repository = createMockHoldingRepository();
+    const voo: Holding = { ...testHolding, id: 'holding-voo', security: {
+      symbol: 'VOO', name: 'Vanguard S&P 500 ETF', exchange: 'NYSE ARCA', assetType: 'ETF', currency: 'USD',
+      payoutDetails: [{ exDividendDate: '2025-09-29', paymentDate: '2025-10-01', amount: 1.74, status: 'completed' }],
+    } };
+    const unavailable: Holding = { ...voo, security: { ...voo.security, dividendResearchStatus: 'unavailable' } };
+    const refreshed: Holding = { ...voo, security: { ...voo.security, dividendResearchStatus: 'partial',
+      dividendResearchProvider: 'azure_foundry', dividendResearchWarnings: ['Coverage may be incomplete.'],
+      payoutDetails: [...voo.security.payoutDetails!,
+        { exDividendDate: '2026-03-27', amount: 1.8724, status: 'completed' },
+        { exDividendDate: '2026-06-26', amount: 1.9622, status: 'completed' },
+        { exDividendDate: '2026-09-28', paymentDate: '2026-09-30', amount: 1.8226, amountPerShare: '1.8226', status: 'completed', sourceUrl: 'https://investor.vanguard.com/investment-products/etfs/profile/voo' },
+        { exDividendDate: '2026-12-22', amount: 1.77, status: 'projected' },
+        ...['03', '06', '09', '12'].map((month) => ({ exDividendDate: `2027-${month}-22`, amount: 1.77, status: 'projected' as const })),
+      ],
+    } };
+    vi.spyOn(repository, 'listHoldings').mockResolvedValue([voo]);
+    repository.reloadHoldings = vi.fn().mockResolvedValueOnce([unavailable]).mockResolvedValue([refreshed]);
+    vi.spyOn(repository, 'refreshHoldingDividends').mockResolvedValueOnce(unavailable).mockResolvedValue(refreshed);
+    render(<PassiveIncomePage holdingRepository={repository} />);
+    await user.click(await screen.findByRole('button', { name: 'Refresh distribution data' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('No distributions were imported for VOO');
+    await user.click(screen.getByRole('button', { name: 'Retry distribution refresh' }));
+    expect(await screen.findByText('1 of 1 securities refreshed.')).toBeInTheDocument();
+    expect(screen.getByText('Actual: $56.57 · Announced: $0.00 · Projected: $17.70')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Sep, 1 payment, \$18.23/ }));
+    expect(screen.getByText('$1.8226')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'VOO distribution source' })).toHaveAttribute('href', 'https://investor.vanguard.com/investment-products/etfs/profile/voo');
+    const year = screen.getByRole('combobox', { name: 'Distribution year' });
+    await user.selectOptions(year, '2025');
+    expect(screen.getByRole('button', { name: /Sep, 1 payment, \$17.40/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Oct, 0 payments/ })).toBeInTheDocument();
+    await user.selectOptions(year, '2027');
+    expect(screen.getByText('Actual: $0.00 · Announced: $0.00 · Projected: $70.80')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('refreshes one chosen security and exposes safe provider permission errors', async () => {
     const user = userEvent.setup();
     const repository = createMockHoldingRepository();

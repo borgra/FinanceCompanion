@@ -6,14 +6,18 @@ import type {
   TableHTMLAttributes,
   ThHTMLAttributes,
 } from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { KeyboardNavigableTable } from './KeyboardNavigableTable';
+import type { TableBodyCellNavigationOptions } from './useTableBodyCellTabNavigation';
 
-type FinanceTableProps = TableHTMLAttributes<HTMLTableElement> & {
-  children: ReactNode;
-  wrapperClassName?: string;
-  wrapperStyle?: CSSProperties;
-};
+type FinanceTableProps = TableHTMLAttributes<HTMLTableElement>
+  & TableBodyCellNavigationOptions
+  & {
+    children: ReactNode;
+    variant?: 'spreadsheet' | 'plain';
+    wrapperClassName?: string;
+    wrapperStyle?: CSSProperties;
+  };
 
 type FinanceTableHeaderCellProps = ThHTMLAttributes<HTMLTableCellElement> & {
   children: ReactNode;
@@ -52,23 +56,69 @@ type FinanceMoneyCellValueProps = {
 const joinClassNames = (...classNames: Array<string | undefined>) =>
   classNames.filter(Boolean).join(' ');
 
+export function useFinanceTableRowRetention(currentRowCount = 0) {
+  const [activeRowKey, setActiveRowKey] = useState<string | null>(null);
+  const [minRowCount, setMinRowCount] = useState(0);
+  const rowCountRef = useRef(currentRowCount);
+  rowCountRef.current = currentRowCount;
+
+  const syncRowCount = useCallback((count: number) => {
+    rowCountRef.current = count;
+  }, []);
+
+  const onCellEditStateChange = useCallback((isEditing: boolean) => {
+    setMinRowCount((current) => (isEditing ? Math.max(current, rowCountRef.current) : 0));
+  }, []);
+
+  const clearRetention = useCallback(() => {
+    setActiveRowKey(null);
+    setMinRowCount(0);
+  }, []);
+
+  return {
+    activeRowKey,
+    clearRetention,
+    minRowCount,
+    syncRowCount,
+    tableProps: {
+      onActiveRowKeyChange: setActiveRowKey,
+      onCellEditStateChange,
+    },
+  };
+}
+
 export function FinanceTable({
   children,
   className,
+  variant = 'spreadsheet',
   wrapperClassName,
   wrapperStyle,
   onKeyDownCapture,
   ...tableProps
 }: FinanceTableProps) {
+  const table = (
+    <KeyboardNavigableTable
+      className={joinClassNames(variant === 'spreadsheet' ? 'excel-table' : undefined, className)}
+      {...tableProps}
+      onKeyDownCapture={onKeyDownCapture}
+    >
+      {children}
+    </KeyboardNavigableTable>
+  );
+
+  if (variant === 'plain') {
+    return wrapperClassName || wrapperStyle ? (
+      <div className={wrapperClassName} style={wrapperStyle}>
+        {table}
+      </div>
+    ) : (
+      table
+    );
+  }
+
   return (
     <div className={joinClassNames('excel-wrapper', wrapperClassName)} style={wrapperStyle}>
-      <KeyboardNavigableTable
-        className={joinClassNames('excel-table', className)}
-        {...tableProps}
-        onKeyDownCapture={onKeyDownCapture}
-      >
-        {children}
-      </KeyboardNavigableTable>
+      {table}
     </div>
   );
 }
@@ -190,11 +240,15 @@ export function FinanceMoneyCellInput({
   onBlur,
   onFillDown,
   onFocus,
+  onMouseUp,
   onValueChange,
   value,
   ...inputProps
 }: FinanceMoneyCellInputProps) {
   void _nextFocusId;
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const shouldSelectOnFocusRef = useRef(false);
+  const preserveSelectionOnMouseUpRef = useRef(false);
   const [isFocused, setIsFocused] = useState(false);
   const [draftValue, setDraftValue] = useState(value === 0 ? '' : String(value));
 
@@ -203,6 +257,13 @@ export function FinanceMoneyCellInput({
       setDraftValue(value === 0 ? '' : String(value));
     }
   }, [isFocused, value]);
+
+  useLayoutEffect(() => {
+    if (isFocused && shouldSelectOnFocusRef.current) {
+      shouldSelectOnFocusRef.current = false;
+      inputRef.current?.select();
+    }
+  }, [isFocused, draftValue]);
 
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     setDraftValue(event.target.value);
@@ -213,6 +274,7 @@ export function FinanceMoneyCellInput({
     <div className="excel-editable-cell">
       <input
         {...inputProps}
+        ref={inputRef}
         className={joinClassNames('excel-cell-input', className)}
         data-ledger-cell={focusId}
         inputMode={inputProps.inputMode ?? 'decimal'}
@@ -222,13 +284,25 @@ export function FinanceMoneyCellInput({
           event.currentTarget.select();
           inputProps.onClick?.(event);
         }}
+        onMouseUp={(event) => {
+          if (preserveSelectionOnMouseUpRef.current) {
+            preserveSelectionOnMouseUpRef.current = false;
+            event.preventDefault();
+            event.currentTarget.select();
+          }
+          onMouseUp?.(event);
+        }}
         onFocus={(event) => {
+          shouldSelectOnFocusRef.current = true;
+          preserveSelectionOnMouseUpRef.current = true;
           setIsFocused(true);
           setDraftValue(value === 0 ? '' : String(value));
           event.currentTarget.select();
           onFocus?.(event);
         }}
         onBlur={(event) => {
+          shouldSelectOnFocusRef.current = false;
+          preserveSelectionOnMouseUpRef.current = false;
           setIsFocused(false);
           onBlur?.(event);
         }}
@@ -238,6 +312,8 @@ export function FinanceMoneyCellInput({
         <button
           type="button"
           className="link-button"
+          data-cell-auxiliary="true"
+          tabIndex={-1}
           aria-label={fillDownLabel}
           title={fillDownLabel}
           onMouseDown={(event) => event.preventDefault()}
@@ -258,6 +334,30 @@ export function FinanceMoneyCellInput({
           </span>
         </button>
       ) : null}
+    </div>
+  );
+}
+
+export function FinanceCellInput({
+  className,
+  onClick,
+  onFocus,
+  ...inputProps
+}: InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <div className="excel-editable-cell">
+      <input
+        {...inputProps}
+        className={joinClassNames('excel-cell-input', className)}
+        onClick={(event) => {
+          event.currentTarget.select();
+          onClick?.(event);
+        }}
+        onFocus={(event) => {
+          event.currentTarget.select();
+          onFocus?.(event);
+        }}
+      />
     </div>
   );
 }
