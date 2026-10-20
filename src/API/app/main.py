@@ -28,7 +28,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             is_write = request.method not in {"GET", "HEAD"}
             if (
                 (origin is not None and origin not in settings.cors_origins)
-                or (request.headers.get("sec-fetch-site") == "cross-site")
+                # The trusted UI and API can be hosted on different sites.
+                # An exact trusted Origin authorizes that browser request;
+                # Fetch Metadata still blocks cross-site requests without one.
+                or (origin is None and request.headers.get("sec-fetch-site") == "cross-site")
                 or (is_write and cookie_session and origin is None)
             ):
                 return JSONResponse(status_code=403, content={"detail": "A trusted Origin is required for this request."})

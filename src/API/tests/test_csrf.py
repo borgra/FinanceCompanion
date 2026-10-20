@@ -1,8 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app.domain.models import VerifiedIdentity
 from app.infrastructure.settings import Settings
 from app.main import create_app
+from app.presentation.http.container import build_container
 
 
 TRUSTED_ORIGIN = "https://finance.example.com"
@@ -42,6 +44,66 @@ def test_trusted_cookie_write_and_preflight_work():
     assert response.status_code == 204
     assert response.headers["access-control-allow-origin"] == TRUSTED_ORIGIN
     assert "set-cookie" in response.headers
+
+
+def test_trusted_cross_site_browser_can_complete_production_login_and_session():
+    settings = Settings(
+        environment="production",
+        session_secret="csrf-test-session-secret-12345678901234567890",
+        dividend_research_provider="stub",
+        cors_origins=[TRUSTED_ORIGIN],
+        entra_client_id="test-client", entra_tenant_id="test-tenant",
+        allowed_email="user@example.test",
+    )
+
+    class FakeVerifier:
+        def verify(self, token, client_id, tenant_id):
+            assert (token, client_id, tenant_id) == ("test-id-token", "test-client", "test-tenant")
+            return VerifiedIdentity(
+                subject="test-subject", object_id="test-object", tenant_id="test-tenant",
+                email="user@example.test",
+            )
+
+    app = create_app(settings)
+    app.state.container = build_container(settings, verifier=FakeVerifier())
+    # Static Web Apps and Container Apps use different sites in production.
+    # The browser sends both its exact Origin and cross-site Fetch Metadata.
+    client = TestClient(app, base_url="https://api.example.net", headers={
+        "Origin": TRUSTED_ORIGIN, "Sec-Fetch-Site": "cross-site",
+    })
+    preflight = client.options("/api/v1/auth/entra/verify", headers={
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+    })
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == TRUSTED_ORIGIN
+    assert client.get("/api/v1/auth/session").status_code == 401
+
+    login = client.post("/api/v1/auth/entra/verify", json={"idToken": "test-id-token"})
+    assert login.status_code == 200
+    assert login.json()["user"]["email"] == "user@example.test"
+    assert login.headers["access-control-allow-origin"] == TRUSTED_ORIGIN
+    assert login.headers["access-control-allow-credentials"] == "true"
+    cookie = login.headers["set-cookie"].lower()
+    assert "secure" in cookie and "httponly" in cookie and "samesite=none" in cookie
+    assert client.get("/api/v1/auth/session").json()["email"] == "user@example.test"
+    assert client.get("/api/v1/accounts").status_code == 200
+    assert client.post("/api/v1/auth/logout").status_code == 204
+    assert client.get("/api/v1/auth/session").status_code == 401
+
+
+@pytest.mark.parametrize("origin", [None, "null", "https://attacker.example", "https://finance.example.com.attacker.example"])
+def test_cross_site_login_rejects_missing_or_untrusted_origin_before_verifying_identity(origin):
+    client, _ = client_for_writes()
+    calls = []
+    client.app.state.container.authenticate_identity_user.execute = lambda *args: calls.append(args)
+    headers = {"Sec-Fetch-Site": "cross-site"}
+    if origin is not None:
+        headers["Origin"] = origin
+    response = client.post("/api/v1/auth/entra/verify", json={"idToken": "test-id-token"}, headers=headers)
+    assert response.status_code == 403
+    assert "set-cookie" not in response.headers
+    assert calls == []
 
 
 def test_bearer_client_can_write_without_origin():
