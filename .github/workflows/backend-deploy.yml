@@ -68,12 +68,12 @@ jobs:
             set -euo pipefail
             OUTPUTS="$(az deployment group show --resource-group "${AZURE_RESOURCE_GROUP}" --name "${APP_NAME}-foundry" --query properties.outputs --output json --only-show-errors)"
             ENDPOINT="$(echo "${OUTPUTS}" | jq -r '.projectEndpoint.value // empty')"
-            DEPLOYMENT="${AZURE_FOUNDRY_DEPLOYMENT}"
+            DEPLOYMENT="${AZURE_FOUNDRY_DEPLOYMENT:-}"
             if [ -z "${DEPLOYMENT}" ]; then DEPLOYMENT="$(echo "${OUTPUTS}" | jq -r '.deploymentName.value // empty')"; fi
             test -n "${ENDPOINT}" && test -n "${DEPLOYMENT}" || { echo "Run the Foundry infrastructure tranche or configure the endpoint/deployment variables." >&2; exit 1; }
             echo "AZURE_FOUNDRY_ENDPOINT=${ENDPOINT}" >> "${GITHUB_ENV}"
             echo "AZURE_FOUNDRY_DEPLOYMENT=${DEPLOYMENT}" >> "${GITHUB_ENV}"
-            if [ -z "${AZURE_FOUNDRY_REASONING_EFFORT}" ]; then
+            if [ -z "${AZURE_FOUNDRY_REASONING_EFFORT:-}" ]; then
               echo "AZURE_FOUNDRY_REASONING_EFFORT=$(echo "${OUTPUTS}" | jq -r '.reasoningEffort.value // "low"')" >> "${GITHUB_ENV}"
             fi
 
@@ -83,8 +83,8 @@ jobs:
           case "${DIVIDEND_RESEARCH_PROVIDER}" in
             stub) ;;
             azure_foundry)
-              test -n "${AZURE_FOUNDRY_ENDPOINT}" || { echo "Set AZURE_FOUNDRY_ENDPOINT in deployment environment variables." >&2; exit 1; }
-              test -n "${AZURE_FOUNDRY_DEPLOYMENT}" || { echo "Set AZURE_FOUNDRY_DEPLOYMENT in deployment environment variables." >&2; exit 1; }
+              test -n "${AZURE_FOUNDRY_ENDPOINT:-}" || { echo "Set AZURE_FOUNDRY_ENDPOINT in deployment environment variables." >&2; exit 1; }
+              test -n "${AZURE_FOUNDRY_DEPLOYMENT:-}" || { echo "Set AZURE_FOUNDRY_DEPLOYMENT in deployment environment variables." >&2; exit 1; }
               test "${AZURE_FOUNDRY_AUTH_MODE}" = entra || { echo "Production deployment requires Foundry Entra managed identity authentication." >&2; exit 1; }
               ;;
             *) echo "Unknown DIVIDEND_RESEARCH_PROVIDER." >&2; exit 1 ;;
@@ -170,7 +170,7 @@ jobs:
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --system-assigned --output none --only-show-errors
             MI_CLIENT_ID=""
-            if [ -n "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" ]; then
+            if [ -n "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID:-}" ]; then
               az containerapp identity assign \
                 --name "${API_CONTAINER_APP_NAME}" \
                 --resource-group "${AZURE_RESOURCE_GROUP}" \
@@ -219,7 +219,7 @@ jobs:
               --only-show-errors --output none
 
             ALPHA_VANTAGE_SECRET_REF=""
-            if [ -n "${LEGACY_ALPHA_VANTAGE_API_KEY}" ]; then
+            if [ -n "${LEGACY_ALPHA_VANTAGE_API_KEY:-}" ]; then
               az containerapp secret set \
                 --name "${API_CONTAINER_APP_NAME}" \
                 --resource-group "${AZURE_RESOURCE_GROUP}" \
@@ -238,9 +238,9 @@ jobs:
         with:
           inlineScript: |
             set -euo pipefail
-            test -n "${ENTRA_CLIENT_ID}" || { echo "Configure ENV_PROD_ENTRA_CLIENT_ID or AZURE_ENTRA_CLIENT_ID." >&2; exit 1; }
-            test -n "${ENTRA_TENANT_ID}" || { echo "Configure ENV_PROD_ENTRA_TENANT_ID or AZURE_ENTRA_TENANT_ID." >&2; exit 1; }
-            test -n "${ALLOWED_EMAIL}" || { echo "Configure ENV_PROD_ALLOWED_EMAIL or AZURE_ALLOWED_EMAIL." >&2; exit 1; }
+            test -n "${ENTRA_CLIENT_ID:-}" || { echo "Configure ENV_PROD_ENTRA_CLIENT_ID or AZURE_ENTRA_CLIENT_ID." >&2; exit 1; }
+            test -n "${ENTRA_TENANT_ID:-}" || { echo "Configure ENV_PROD_ENTRA_TENANT_ID or AZURE_ENTRA_TENANT_ID." >&2; exit 1; }
+            test -n "${ALLOWED_EMAIL:-}" || { echo "Configure ENV_PROD_ALLOWED_EMAIL or AZURE_ALLOWED_EMAIL." >&2; exit 1; }
             az containerapp update \
               --name "${API_CONTAINER_APP_NAME}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
@@ -255,9 +255,9 @@ jobs:
                 FINANCE_COMPANION_ALLOWED_EMAIL="${ALLOWED_EMAIL}" \
                 FINANCE_COMPANION_ENVIRONMENT="production" \
                 FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER="${DIVIDEND_RESEARCH_PROVIDER}" \
-                FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT="${AZURE_FOUNDRY_ENDPOINT}" \
-                FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT="${AZURE_FOUNDRY_DEPLOYMENT}" \
-                FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT="${AZURE_FOUNDRY_REASONING_EFFORT}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT="${AZURE_FOUNDRY_ENDPOINT:-}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT="${AZURE_FOUNDRY_DEPLOYMENT:-}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT="${AZURE_FOUNDRY_REASONING_EFFORT:-}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE="${AZURE_FOUNDRY_AUTH_MODE}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID="${AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID:-}" \
                 FINANCE_COMPANION_CORS_ORIGINS="${CORS_ORIGINS}" \

@@ -195,18 +195,18 @@ jobs:
             set -euo pipefail
             started_at="$(date +%s)"
             if [ "${API_ENVIRONMENT}" != "development" ]; then
-              test -n "${ENTRA_CLIENT_ID}" || { echo "Configure ENV_PROD_ENTRA_CLIENT_ID or AZURE_ENTRA_CLIENT_ID." >&2; exit 1; }
-              test -n "${ENTRA_TENANT_ID}" || { echo "Configure ENV_PROD_ENTRA_TENANT_ID or AZURE_ENTRA_TENANT_ID." >&2; exit 1; }
+              test -n "${ENTRA_CLIENT_ID:-}" || { echo "Configure ENV_PROD_ENTRA_CLIENT_ID or AZURE_ENTRA_CLIENT_ID." >&2; exit 1; }
+              test -n "${ENTRA_TENANT_ID:-}" || { echo "Configure ENV_PROD_ENTRA_TENANT_ID or AZURE_ENTRA_TENANT_ID." >&2; exit 1; }
             fi
-            test -n "${ALLOWED_EMAIL}" || { echo "Configure ENV_PROD_ALLOWED_EMAIL or AZURE_ALLOWED_EMAIL." >&2; exit 1; }
+            test -n "${ALLOWED_EMAIL:-}" || { echo "Configure ENV_PROD_ALLOWED_EMAIL or AZURE_ALLOWED_EMAIL." >&2; exit 1; }
             MI_CLIENT_ID=""
-            if [ -n "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" ]; then
+            if [ -n "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID:-}" ]; then
               MI_CLIENT_ID="$(az identity show --ids "${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" --query clientId --output tsv --only-show-errors)"
               test -n "${MI_CLIENT_ID}" || { echo "Unable to resolve the user-assigned managed identity client ID." >&2; exit 1; }
             fi
             SECRET_PARAMS="$(mktemp)"
             trap 'rm -f "${SECRET_PARAMS}"' EXIT
-            jq -n --arg ss "${API_SESSION_SECRET}" --arg av "${LEGACY_ALPHA_VANTAGE_API_KEY}" \
+            jq -n --arg ss "${API_SESSION_SECRET}" --arg av "${LEGACY_ALPHA_VANTAGE_API_KEY:-}" \
               '{sessionSecret:{value:$ss},alphaVantageApiKey:{value:$av}}' > "${SECRET_PARAMS}"
             az deployment group create \
               --name "finance-companion-runtime-api-${{ github.run_id }}" \
@@ -219,15 +219,15 @@ jobs:
                            apiTargetPort="${AZURE_API_TARGET_PORT}" \
                            apiMaxReplicas="${AZURE_API_MAX_REPLICAS}" \
                            tableName="${AZURE_TABLE_NAME}" \
-                           entraClientId="${ENTRA_CLIENT_ID}" \
-                           entraTenantId="${ENTRA_TENANT_ID}" \
+                           entraClientId="${ENTRA_CLIENT_ID:-}" \
+                           entraTenantId="${ENTRA_TENANT_ID:-}" \
                            allowedEmail="${ALLOWED_EMAIL}" \
                            environment="${API_ENVIRONMENT}" \
                            dividendResearchProvider="${DIVIDEND_RESEARCH_PROVIDER}" \
-                           azureFoundryEndpoint="${AZURE_FOUNDRY_ENDPOINT}" \
-                           azureFoundryDeployment="${AZURE_FOUNDRY_DEPLOYMENT}" \
-                           azureFoundryReasoningEffort="${AZURE_FOUNDRY_REASONING_EFFORT}" \
-                           azureFoundryManagedIdentityResourceId="${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID}" \
+                           azureFoundryEndpoint="${AZURE_FOUNDRY_ENDPOINT:-}" \
+                           azureFoundryDeployment="${AZURE_FOUNDRY_DEPLOYMENT:-}" \
+                           azureFoundryReasoningEffort="${AZURE_FOUNDRY_REASONING_EFFORT:-}" \
+                           azureFoundryManagedIdentityResourceId="${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID:-}" \
                            azureFoundryManagedIdentityClientId="${MI_CLIENT_ID}" \
               --only-show-errors \
               --output json > runtime-api-outputs.json

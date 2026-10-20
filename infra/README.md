@@ -42,6 +42,16 @@ The default configuration uses the Azure Static Web Apps Free tier. Recommended 
 - Review deployed resources after each infrastructure change.
 - Keep additional resources out of this resource group unless intentionally added to Bicep.
 
+## Offline Workflow Checks
+
+With the API development environment activated and Bash installed (Git Bash on Windows), run from `src/API`:
+
+```shell
+python -m pytest tests/test_deployment_workflows.py
+```
+
+These checks execute the workflow Bash with mocked Azure and JSON commands. They cover unset and empty optional configuration, Foundry discovery, explicit overrides, required-setting errors, and propagation of Azure CLI failures. They do not contact Azure or deploy resources.
+
 ## Local Deployment
 
 Prerequisites:
