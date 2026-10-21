@@ -9,7 +9,7 @@ import {
 } from '../components/FinanceTable';
 import type { Account } from '../domain/account';
 import type { AccountRepository } from '../domain/accountRepository';
-import type { CorporateAction, Holding, HoldingImportRow, PassiveIncomeImportRow, SecurityMetadata, SecurityPayoutDetails } from '../domain/holding';
+import type { CorporateAction, Holding, HoldingImportRow, PassiveIncomeImportRow, SecurityMetadata } from '../domain/holding';
 import type { HoldingRepository } from '../domain/holdingRepository';
 
 type HoldingsPageProps = {
@@ -204,6 +204,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const pendingHoldingSaveRef = useRef(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isImportingPayments, setIsImportingPayments] = useState(false);
   const [selectedHoldingId, setSelectedHoldingId] = useState<string | null>(null);
@@ -218,10 +219,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [refreshingDividendHoldingIds, setRefreshingDividendHoldingIds] = useState<Set<string>>(() => new Set());
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editingPayoutHolding, setEditingPayoutHolding] = useState<Holding | null>(null);
   const [securityDetailsHolding, setSecurityDetailsHolding] = useState<Holding | null>(null);
-  const [payoutDrafts, setPayoutDrafts] = useState<SecurityPayoutDetails[]>([]);
-  const [isSavingPayouts, setIsSavingPayouts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -356,23 +354,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setIsSearching(false);
   };
 
-  const openPayoutEditor = (holding: Holding) => {
-    setEditingPayoutHolding(holding);
-    setPayoutDrafts(
-      (holding.security.manualPayoutDetails ?? (holding.security.payoutDetails ?? []).filter((payout) =>
-        payout.mode !== 'source' && payout.status !== 'projected' && payout.status !== 'superseded',
-      )).map((payout) => ({ ...payout, mode: 'manual' })),
-    );
-    setError(null);
-  };
-
-  const closePayoutEditor = () => {
-    if (!isSavingPayouts) {
-      setEditingPayoutHolding(null);
-      setPayoutDrafts([]);
-    }
-  };
-
   const getQuantity = (holding: Holding, accountId: string) =>
     holding.accountPositions.find((position) => position.accountId === accountId)?.quantity ?? 0;
 
@@ -423,14 +404,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     );
     setDirtyHoldingIds((current) => new Set(current).add(holdingId));
     setError(null);
-    setSuccessMessage(null);
-  };
-
-  const updateManageDividends = (holdingId: string, manageDividends: boolean) => {
-    setHoldings((current) => current.map((holding) =>
-      holding.id === holdingId ? { ...holding, manageDividends } : holding,
-    ));
-    setDirtyHoldingIds((current) => new Set(current).add(holdingId));
     setSuccessMessage(null);
   };
 
@@ -517,17 +490,38 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setSecurityDetailsHolding(updated);
     setSuccessMessage(`${updated.security.symbol} corporate actions were saved.`);
   };
-  const saveDividendGrowthRate = async (dividendGrowthRate: number | null) => {
+  const saveDividendSettings = async (dividendGrowthRate: number | null, manageDividends: boolean) => {
     if (!securityDetailsHolding) return;
+    if (pendingHoldingSaveRef.current) throw new Error('A holding save is already in progress.');
+    pendingHoldingSaveRef.current = true;
+    setIsSaving(true);
     setError(null);
     setSuccessMessage(null);
-    const updated = await holdingRepository.updateHolding(securityDetailsHolding.id, {
-      security: { ...securityDetailsHolding.security, dividendGrowthRate },
-      accountPositions: securityDetailsHolding.accountPositions,
-    });
-    setHoldings((current) => mergeRefreshedSecurityDetails(current, [updated]));
-    setSecurityDetailsHolding(updated);
-    setSuccessMessage(`${updated.security.symbol} dividend growth rate was saved.`);
+    try {
+      const savedHolding = (await holdingRepository.listHoldings()).find((holding) => holding.id === securityDetailsHolding.id);
+      if (!savedHolding) throw new Error('Holding not found.');
+      const updated = await holdingRepository.updateHolding(securityDetailsHolding.id, {
+        security: { ...savedHolding.security, dividendGrowthRate },
+        accountPositions: savedHolding.accountPositions,
+        manageDividends,
+      });
+      setHoldings((current) => current.map((holding) => holding.id === updated.id ? {
+        ...holding,
+        manageDividends: updated.manageDividends ?? manageDividends,
+        security: { ...holding.security, dividendGrowthRate: updated.security.dividendGrowthRate },
+        updatedAt: updated.updatedAt,
+      } : holding));
+      setSecurityDetailsHolding((current) => current?.id === updated.id ? {
+        ...current,
+        manageDividends: updated.manageDividends ?? manageDividends,
+        security: { ...current.security, dividendGrowthRate: updated.security.dividendGrowthRate },
+        updatedAt: updated.updatedAt,
+      } : current);
+      setSuccessMessage(`${updated.security.symbol} dividend settings were saved.`);
+    } finally {
+      pendingHoldingSaveRef.current = false;
+      setIsSaving(false);
+    }
   };
 
   const refreshHoldingDetails = async (holdingId: string) => {
@@ -685,11 +679,13 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const saveQuantityChanges = async () => {
+    if (pendingHoldingSaveRef.current) return;
     const dirtyHoldings = holdings.filter((holding) => dirtyHoldingIds.has(holding.id));
     if (dirtyHoldings.length === 0) {
       return;
     }
 
+    pendingHoldingSaveRef.current = true;
     setIsSaving(true);
     setError(null);
     setSuccessMessage(null);
@@ -717,6 +713,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     } catch {
       setError('Unable to save holdings.');
     } finally {
+      pendingHoldingSaveRef.current = false;
       setIsSaving(false);
     }
   };
@@ -743,66 +740,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
       setError('Unable to remove holding.');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const updatePayoutDraft = (
-    index: number,
-    field: keyof Pick<SecurityPayoutDetails, 'paymentDate' | 'exDividendDate' | 'amount'>,
-    value: string,
-  ) => {
-    setPayoutDrafts((current) =>
-      current.map((payout, payoutIndex) =>
-        payoutIndex === index
-          ? {
-              ...payout,
-              [field]: field === 'amount' ? Number(value) || 0 : value,
-              ...(field === 'amount' ? {
-                amountPerShare: null,
-                rawAmount: null,
-                shareBasis: null,
-                appliedActionIds: [],
-                forecastMethod: null,
-                forecastRange: null,
-                forecastInputEventIds: [],
-                forecastAsOf: null,
-                supersedesEventId: null,
-                evidenceRef: null,
-                sourceUrl: null,
-                source: 'user',
-              } : {}),
-            }
-          : payout,
-      ),
-    );
-  };
-
-  const saveManualPayouts = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!editingPayoutHolding) {
-      return;
-    }
-
-    const validPayouts = payoutDrafts.filter((payout) => payout.exDividendDate && payout.amount > 0);
-    setIsSavingPayouts(true);
-    setError(null);
-    try {
-      const updated = await holdingRepository.updateManualPayoutDetails(
-        editingPayoutHolding.id,
-        validPayouts.map((payout) => ({ ...payout, mode: 'manual' })),
-      );
-      setHoldings((current) => current.map((holding) => holding.id === updated.id ? {
-        ...holding,
-        security: { ...holding.security, payoutDetails: updated.security.payoutDetails, manualPayoutDetails: updated.security.manualPayoutDetails },
-        updatedAt: updated.updatedAt,
-      } : holding));
-      setSuccessMessage(`${updated.security.symbol} payment data was saved.`);
-      setEditingPayoutHolding(null);
-      setPayoutDrafts([]);
-    } catch {
-      setError('Unable to save manual payment data.');
-    } finally {
-      setIsSavingPayouts(false);
     }
   };
 
@@ -833,7 +770,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
             </button>
           </div>
           <p>{selectedAccount ? `Viewing holdings in ${selectedAccount.name}.` : 'Manage share quantities by investment account.'}</p>
-          <p id="manage-dividends-help">Turn off Manage Dividends to skip distribution refresh for a holding. Save changes to apply; saved payment records are kept.</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <label htmlFor="holdings-account-filter">Account</label>
             <select id="holdings-account-filter" aria-label="Filter holdings by account" value={selectedAccountFilterId} onChange={(event) => { setSelectedAccountFilterId(event.target.value); clearEditingHolding(); }}>
@@ -910,14 +846,13 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   {account.name.length > 18 ? `${account.name.slice(0, 15)}...` : account.name}
                 </FinanceTableHeaderCell>
               ))}
-              <FinanceTableHeaderCell isEditable>Manage Dividends</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Actions</FinanceTableHeaderCell>
             </tr>
           </thead>
           <tbody>
             {orderedHoldings.length === 0 ? (
               <tr>
-                <td colSpan={7 + visibleAccounts.length}>
+                <td colSpan={6 + visibleAccounts.length}>
                   <span className="excel-cell-val">{holdings.length === 0 ? 'No holdings have been added yet.' : 'No holdings are in the selected account.'}</span>
                 </td>
               </tr>
@@ -936,7 +871,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                         {isCashSecurity(holding.security) ? (
                           <span className="excel-cell-val">{holding.security.name}</span>
                         ) : (
-                          <button className="link-button holdings-security-link" type="button" disabled={refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)} onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
+                          <button className="link-button holdings-security-link" type="button" disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)} onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
                         )}
                         <small>{formatLastUpdated(holding.security.detailsUpdatedAt)}</small>
                         {holding.security.dividendResearchRetrievedAt ? <small>{holding.security.dividendResearchProvider === 'stub' ? 'Stub data' : 'Dividend data'} · {formatLastUpdated(holding.security.dividendResearchRetrievedAt)}</small> : null}
@@ -980,31 +915,8 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                       </td>
                     ))}
                     <td>
-                      {isCashSecurity(holding.security) ? <span aria-label="Dividends not applicable">—</span> : (
-                        <input
-                          type="checkbox"
-                          checked={holding.manageDividends !== false}
-                          onChange={(event) => updateManageDividends(holding.id, event.target.checked)}
-                          disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
-                          aria-label={`Manage Dividends for ${holding.security.symbol}`}
-                          aria-describedby="manage-dividends-help"
-                          title="Save changes to apply. When off, distribution refresh skips this holding."
-                        />
-                      )}
-                    </td>
-                    <td>
                       <div className="holdings-row-actions">
                         {!isCashSecurity(holding.security) ? <>
-                        <button
-                          className="link-button holdings-refresh-action"
-                          type="button"
-                          onClick={() => openPayoutEditor(holding)}
-                          disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
-                          aria-label={`Edit ${holding.security.symbol} payments`}
-                          title={`Edit ${holding.security.symbol} payments`}
-                        >
-                          <span className="material-symbols-outlined" aria-hidden="true">payments</span>
-                        </button>
                         <button
                           className="link-button holdings-refresh-action"
                           type="button"
@@ -1056,7 +968,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       {successMessage ? <p className="form-success" role="status">{successMessage}</p> : null}
 
-      {securityDetailsHolding ? <SecurityDetailsDialog security={securityDetailsHolding.security} onClose={() => setSecurityDetailsHolding(null)} onSaveCorporateActions={saveCorporateActions} onSaveDividendGrowthRate={saveDividendGrowthRate} onRemovePayments={holdingRepository.removeHoldingPayments ? removeSecurityPayments : undefined} /> : null}
+      {securityDetailsHolding ? <SecurityDetailsDialog key={securityDetailsHolding.id} security={securityDetailsHolding.security} manageDividends={securityDetailsHolding.manageDividends} onClose={() => setSecurityDetailsHolding(null)} onSaveCorporateActions={saveCorporateActions} onSaveDividendSettings={saveDividendSettings} onRemovePayments={holdingRepository.removeHoldingPayments ? removeSecurityPayments : undefined} /> : null}
 
       {isAddDialogOpen ? (
         <div className="modal-overlay" onClick={closeAddDialog}>
@@ -1151,76 +1063,6 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         </div>
       ) : null}
 
-      {editingPayoutHolding ? (
-        <div className="modal-overlay" onClick={closePayoutEditor}>
-          <form
-            className="modal-container payment-editor-modal"
-            onSubmit={saveManualPayouts}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2>{editingPayoutHolding.security.symbol} Payments</h2>
-            <p>Saving changes creates user-managed payment data that source refreshes preserve by default.</p>
-            <div className="payment-editor-table" role="group" aria-label="Manual payment records">
-              {payoutDrafts.map((payout, index) => (
-                <div className="payment-editor-row" key={`${payout.exDividendDate}-${index}`}>
-                  <label>
-                    <span>Payment date</span>
-                    <input
-                      type="date"
-                      value={payout.paymentDate || payout.exDividendDate}
-                      onChange={(event) => updatePayoutDraft(index, 'paymentDate', event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>Ex-date</span>
-                    <input
-                      type="date"
-                      value={payout.exDividendDate}
-                      onChange={(event) => updatePayoutDraft(index, 'exDividendDate', event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    <span>Per share</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.0001"
-                      value={payout.amount}
-                      onChange={(event) => updatePayoutDraft(index, 'amount', event.target.value)}
-                    />
-                  </label>
-                  <button
-                    className="link-button link-button-danger"
-                    type="button"
-                    aria-label={`Remove payment ${index + 1}`}
-                    onClick={() => setPayoutDrafts((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                  >
-                    <span className="material-symbols-outlined" aria-hidden="true">delete</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              className="secondary-action"
-              type="button"
-              onClick={() => setPayoutDrafts((current) => [
-                ...current,
-                { exDividendDate: '', paymentDate: '', amount: 0, mode: 'manual', source: 'user' },
-              ])}
-            >
-              Add payment
-            </button>
-            <div className="modal-actions">
-              <button className="secondary-action" type="button" onClick={closePayoutEditor}>
-                Cancel
-              </button>
-              <button className="primary-action" type="submit" disabled={isSavingPayouts}>
-                {isSavingPayouts ? 'Saving...' : 'Save payments'}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
     </section>
   );
 }

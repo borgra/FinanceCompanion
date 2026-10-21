@@ -130,13 +130,8 @@ describe('InvestingPage', () => {
 
     expect(screen.getByText('Not updated')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit VTI payments' }));
-    expect(await screen.findByRole('heading', { name: 'VTI Payments' })).toBeInTheDocument();
-    expect(screen.getAllByLabelText('Payment date')).toHaveLength(2);
-    await userEvent.click(screen.getByRole('button', { name: 'Save payments' }));
-
-    expect(await screen.findByText('VTI payment data was saved.')).toBeInTheDocument();
-    expect(updateManualPayoutDetails).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Edit VTI payments' })).not.toBeInTheDocument();
+    expect(updateManualPayoutDetails).not.toHaveBeenCalled();
   });
 
   it('adds Cash explicitly and keeps its row fixed and action-free', async () => {

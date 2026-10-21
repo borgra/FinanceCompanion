@@ -4,9 +4,10 @@ import type { CorporateAction, SecurityMetadata, SecurityPayoutDetails } from '.
 
 type SecurityDetailsDialogProps = {
   security: SecurityMetadata;
+  manageDividends?: boolean;
   onClose: () => void;
   onSaveCorporateActions: (actions: CorporateAction[]) => Promise<void>;
-  onSaveDividendGrowthRate: (dividendGrowthRate: number | null) => Promise<void>;
+  onSaveDividendSettings: (dividendGrowthRate: number | null, manageDividends: boolean) => Promise<void>;
   onRemovePayments?: () => Promise<void>;
 };
 
@@ -45,21 +46,24 @@ const isValidAction = (action: CorporateAction) =>
   Boolean(action.effectiveDate) && action.oldShares > 0 && action.newShares > 0 && action.oldShares !== action.newShares &&
   (action.type === 'stock_split' ? action.newShares > action.oldShares : action.newShares < action.oldShares);
 
-export function SecurityDetailsDialog({ security, onClose, onSaveCorporateActions, onSaveDividendGrowthRate, onRemovePayments }: SecurityDetailsDialogProps) {
+export function SecurityDetailsDialog({ security, manageDividends = true, onClose, onSaveCorporateActions, onSaveDividendSettings, onRemovePayments }: SecurityDetailsDialogProps) {
   const [activeTab, setActiveTab] = useState<'details' | 'actions'>('details');
   const [actionDrafts, setActionDrafts] = useState(() => cloneActions(security.corporateActions));
   const [isSavingActions, setIsSavingActions] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [dividendGrowthRateDraft, setDividendGrowthRateDraft] = useState(() => toPercentDraft(security.dividendGrowthRate));
+  const [manageDividendsDraft, setManageDividendsDraft] = useState(manageDividends);
   const [dividendGrowthRateBadInput, setDividendGrowthRateBadInput] = useState(false);
-  const [isSavingDividendGrowthRate, setIsSavingDividendGrowthRate] = useState(false);
+  const [isSavingDividendSettings, setIsSavingDividendSettings] = useState(false);
   const [dividendGrowthRateError, setDividendGrowthRateError] = useState<string | null>(null);
+  const [dividendSettingsError, setDividendSettingsError] = useState<string | null>(null);
+  const [dividendSettingsSaved, setDividendSettingsSaved] = useState(false);
   const [isRemovingPayments, setIsRemovingPayments] = useState(false);
   const [removePaymentsError, setRemovePaymentsError] = useState<string | null>(null);
   const [paymentsRemoved, setPaymentsRemoved] = useState(false);
   const mutationPending = useRef(false);
-  const isMutationPending = isSavingActions || isSavingDividendGrowthRate || isRemovingPayments;
+  const isMutationPending = isSavingActions || isSavingDividendSettings || isRemovingPayments;
   const hasSavedPayments = [security.payoutDetails, security.sourcePayoutDetails, security.manualPayoutDetails, security.payoutAuditDetails]
     .some((payments) => Boolean(payments?.length)) || Object.entries(security).some(([key, value]) =>
       (key.startsWith('dividendResearch') || ['dividendPreviousYear', 'dividendCurrentYear', 'estimatedFuturePayout', 'dividendStatus'].includes(key))
@@ -83,7 +87,7 @@ export function SecurityDetailsDialog({ security, onClose, onSaveCorporateAction
   }, [onClose]);
 
   const actionsChanged = JSON.stringify(actionDrafts) !== JSON.stringify(savedActions);
-  const dividendGrowthRateChanged = dividendGrowthRateDraft !== savedDividendGrowthRateDraft;
+  const dividendSettingsChanged = dividendGrowthRateDraft !== savedDividendGrowthRateDraft || manageDividendsDraft !== manageDividends;
   const updateAction = (id: string, patch: Partial<CorporateAction>) => {
     setActionDrafts((current) => current.map((action) => action.id === id ? { ...action, ...patch } : action));
     setActionError(null);
@@ -108,7 +112,7 @@ export function SecurityDetailsDialog({ security, onClose, onSaveCorporateAction
       setIsSavingActions(false);
     }
   };
-  const saveDividendGrowthRate = async (event: FormEvent) => {
+  const saveDividendSettings = async (event: FormEvent) => {
     event.preventDefault();
     if (mutationPending.current) return;
     const normalizedDraft = dividendGrowthRateDraft.trim();
@@ -118,15 +122,18 @@ export function SecurityDetailsDialog({ security, onClose, onSaveCorporateAction
       return;
     }
     mutationPending.current = true;
-    setIsSavingDividendGrowthRate(true);
+    setIsSavingDividendSettings(true);
     setDividendGrowthRateError(null);
+    setDividendSettingsError(null);
+    setDividendSettingsSaved(false);
     try {
-      await onSaveDividendGrowthRate(percent === null ? null : percent / 100);
+      await onSaveDividendSettings(percent === null ? null : percent / 100, manageDividendsDraft);
+      setDividendSettingsSaved(true);
     } catch {
-      setDividendGrowthRateError('Unable to save the dividend growth rate.');
+      setDividendSettingsError('Unable to save dividend settings.');
     } finally {
       mutationPending.current = false;
-      setIsSavingDividendGrowthRate(false);
+      setIsSavingDividendSettings(false);
     }
   };
 
@@ -163,17 +170,24 @@ export function SecurityDetailsDialog({ security, onClose, onSaveCorporateAction
         </div>
 
         {activeTab === 'details' ? (
-          <form id="security-details-panel" role="tabpanel" aria-labelledby="security-details-tab" noValidate onSubmit={(event) => void saveDividendGrowthRate(event)}>
+          <form id="security-details-panel" role="tabpanel" aria-labelledby="security-details-tab" noValidate onSubmit={(event) => void saveDividendSettings(event)}>
             <dl className="security-details-grid">
               <div><dt>Symbol</dt><dd>{security.symbol}</dd></div><div><dt>Exchange</dt><dd>{security.exchange}</dd></div><div><dt>Asset type</dt><dd>{security.assetType}</dd></div><div><dt>Currency</dt><dd>{security.currency}</dd></div><div><dt>Price</dt><dd>{formatOptional(security.price, currencyFormatter)}</dd></div><div><dt>Sector</dt><dd>{security.sector || 'Not available'}</dd></div><div><dt>Industry</dt><dd>{security.industry || 'Not available'}</dd></div><div><dt>P/E ratio</dt><dd>{formatOptional(security.peRatio)}</dd></div><div><dt>30-day yield</dt><dd>{formatOptional(security.thirtyDayYield, percentFormatter)}</dd></div><div><dt>52-week low</dt><dd>{formatOptional(security.fiftyTwoWeekLow, currencyFormatter)}</dd></div><div><dt>52-week high</dt><dd>{formatOptional(security.fiftyTwoWeekHigh, currencyFormatter)}</dd></div>
             </dl>
+            <label className="configuration-checkbox" htmlFor="manage-dividends">
+              <input id="manage-dividends" type="checkbox" checked={manageDividendsDraft} disabled={isMutationPending} aria-describedby="manage-dividends-help" onChange={(event) => { setManageDividendsDraft(event.target.checked); setDividendSettingsError(null); setDividendSettingsSaved(false); }} />
+              <span>Manage Dividends</span>
+            </label>
+            <p id="manage-dividends-help" className="status-copy">When off, distribution research is skipped for this holding. Saved payments are kept.</p>
             <label className="field" htmlFor="dividend-growth-rate"><span>Dividend growth rate (%)</span>
-              <input id="dividend-growth-rate" type="number" min="-100" step="any" disabled={isMutationPending} value={dividendGrowthRateDraft} aria-invalid={Boolean(dividendGrowthRateError)} aria-describedby={dividendGrowthRateError ? 'dividend-growth-rate-error' : undefined} onChange={(event) => { setDividendGrowthRateDraft(event.target.value); setDividendGrowthRateBadInput(event.target.validity.badInput); setDividendGrowthRateError(null); }} />
+              <input id="dividend-growth-rate" type="number" min="-100" step="any" disabled={isMutationPending} value={dividendGrowthRateDraft} aria-invalid={Boolean(dividendGrowthRateError)} aria-describedby={dividendGrowthRateError ? 'dividend-growth-rate-error' : undefined} onChange={(event) => { setDividendGrowthRateDraft(event.target.value); setDividendGrowthRateBadInput(event.target.validity.badInput); setDividendGrowthRateError(null); setDividendSettingsError(null); setDividendSettingsSaved(false); }} />
             </label>
             {dividendGrowthRateError ? <p id="dividend-growth-rate-error" className="form-error" role="alert">{dividendGrowthRateError}</p> : null}
+            {dividendSettingsError ? <p className="form-error" role="alert">{dividendSettingsError}</p> : null}
+            {dividendSettingsSaved ? <p className="status-copy" role="status">Dividend settings saved.</p> : null}
             <div className="modal-actions">
-              <button className="secondary-action" type="button" disabled={!dividendGrowthRateChanged || isMutationPending} onClick={() => { setDividendGrowthRateDraft(savedDividendGrowthRateDraft); setDividendGrowthRateBadInput(false); setDividendGrowthRateError(null); }}>Reset</button>
-              <button className="primary-action" type="submit" disabled={!dividendGrowthRateChanged || isMutationPending}>{isSavingDividendGrowthRate ? 'Saving...' : 'Save changes'}</button>
+              <button className="secondary-action" type="button" disabled={!dividendSettingsChanged || isMutationPending} onClick={() => { setDividendGrowthRateDraft(savedDividendGrowthRateDraft); setManageDividendsDraft(manageDividends); setDividendGrowthRateBadInput(false); setDividendGrowthRateError(null); setDividendSettingsError(null); setDividendSettingsSaved(false); }}>Reset</button>
+              <button className="primary-action" type="submit" disabled={!dividendSettingsChanged || isMutationPending}>{isSavingDividendSettings ? 'Saving...' : 'Save changes'}</button>
             </div>
             <section aria-labelledby="security-distributions-heading">
               <h3 id="security-distributions-heading">Distributions</h3>
