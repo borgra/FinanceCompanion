@@ -596,6 +596,17 @@ def import_manual_payouts(
     except DomainError as exc:
         raise _domain_error_to_http(exc) from exc
 
+@router.delete("/holdings/{holding_id}/payouts", response_model=HoldingPayload)
+def remove_holding_payment_data(
+    holding_id: str,
+    user=Depends(require_session_user),
+    container=Depends(get_container),
+) -> HoldingPayload:
+    try:
+        return to_holding_payload(container.remove_holding_payment_data.execute(user.user_id, holding_id))
+    except DomainError as exc:
+        raise _domain_error_to_http(exc) from exc
+
 @router.put("/holdings/{holding_id}/manual-payouts", response_model=HoldingPayload)
 def update_manual_payouts(
     holding_id: str,

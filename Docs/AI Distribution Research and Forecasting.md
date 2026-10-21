@@ -104,6 +104,7 @@ The live implementation uses Foundry's built-in Responses `web_search` tool for 
 - Provide refresh action, last researched time, partial/stale status, and warnings.
 - **Refresh Distribution Data** processes eligible securities sequentially, with a 15-second wait after each attempt before the next security. There is no initial or final wait. Waiting progress is announced, and leaving the view cancels queued requests.
 - **Manage Dividends** is a per-holding checkbox in Holdings, applied with **Save changes**. It defaults to enabled for new and existing holdings. Turning it off skips individual and bulk distribution research without deleting saved payouts or changing their income totals. Cash remains ineligible for research.
+- **Remove payments** in a holding's security details asks for confirmation, then clears that holding's source, manual, projected, and audit payments plus research history and cache. Holdings, quantities, corporate actions, dividend growth rate, and Manage Dividends are kept. Other holdings are unaffected; refreshing distributions can load source payments again.
 - States: loading; no distributions found; unsupported security; partial/unverified sources; stale data; provider/rate-limit failure with retry; AI configuration/permission failure; successful refresh.
 - Preserve manual payout records and identify them as user-entered. Do not imply the forecast is guaranteed or investment advice.
 - Support keyboard operation, screen readers, responsive layouts, and accessible status announcements.

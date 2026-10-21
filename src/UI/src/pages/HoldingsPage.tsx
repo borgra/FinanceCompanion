@@ -485,6 +485,28 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
       setError(importError instanceof Error ? importError.message : 'Unable to import payments.');
     } finally { setIsImportingPayments(false); }
   };
+  const removeSecurityPayments = async () => {
+    if (!securityDetailsHolding || !holdingRepository.removeHoldingPayments) return;
+    if (refreshingHoldingIds.has(securityDetailsHolding.id) || refreshingDividendHoldingIds.has(securityDetailsHolding.id)) {
+      throw new Error('Wait for this holding to finish refreshing before removing payments.');
+    }
+    setError(null);
+    setSuccessMessage(null);
+    const updated = await holdingRepository.removeHoldingPayments(securityDetailsHolding.id);
+    const mergeClearedPayments = (holding: Holding): Holding => ({
+      ...holding,
+      security: {
+        ...updated.security,
+        price: holding.security.price,
+        corporateActions: holding.security.corporateActions,
+        dividendGrowthRate: holding.security.dividendGrowthRate,
+      },
+      updatedAt: updated.updatedAt,
+    });
+    setHoldings((current) => current.map((holding) => holding.id === updated.id ? mergeClearedPayments(holding) : holding));
+    setSecurityDetailsHolding((current) => current?.id === updated.id ? mergeClearedPayments(current) : current);
+    setSuccessMessage(`${updated.security.symbol} payments were removed.`);
+  };
   const saveCorporateActions = async (actions: CorporateAction[]) => {
     if (!securityDetailsHolding) return;
     const updated = await holdingRepository.updateHolding(securityDetailsHolding.id, {
@@ -914,7 +936,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                         {isCashSecurity(holding.security) ? (
                           <span className="excel-cell-val">{holding.security.name}</span>
                         ) : (
-                          <button className="link-button holdings-security-link" type="button" onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
+                          <button className="link-button holdings-security-link" type="button" disabled={refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)} onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
                         )}
                         <small>{formatLastUpdated(holding.security.detailsUpdatedAt)}</small>
                         {holding.security.dividendResearchRetrievedAt ? <small>{holding.security.dividendResearchProvider === 'stub' ? 'Stub data' : 'Dividend data'} · {formatLastUpdated(holding.security.dividendResearchRetrievedAt)}</small> : null}
@@ -1034,7 +1056,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
       {error ? <p className="form-error" role="alert">{error}</p> : null}
       {successMessage ? <p className="form-success" role="status">{successMessage}</p> : null}
 
-      {securityDetailsHolding ? <SecurityDetailsDialog security={securityDetailsHolding.security} onClose={() => setSecurityDetailsHolding(null)} onSaveCorporateActions={saveCorporateActions} onSaveDividendGrowthRate={saveDividendGrowthRate} /> : null}
+      {securityDetailsHolding ? <SecurityDetailsDialog security={securityDetailsHolding.security} onClose={() => setSecurityDetailsHolding(null)} onSaveCorporateActions={saveCorporateActions} onSaveDividendGrowthRate={saveDividendGrowthRate} onRemovePayments={holdingRepository.removeHoldingPayments ? removeSecurityPayments : undefined} /> : null}
 
       {isAddDialogOpen ? (
         <div className="modal-overlay" onClick={closeAddDialog}>
