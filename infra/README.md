@@ -12,7 +12,7 @@ The active deployment creates:
 - An Azure Container Registry.
 - An Azure Container Apps environment.
 - An Azure Container App for the API.
-- A dedicated Foundry account, project and GPT-6 Luna deployment when Foundry provisioning is enabled.
+- A dedicated Foundry account, project, GPT-6 Luna deployment and version-controlled dividend history prompt agent when Foundry provisioning is enabled.
 - Optional blob storage when explicitly enabled.
 
 ## Files
@@ -27,7 +27,9 @@ The active deployment creates:
 | `runtime-api.bicep` | Runtime API tranche for the Container App and app configuration. |
 | `foundry.bicep` | Entra-only Foundry account, research project, pinned GPT-6 Luna model and project service identity access. |
 | `scripts/deploy-foundry.ps1` | Deploy only Foundry; optionally authorize the API identity and signed-in developer. Supports `-WhatIf`. |
-| `scripts/test-foundry.ps1` | Opt-in live web-search and structured-output capability checks. |
+| `agents/dividend-history-agent.md` / `.schema.json` | Canonical dividend retrieval instructions and strict JSON response contract. |
+| `scripts/register-foundry-agent.ps1` | Create/update the named prompt agent using Entra authentication and the Foundry v1 API. Supports `-WhatIf`. |
+| `scripts/test-foundry.ps1` | Opt-in single-call live dividend history, web-search and structured-output capability check. |
 | `storage.bicep` | Optional storage tranche. |
 | `parameters/dev.subscription.bicepparam` | Example subscription-scoped development parameters. |
 | `scripts/up.ps1` | Local deployment helper. |
@@ -76,7 +78,24 @@ To provision only Foundry against the existing application, without replacing it
 ./infra/scripts/test-foundry.ps1 -SubscriptionId '<subscription-id>' -Endpoint '<returned-project-endpoint>'
 ```
 
-The first command creates the account/project/model and assigns scoped inference roles. The second makes two live, billable calls to prove web search and strict JSON output. Use `-WhatIf` on the first command for a local preview; use `az deployment group what-if --template-file infra/foundry.bicep --parameters appName=finance-companion` for an Azure resource preview. No Azure/model keys are created or needed.
+The first command creates the account/project/model, assigns scoped inference roles and registers `dividend-history-agent`. Registration uses the canonical instructions and schema in `infra/agents`; the API image bundles those same files for its single-call Responses fallback. Use `-AgentName` to override the registered name, or `-RegisterAgent:$false` for ARM-only provisioning. The second command makes one live, billable call combining web search and strict dividend JSON output, using those same files and an explicit reference date (`-AsOf`) when supplied. Use `-WhatIf` on the first command for a local preview; use `az deployment group what-if --template-file infra/foundry.bicep --parameters appName=finance-companion` for an Azure resource preview. No Azure/model keys are created or needed.
+
+Registration requires Foundry User on the target project (or an inherited resource-group grant) for the signed-in operator or Infra Up OIDC principal. Resource Contributor alone does not include this data-plane access; have an administrator assign it before registering. After new role assignments, allow RBAC propagation and rerun `register-foundry-agent.ps1` if Azure reports access denied.
+
+The implementation uses the documented [Foundry v1 prompt-agent API](https://learn.microsoft.com/en-us/rest/api/microsoft-foundry/aiproject), which supports `tools: web_search` and `text.format: json_schema`. The guide's legacy `/assistants?api-version=2025-05-01` route uses a different agent/tool contract. Registration looks up the exact name, creates it on 404 and updates it otherwise; unchanged definitions reuse the existing version. The backend's one-call Responses request uses the named definition's local instructions/schema, so refreshing a holding does not require a registration lookup or another model call.
+
+To update an existing project's agent without provisioning resources:
+
+```powershell
+./infra/scripts/register-foundry-agent.ps1 -SubscriptionId '<subscription-id>' -Endpoint '<project-endpoint>' -Deployment '<model-deployment>'
+```
+
+Offline checks (no Azure access):
+
+```powershell
+./infra/tests/deploy-foundry.test.ps1
+./infra/tests/foundry-agent.test.ps1
+```
 
 The script now runs staged deployments in observable tranches:
 
@@ -131,7 +150,7 @@ For live distribution retrieval and API-to-Foundry managed identity access, see
 in the GitHub Environment `deployment` selects `stub` (default) or
 `azure_foundry` in both Backend Deploy and Infra Up. When `azure_foundry` is selected and no endpoint is configured, Infra Up creates the dedicated Foundry tranche and authorizes the API identity. Backend Deploy discovers its endpoint/deployment from the persisted `${APP_NAME}-foundry` ARM deployment outputs. Supplying an existing endpoint/deployment bypasses creation; use `scripts/configure-foundry-access.ps1` to grant access to that existing project.
 
-The Infra Up identity needs resource creation plus scoped role-assignment permissions for the Foundry tranche. Backend Deploy still needs no permission to grant inference roles. `AZURE_FOUNDRY_CAPACITY` defaults to `100` in Infra Up. Model availability, quota and tool policy are validated by Azure; unsupported regions or exhausted quota fail explicitly.
+The Infra Up identity needs resource creation, scoped role-assignment permissions for the Foundry tranche, and Foundry User to register the project agent. Infra Up registers the agent for project endpoints; direct Azure OpenAI resource endpoints use the bundled single-pass definition without project registration. Backend Deploy still needs no permission to grant inference roles. `AZURE_FOUNDRY_CAPACITY` defaults to `100` in Infra Up. Model availability, quota and tool policy are validated by Azure; unsupported regions or exhausted quota fail explicitly.
 
 ### Additional Variables And Secrets
 
@@ -144,6 +163,7 @@ For the runtime API tranche, set these repository values:
 | `AZURE_ALLOWED_EMAIL` | Variable | Primary allowed user email for the placeholder seeded user. |
 | `AZURE_API_ENVIRONMENT` | Variable | API environment string, typically `production`. |
 | `AZURE_API_SESSION_SECRET` | Secret | Session signing secret for the API cookie/JWT. |
+| `AZURE_FOUNDRY_AGENT_NAME` | Optional variable | Named dividend history agent; defaults to `dividend-history-agent` in both workflows. |
 | `ALPHA_VANTAGE_API_KEY` | Optional secret | Legacy market-data adapter only; not needed for Foundry web research or security search. |
 
 ### Workflow Defaults

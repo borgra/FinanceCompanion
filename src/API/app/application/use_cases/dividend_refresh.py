@@ -62,6 +62,10 @@ class RefreshHoldingDividends:
         finally:
             with self._in_flight_lock:
                 self._in_flight.discard(in_flight_key)
+        if result.status == "unavailable":
+            # An empty research result is not evidence that saved distributions
+            # or projections have disappeared. Do not reconcile or persist it.
+            raise DividendResearchProviderError("No reliable dividend history was available. Existing records were preserved; please retry later.")
         if result.resolved_exchange or result.resolved_asset_type:
             request = replace(request, exchange=result.resolved_exchange or request.exchange,
                 asset_type=result.resolved_asset_type or request.asset_type)

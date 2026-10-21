@@ -1,48 +1,56 @@
-<# Opt-in live capability check. Makes two billable model calls; never prints tokens. #>
+<# Opt-in live capability check. Makes one billable web-search/structured-output call. #>
 param(
   [Parameter(Mandatory = $true)][string]$Endpoint,
   [string]$Deployment = 'gpt-6-luna',
+  [string]$AgentName = 'dividend-history-agent',
+  [ValidatePattern('^[A-Za-z0-9.-]{1,20}$')][string]$Symbol = 'SCHD',
+  [datetime]$AsOf = (Get-Date),
   [Parameter(Mandatory = $true)][string]$SubscriptionId
 )
 $ErrorActionPreference = 'Stop'
-$parsedEndpoint = $null
-if (-not [Uri]::TryCreate($Endpoint, [UriKind]::Absolute, [ref]$parsedEndpoint) -or $parsedEndpoint.Scheme -ne 'https' -or $parsedEndpoint.Port -ne 443 -or $parsedEndpoint.UserInfo -or $parsedEndpoint.Query -or $parsedEndpoint.Fragment -or ($parsedEndpoint.Host -notlike '*.services.ai.azure.com' -and $parsedEndpoint.Host -notlike '*.openai.azure.com') -or $parsedEndpoint.AbsolutePath.TrimEnd('/') -notmatch '^(?:/api/projects/[A-Za-z0-9._-]+)?(?:/openai/v1)?$') {
-  throw 'Use the Azure HTTPS project/resource endpoint returned by the Foundry deployment.'
-}
+. (Join-Path $PSScriptRoot 'foundry-agent-definition.ps1')
+Assert-FoundryResponsesEndpoint -Endpoint $Endpoint
 $base = $Endpoint.TrimEnd('/')
 if (-not $base.EndsWith('/openai/v1')) { $base += '/openai/v1' }
+$definition = Get-DividendHistoryAgentDefinition -Deployment $Deployment
 $accessToken = & az account get-access-token --subscription $SubscriptionId --resource https://ai.azure.com --query accessToken --output tsv --only-show-errors
 if ($LASTEXITCODE -ne 0 -or -not $accessToken) { throw 'Azure token acquisition failed. Sign in with az login.' }
 try {
   $headers = @{ Authorization = "Bearer $accessToken" }
-  $search = Invoke-RestMethod -Uri "$base/responses" -Headers $headers -ContentType application/json -Method Post -TimeoutSec 90 -Body (@{
-    model = $Deployment; store = $false; max_output_tokens = 4096
-    reasoning = @{ effort = 'low' }
-    tools = @(@{ type = 'web_search' }); tool_choice = 'required'; max_tool_calls = 2
+  $request = @{
+    model = $Deployment; store = $false; max_output_tokens = 12000
+    reasoning = $definition.reasoning
+    tools = $definition.tools; tool_choice = $definition.tool_choice
     include = @('web_search_call.action.sources')
-    input = 'Find the official JPMorgan issuer page for JEPQ. Return its title with a web citation. Do not give investment advice.'
-  } | ConvertTo-Json -Depth 15)
-  $searches = @($search.output | Where-Object { $_.type -eq 'web_search_call' -and $_.status -eq 'completed' })
-  $citations = @($search.output | Where-Object type -EQ 'message' | ForEach-Object content | ForEach-Object annotations | Where-Object type -EQ 'url_citation')
+    metadata = @{ agent_name = $AgentName }
+    text = $definition.text
+    input = @(
+      @{ role = 'system'; content = $definition.instructions }
+      @{ role = 'user'; content = (@{
+        symbol = $Symbol.ToUpperInvariant(); exchange = $null
+        as_of = $AsOf.ToString('yyyy-MM-dd'); history_start = $AsOf.AddMonths(-24).ToString('yyyy-MM-dd')
+      } | ConvertTo-Json -Compress) }
+    )
+  }
+  $response = Invoke-RestMethod -Uri "$base/responses" -Headers $headers -ContentType application/json -Method Post -TimeoutSec 120 -Body ($request | ConvertTo-Json -Depth 30)
+  $searches = @($response.output | Where-Object { $_.type -eq 'web_search_call' -and $_.status -eq 'completed' })
+  $texts = @($response.output | Where-Object type -EQ 'message' | ForEach-Object content | Where-Object type -EQ 'output_text' | ForEach-Object text)
+  if ($response.status -ne 'completed' -or $searches.Count -eq 0 -or $texts.Count -ne 1) { throw 'Expected completed web search and one structured output.' }
+  $schemaPath = Join-Path $PSScriptRoot '../agents/dividend-history-agent.schema.json'
+  if (-not (Test-Json -Json $texts[0] -SchemaFile $schemaPath -ErrorAction Stop)) { throw 'Output did not match the dividend agent schema.' }
+  $result = $texts[0] | ConvertFrom-Json
+  if ($result.error -or $result.symbol -ne $Symbol -or @($result.dividends).Count -eq 0) { throw 'No reliable dividend history returned for the requested security.' }
   $sourceUrls = @($searches | ForEach-Object action | ForEach-Object sources | ForEach-Object url)
-  if ($search.status -ne 'completed' -or $searches.Count -eq 0 -or @($citations | Where-Object { $_.url -in $sourceUrls }).Count -eq 0) { throw 'The model did not return completed web search with a matching source citation.' }
-  Write-Output 'PASS: web_search completed with cited public sources.'
-  $extraction = Invoke-RestMethod -Uri "$base/responses" -Headers $headers -ContentType application/json -Method Post -TimeoutSec 60 -Body (@{
-    model = $Deployment; store = $false; max_output_tokens = 2048
-    reasoning = @{ effort = 'low' }
-    input = 'Return status ready in the required JSON schema.'
-    text = @{ format = @{ type = 'json_schema'; name = 'readiness'; strict = $true; schema = @{
-      type = 'object'; properties = @{ status = @{ type = 'string'; enum = @('ready') } }
-      required = @('status'); additionalProperties = $false
-    } } }
-  } | ConvertTo-Json -Depth 15)
-  $text = @($extraction.output | Where-Object type -EQ 'message' | ForEach-Object content | Where-Object type -EQ 'output_text' | ForEach-Object text)
-  if ($extraction.status -ne 'completed' -or $text.Count -ne 1 -or ($text[0] | ConvertFrom-Json).status -ne 'ready') { throw 'Structured-output extraction did not return the expected result.' }
-  Write-Output 'PASS: strict structured output completed with the same deployment and Entra identity.'
+  $citations = @($response.output | Where-Object type -EQ 'message' | ForEach-Object content | ForEach-Object annotations | Where-Object type -EQ 'url_citation' | ForEach-Object url)
+  $publicSources = @(@($sourceUrls) + @($citations) | Where-Object { $_ -match '^https://[^/]+/' -and $_ -notmatch '^https://(localhost|127\.|10\.|192\.168\.|\[)' })
+  if ($publicSources.Count -eq 0) { throw 'No public HTTPS web-search evidence returned.' }
+  foreach ($dividend in $result.dividends) {
+    $exDate = [datetime]::ParseExact($dividend.ex_dividend_date, 'yyyy-MM-dd', [cultureinfo]::InvariantCulture)
+    if ($exDate -lt $AsOf.Date.AddMonths(-24) -or $dividend.amount -le 0 -or [double]::IsInfinity($dividend.amount) -or [double]::IsNaN($dividend.amount)) { throw 'Invalid date or dividend amount returned.' }
+  }
+  Write-Output "PASS: $AgentName retrieved $(@($result.dividends).Count) $Symbol dividends with web evidence and strict JSON in one call."
 } catch {
-  $detail = if ($_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
-  $detail = $detail.Replace($accessToken, '[redacted]')
-  throw "Foundry readiness failed: $($detail.Substring(0, [Math]::Min(800, $detail.Length)))"
+  throw "Foundry dividend smoke test failed ($($_.Exception.GetType().Name)). Verify tool support, project access and reliable history availability."
 } finally {
   $accessToken = $null
   $headers = $null

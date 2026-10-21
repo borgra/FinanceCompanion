@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'src/API/**'
+      - 'infra/agents/**'
       - '.github/workflows/backend-deploy.yml'
   workflow_dispatch:
 
@@ -32,6 +33,7 @@ jobs:
       DIVIDEND_RESEARCH_PROVIDER: ${{ vars.DIVIDEND_RESEARCH_PROVIDER || 'stub' }}
       AZURE_FOUNDRY_ENDPOINT: ${{ vars.AZURE_FOUNDRY_ENDPOINT }}
       AZURE_FOUNDRY_DEPLOYMENT: ${{ vars.AZURE_FOUNDRY_DEPLOYMENT }}
+      AZURE_FOUNDRY_AGENT_NAME: ${{ vars.AZURE_FOUNDRY_AGENT_NAME || 'dividend-history-agent' }}
       AZURE_FOUNDRY_REASONING_EFFORT: ${{ vars.AZURE_FOUNDRY_REASONING_EFFORT }}
       AZURE_FOUNDRY_AUTH_MODE: ${{ vars.AZURE_FOUNDRY_AUTH_MODE || 'entra' }}
       AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID: ${{ vars.AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID }}
@@ -190,7 +192,7 @@ jobs:
           az acr login --name "${{ env.ACR_NAME }}"
 
       - name: Build image
-        run: docker build -t "${IMAGE_NAME}" "${API_PATH}"
+        run: docker build -f "${API_PATH}/Dockerfile" -t "${IMAGE_NAME}" .
 
       - name: Push image
         run: docker push "${IMAGE_NAME}"
@@ -257,6 +259,7 @@ jobs:
                 FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER="${DIVIDEND_RESEARCH_PROVIDER}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT="${AZURE_FOUNDRY_ENDPOINT:-}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT="${AZURE_FOUNDRY_DEPLOYMENT:-}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME="${AZURE_FOUNDRY_AGENT_NAME:-dividend-history-agent}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT="${AZURE_FOUNDRY_REASONING_EFFORT:-}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE="${AZURE_FOUNDRY_AUTH_MODE}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID="${AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID:-}" \

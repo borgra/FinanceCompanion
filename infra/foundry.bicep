@@ -3,6 +3,7 @@ targetScope = 'resourceGroup'
 param appName string
 param location string = resourceGroup().location
 param projectName string = 'distribution-research'
+param agentName string = 'dividend-history-agent'
 param deploymentName string = 'gpt-6-luna'
 param modelName string = 'gpt-6-luna'
 param modelVersion string = '2026-09-22'
@@ -11,7 +12,7 @@ param modelVersion string = '2026-09-22'
 @allowed(['Enabled', 'Disabled'])
 param publicNetworkAccess string = 'Enabled'
 
-@description('Global Standard quota units, not provisioned throughput. 100 gives this model 100k TPM; both research passes need headroom.')
+@description('Global Standard quota units, not provisioned throughput. 100 gives this model 100k TPM; single-pass web research needs headroom.')
 @minValue(1)
 param capacity int = 100
 
@@ -50,7 +51,7 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
   identity: { type: 'SystemAssigned' }
   properties: {
     displayName: 'Finance Companion distributions'
-    description: 'Cited public-web distribution research and structured fact extraction.'
+    description: 'Single-pass cited public-web dividend history research.'
   }
   // Cognitive Services rejects overlapping project/model writes on one account.
   dependsOn: [model]
@@ -92,3 +93,5 @@ output projectEndpoint string = 'https://${foundry.name}.services.ai.azure.com/a
 output deploymentName string = model.name
 output modelVersion string = modelVersion
 output reasoningEffort string = 'low'
+
+output agentName string = agentName

@@ -16,6 +16,7 @@ param(
   [string] $DividendResearchProvider = 'stub',
   [string] $AzureFoundryEndpoint = '',
   [string] $AzureFoundryDeployment = '',
+  [string] $AzureFoundryAgentName = 'dividend-history-agent',
   [string] $AzureFoundryReasoningEffort = '',
   [string] $AzureFoundryManagedIdentityResourceId = '',
   [switch] $EnableFoundry,
@@ -99,7 +100,7 @@ Invoke-DeploymentTranche -Name "runtime-base" -Command {
 
 $newFoundry = $null
 if ($EnableFoundry) {
-  $newFoundry = & (Join-Path $PSScriptRoot 'deploy-foundry.ps1') -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -AppName $AppName -Location $Location -Capacity $FoundryCapacity
+  $newFoundry = & (Join-Path $PSScriptRoot 'deploy-foundry.ps1') -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -AppName $AppName -Location $Location -Capacity $FoundryCapacity -AgentName $AzureFoundryAgentName
   $AzureFoundryEndpoint = $newFoundry.projectEndpoint.value
   $AzureFoundryDeployment = $newFoundry.deploymentName.value
   $AzureFoundryReasoningEffort = $newFoundry.reasoningEffort.value
@@ -137,6 +138,7 @@ Invoke-DeploymentTranche -Name "runtime-api" -Command {
                    dividendResearchProvider=$DividendResearchProvider `
                    azureFoundryEndpoint=$AzureFoundryEndpoint `
                    azureFoundryDeployment=$AzureFoundryDeployment `
+                   azureFoundryAgentName=$AzureFoundryAgentName `
                    azureFoundryReasoningEffort=$AzureFoundryReasoningEffort `
                    azureFoundryManagedIdentityResourceId=$AzureFoundryManagedIdentityResourceId `
                    azureFoundryManagedIdentityClientId=$runtimeIdentityClientId `

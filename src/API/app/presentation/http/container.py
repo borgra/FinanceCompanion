@@ -171,6 +171,7 @@ def build_container(
         from app.infrastructure.foundry_web_research import FoundryWebDividendResearchProvider, FoundrySecuritySearchProvider, UnavailableMarketDetailsProvider
         dividend_research = FoundryWebDividendResearchProvider(
             endpoint=settings.azure_foundry_endpoint, deployment=settings.azure_foundry_deployment,
+            agent_name=settings.azure_foundry_agent_name,
             reasoning_effort=settings.azure_foundry_reasoning_effort,
             auth_mode=settings.azure_foundry_auth_mode, api_key=settings.azure_foundry_api_key,
             environment=settings.environment,

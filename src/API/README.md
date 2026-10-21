@@ -43,7 +43,7 @@ Forecasts use the median of up to three same-season split-normalized observation
 
 See [Local Live Distribution Testing](../../Docs/Local%20Live%20Distribution%20Testing.md) for configuration-only startup and an opt-in retrieval/persistence/restart check. No prepared source files are needed.
 
-Foundry calls Responses with its built-in `web_search` tool to research the exact ticker/exchange, issuer distribution history and corporate actions. A second, tool-free Responses call extracts strict schema facts from the cited answer. The application requires a completed search, returned source URLs, nearby citation annotations, exact claim excerpts and consistent identity/date-role/amount evidence. It rejects unsupported facts instead of synthesizing missing months. Both calls share a 90-second research budget; size/output/tool-call limits bound a refresh. Failed live calls never fall back to demonstration data.
+Dividend refresh uses one Responses call with `web_search` and strict JSON output. The canonical instructions and schema live in `infra/agents/`; native development reads them directly and the API image bundles them. The agent retrieves the trailing 24 months plus announced upcoming dividends. The API validates the requested listing, positive exact amounts, and dates, then uses the existing deterministic forecasting and persistence pipeline. Invalid optional dates are dropped with warnings; failed, empty, or unavailable research preserves saved records. Security lookup retains its separate identity research flow.
 
 Set these server-only values in the ignored root `.env.local`:
 
@@ -51,17 +51,20 @@ Set these server-only values in the ignored root `.env.local`:
 FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER=azure_foundry
 FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT=https://YOUR-RESOURCE.services.ai.azure.com/api/projects/YOUR-PROJECT
 FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT=YOUR-PINNED-DEPLOYMENT
+FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME=dividend-history-agent
 FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT=low
 FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE=entra
 ```
 
-Both project and direct resource endpoints use Responses for web research, with `text.format` in the extraction pass. Leave API_VERSION empty. Project endpoints require Entra. Local constrained `DefaultAzureCredential` uses your `az login`; production uses the API Container App's managed identity, with optional `FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID` to select a user-assigned identity. Web research requests the `https://ai.azure.com/.default` token scope. Configure an Azure deployment supporting Responses, web_search and strict structured outputs. See [Foundry Entra RBAC](../../Docs/Foundry%20Entra%20RBAC.md) for precise roles, scopes, setup scripts and deployment variables.
+Both project and direct resource endpoints use Responses for web research, with `text.format` in the same call. The configured agent name is sent as metadata; runtime supplies the canonical definition inline so both endpoint types work without an extra agent lookup. Leave API_VERSION empty. Project endpoints require Entra. Local constrained `DefaultAzureCredential` uses your `az login`; production uses the API Container App's managed identity, with optional `FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID` to select a user-assigned identity. Web research requests the `https://ai.azure.com/.default` token scope. Configure an Azure deployment supporting Responses, web_search and strict structured outputs. See [Foundry Entra RBAC](../../Docs/Foundry%20Entra%20RBAC.md) for precise roles, scopes, setup scripts and deployment variables.
 
 `infra/scripts/deploy-foundry.ps1` can provision the dedicated GPT-6 Luna deployment. Use `low` reasoning effort for it to keep research within the request budget; leave effort empty for models that do not support this setting.
 
 No separate search key/resource, market-data subscription or source manifest is needed. Search/model usage is billed through Azure and can be blocked by subscription policy. Browser Entra sign-in is independent and optional in local development.
 
-The cited answer is AI-generated research, not independently fetched publisher text. Imported results remain partial/non-authoritative, with saved research visible under Passive Income's research details. Unknown tax classification remains Other. `regularityBasis=inferred_cadence_v1` discloses deterministic recurrence inference, with known specials/off-cycle amount outliers excluded from forecast inputs. Ambiguous pre-split rows remain unverified/excluded. Missing corporate-action coverage is explicitly warned. Forecasts remain unavailable when enough reliable recent inputs cannot be found.
+The structured answer is AI-generated research, not independently fetched publisher text. Imported results remain partial/non-authoritative, with saved JSON, citations, and search evidence visible under Passive Income's research details. The agent imports income dividends on the current share basis; special distributions are excluded from recurring forecasts. `regularityBasis=inferred_cadence_v1` discloses deterministic recurrence inference. Corporate actions are no longer researched by this provider; existing stored actions remain available. Forecasts remain unavailable when enough reliable recent inputs cannot be found.
+
+Build the API image from the repository root with `docker build -f src/API/Dockerfile .` so its canonical agent definition is included. `docker compose -f docker-compose.local.yml up --build` uses the same context and excludes local credentials/data from the build context.
 
 Normal AI research uses Microsoft's hosted search and grounding terms, not arbitrary server-side URL fetching. CI mocks external services; live calls happen only through an explicitly configured provider or the opt-in smoke script.
 

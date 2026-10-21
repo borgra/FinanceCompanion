@@ -6,6 +6,9 @@ param(
   [string]$AppName = 'finance-companion',
   [string]$Location = 'centralus',
   [string]$ProjectName = 'distribution-research',
+  [ValidatePattern('^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$')]
+  [string]$AgentName = 'dividend-history-agent',
+  [switch]$RegisterAgent = $true,
   [string]$DeploymentName = 'gpt-6-luna',
   [string]$ModelName = 'gpt-6-luna',
   [string]$ModelVersion = '2026-09-22',
@@ -22,7 +25,7 @@ function Invoke-FoundryAzureJson {
   return (($result -join "`n") | ConvertFrom-Json)
 }
 $template = Join-Path $PSScriptRoot '../foundry.bicep'
-$parameters = @("appName=$AppName", "location=$Location", "projectName=$ProjectName", "deploymentName=$DeploymentName", "modelName=$ModelName", "modelVersion=$ModelVersion", "capacity=$Capacity")
+$parameters = @("appName=$AppName", "location=$Location", "projectName=$ProjectName", "agentName=$AgentName", "deploymentName=$DeploymentName", "modelName=$ModelName", "modelVersion=$ModelVersion", "capacity=$Capacity")
 if (-not $PSCmdlet.ShouldProcess("$ResourceGroupName / $DeploymentName ($ModelVersion), $Location, GlobalStandard capacity $Capacity", 'Create or update Foundry resource, project, model deployment and project service identity access')) {
   return
 }
@@ -45,4 +48,7 @@ if ($GrantCurrentUser) {
 }
 Write-Host "Foundry endpoint: $($outputs.projectEndpoint.value)"
 Write-Host "Model deployment: $($outputs.deploymentName.value)"
+if ($RegisterAgent) {
+  $null = & (Join-Path $PSScriptRoot 'register-foundry-agent.ps1') -SubscriptionId $SubscriptionId -Endpoint $outputs.projectEndpoint.value -Deployment $outputs.deploymentName.value -AgentName $AgentName
+}
 return $outputs
