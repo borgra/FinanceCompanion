@@ -897,14 +897,16 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
 
                 return (
                   <tr key={holding.id} data-row-key={holding.id} className={selectedHoldingId === holding.id ? 'holdings-row-selected' : undefined} onClick={() => setSelectedHoldingId(holding.id)} onFocusCapture={() => setSelectedHoldingId(holding.id)}>
-                    <td className="holdings-security-cell">
-                      {isCashSecurity(holding.security) ? (
-                        <span className="excel-cell-val">{holding.security.name}</span>
-                      ) : (
-                        <button className="link-button holdings-security-link" type="button" onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
-                      )}
-                      <small>{formatLastUpdated(holding.security.detailsUpdatedAt)}</small>
-                      {holding.security.dividendResearchRetrievedAt ? <small>{holding.security.dividendResearchProvider === 'stub' ? 'Stub data' : 'Dividend data'} · {formatLastUpdated(holding.security.dividendResearchRetrievedAt)}</small> : null}
+                    <td>
+                      <div className="holdings-security-cell">
+                        {isCashSecurity(holding.security) ? (
+                          <span className="excel-cell-val">{holding.security.name}</span>
+                        ) : (
+                          <button className="link-button holdings-security-link" type="button" onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
+                        )}
+                        <small>{formatLastUpdated(holding.security.detailsUpdatedAt)}</small>
+                        {holding.security.dividendResearchRetrievedAt ? <small>{holding.security.dividendResearchProvider === 'stub' ? 'Stub data' : 'Dividend data'} · {formatLastUpdated(holding.security.dividendResearchRetrievedAt)}</small> : null}
+                      </div>
                     </td>
                     <td>
                       <span className="excel-cell-val">{holding.security.symbol}</span>
