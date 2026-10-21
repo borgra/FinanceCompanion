@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { Account } from '../domain/account';
@@ -13,6 +13,68 @@ const account: Account = {
   investmentAccountType: 'Taxable', manageHoldings: true, yearlyContribution: 0,
   columns: [], monthlyRecords: [], createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
 };
+
+describe('HoldingsPage dividend management', () => {
+  it('saves the setting, keeps saved payments, and skips refresh until re-enabled and saved', async () => {
+    const user = userEvent.setup();
+    const repository = createMockHoldingRepository();
+    const holding = await repository.createHolding({
+      security: {
+        symbol: 'VTI', name: 'VTI Fund', exchange: 'NYSE', assetType: 'ETF', currency: 'USD',
+        payoutDetails: [{ exDividendDate: '2026-01-01', amount: 1, mode: 'manual' }],
+      },
+      accountPositions: [{ accountId: account.id, quantity: 10 }],
+    });
+    const refresh = vi.spyOn(repository, 'refreshHoldingDividends');
+    const accountRepository = createMockAccountRepository({ initialAccounts: [account] });
+    const view = render(<HoldingsPage accountRepository={accountRepository} holdingRepository={repository} />);
+    const checkbox = await screen.findByRole('checkbox', { name: 'Manage Dividends for VTI' });
+    expect(checkbox).toBeChecked();
+    await user.click(checkbox);
+    expect(screen.getByRole('button', { name: 'Update VTI dividends' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByText('Holdings saved.');
+    expect((await repository.listHoldings())[0]).toMatchObject({
+      manageDividends: false,
+      security: { payoutDetails: holding.security.payoutDetails },
+    });
+    view.unmount();
+    render(<HoldingsPage accountRepository={accountRepository} holdingRepository={repository} />);
+    expect(await screen.findByRole('checkbox', { name: 'Manage Dividends for VTI' })).not.toBeChecked();
+    await user.click(screen.getByRole('button', { name: 'Update VTI dividends' }));
+    expect(refresh).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('checkbox', { name: 'Manage Dividends for VTI' }));
+    expect(screen.getByRole('button', { name: 'Update VTI dividends' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByText('Holdings saved.');
+    expect(screen.getByRole('button', { name: 'Update VTI dividends' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Update VTI dividends' }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledWith(holding.id));
+  });
+
+  it('defaults legacy holdings to enabled and retains the edited setting after save failure', async () => {
+    const user = userEvent.setup();
+    const repository = createMockHoldingRepository();
+    const legacy: Holding = {
+      id: 'legacy', security: { symbol: 'VTI', name: 'VTI Fund', exchange: 'NYSE', assetType: 'ETF', currency: 'USD' },
+      accountPositions: [{ accountId: account.id, quantity: 10 }], createdAt: '', updatedAt: '',
+    };
+    vi.spyOn(repository, 'listHoldings').mockResolvedValue([legacy]);
+    const save = vi.spyOn(repository, 'updateHoldingsBatch').mockRejectedValueOnce(new Error('Unavailable'))
+      .mockResolvedValueOnce([{ ...legacy, manageDividends: false }]);
+    render(<HoldingsPage accountRepository={createMockAccountRepository({ initialAccounts: [account] })} holdingRepository={repository} />);
+    const checkbox = await screen.findByRole('checkbox', { name: 'Manage Dividends for VTI' });
+    expect(checkbox).toBeChecked();
+    await user.click(checkbox);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to save holdings.');
+    expect(checkbox).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await screen.findByText('Holdings saved.');
+    expect(save).toHaveBeenLastCalledWith([expect.objectContaining({ draft: expect.objectContaining({ manageDividends: false }) })]);
+  });
+});
 
 describe('HoldingsPage manual distributions', () => {
   it.each([true, false])('preserves only manual records when editing payouts (explicit list: %s)', async (explicitList) => {

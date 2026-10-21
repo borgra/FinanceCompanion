@@ -386,6 +386,7 @@ def to_holding(
     payload: HoldingCreateRequest,
     created_at: str,
     updated_at: str,
+    existing_manage_dividends: bool = True,
 ) -> Holding:
     return Holding(
         id=holding_id,
@@ -396,12 +397,14 @@ def to_holding(
         ],
         created_at=created_at,
         updated_at=updated_at,
+        manage_dividends=payload.manage_dividends if "manage_dividends" in payload.model_fields_set else existing_manage_dividends,
     )
 
 
 def to_holding_payload(item: Holding) -> HoldingPayload:
     return HoldingPayload(
         id=item.id,
+        manage_dividends=item.manage_dividends,
         security=to_security_metadata_payload(item.security),
         account_positions=[
             to_holding_account_position_payload(position)

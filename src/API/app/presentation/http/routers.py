@@ -635,7 +635,7 @@ def update_holdings_batch(request: HoldingBatchRequest, user=Depends(require_ses
         if any(position.quantity < 0 for position in item.account_positions):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Quantity must be zero or greater.")
     timestamp = now_iso()
-    holdings = [to_holding(item.id, item, existing_by_id[item.id].created_at, timestamp) for item in request.holdings]
+    holdings = [to_holding(item.id, item, existing_by_id[item.id].created_at, timestamp, existing_by_id[item.id].manage_dividends) for item in request.holdings]
     return [to_holding_payload(item) for item in container.update_holdings_batch.execute(user.user_id, holdings)]
 
 @router.put("/holdings/{holding_id}", response_model=HoldingPayload)
@@ -664,6 +664,7 @@ def update_holding(holding_id: str, request: HoldingCreateRequest, user=Depends(
         payload=request,
         created_at=existing.created_at,
         updated_at=now_iso(),
+        existing_manage_dividends=existing.manage_dividends,
     )
     return to_holding_payload(container.update_holding.execute(user.user_id, holding_id, holding))
 

@@ -35,7 +35,7 @@ class RefreshHoldingDividends:
         holding = next((item for item in holdings if item.id == holding_id), None)
         if holding is None:
             raise NotFoundError("Holding not found.")
-        if is_cash_security(holding.security):
+        if not holding.manage_dividends or is_cash_security(holding.security):
             return holding
         researched_at = holding.security.dividend_research_retrieved_at
         provider_cache_key = getattr(self._provider, "cache_key", None)
@@ -84,8 +84,16 @@ class RefreshHoldingDividends:
             snapshot["evidence"] = result.evidence_snapshot
         snapshot_id = stable_id("snapshot", snapshot)
         timestamp = now_iso()
+        # Research can be slow. Merge onto current records, respecting opt-outs
+        # and manual edits saved while the provider ran.
+        holdings = self._repository.list_for_user(user_id)
+        current_holding = next((item for item in holdings if item.id == holding_id), None)
+        if current_holding is None:
+            raise NotFoundError("Holding not found.")
         changed = []
         for item in holdings:
+            if not item.manage_dividends:
+                continue
             equivalent_exchanges = {holding.security.exchange.casefold(), (result.resolved_exchange or holding.security.exchange).casefold()}
             if result.resolved_exchange:
                 equivalent_exchanges.update({"united states", "us", "usa", "unknown", ""})
@@ -127,5 +135,5 @@ class RefreshHoldingDividends:
             )
             changed.append(replace(item, security=security, updated_at=timestamp))
         logger.info("distribution_research security_id=%s source_count=%d event_count=%d status=%s latency_ms=%d", request.security_id, len({item.source_url for item in inputs}), len(visible) + len(projected), result.status, (time.monotonic() - started) * 1000)
-        persisted = self._repository.update_batch_for_user(user_id, changed)
-        return next(item for item in persisted if item.id == holding_id)
+        persisted = self._repository.update_batch_for_user(user_id, changed) if changed else []
+        return next((item for item in persisted if item.id == holding_id), current_holding)

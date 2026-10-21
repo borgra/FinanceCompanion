@@ -426,6 +426,14 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setSuccessMessage(null);
   };
 
+  const updateManageDividends = (holdingId: string, manageDividends: boolean) => {
+    setHoldings((current) => current.map((holding) =>
+      holding.id === holdingId ? { ...holding, manageDividends } : holding,
+    ));
+    setDirtyHoldingIds((current) => new Set(current).add(holdingId));
+    setSuccessMessage(null);
+  };
+
   const downloadImportTemplate = () => {
     const template = createHoldingImportTemplate(accounts, holdings);
     const url = URL.createObjectURL(new Blob([template], { type: 'text/csv;charset=utf-8' }));
@@ -533,6 +541,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const refreshHoldingDividends = async (holding: Holding) => {
+    if (holding.manageDividends === false || dirtyHoldingIds.has(holding.id)) return;
     setRefreshingDividendHoldingIds((current) => new Set(current).add(holding.id));
     setError(null);
     setSuccessMessage(null);
@@ -668,6 +677,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           id: holding.id,
           draft: {
             security: holding.security,
+            manageDividends: holding.manageDividends ?? true,
             accountPositions: managedAccounts.map((account) => ({
               accountId: account.id,
               quantity: getQuantity(holding, account.id),
@@ -801,6 +811,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
             </button>
           </div>
           <p>{selectedAccount ? `Viewing holdings in ${selectedAccount.name}.` : 'Manage share quantities by investment account.'}</p>
+          <p id="manage-dividends-help">Turn off Manage Dividends to skip distribution refresh for a holding. Save changes to apply; saved payment records are kept.</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <label htmlFor="holdings-account-filter">Account</label>
             <select id="holdings-account-filter" aria-label="Filter holdings by account" value={selectedAccountFilterId} onChange={(event) => { setSelectedAccountFilterId(event.target.value); clearEditingHolding(); }}>
@@ -877,13 +888,14 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                   {account.name.length > 18 ? `${account.name.slice(0, 15)}...` : account.name}
                 </FinanceTableHeaderCell>
               ))}
+              <FinanceTableHeaderCell isEditable>Manage Dividends</FinanceTableHeaderCell>
               <FinanceTableHeaderCell>Actions</FinanceTableHeaderCell>
             </tr>
           </thead>
           <tbody>
             {orderedHoldings.length === 0 ? (
               <tr>
-                <td colSpan={6 + visibleAccounts.length}>
+                <td colSpan={7 + visibleAccounts.length}>
                   <span className="excel-cell-val">{holdings.length === 0 ? 'No holdings have been added yet.' : 'No holdings are in the selected account.'}</span>
                 </td>
               </tr>
@@ -946,6 +958,19 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                       </td>
                     ))}
                     <td>
+                      {isCashSecurity(holding.security) ? <span aria-label="Dividends not applicable">—</span> : (
+                        <input
+                          type="checkbox"
+                          checked={holding.manageDividends !== false}
+                          onChange={(event) => updateManageDividends(holding.id, event.target.checked)}
+                          disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
+                          aria-label={`Manage Dividends for ${holding.security.symbol}`}
+                          aria-describedby="manage-dividends-help"
+                          title="Save changes to apply. When off, distribution refresh skips this holding."
+                        />
+                      )}
+                    </td>
+                    <td>
                       <div className="holdings-row-actions">
                         {!isCashSecurity(holding.security) ? <>
                         <button
@@ -962,10 +987,10 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                           className="link-button holdings-refresh-action"
                           type="button"
                           onClick={() => void refreshHoldingDividends(holding)}
-                          disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
+                          disabled={isSaving || holding.manageDividends === false || dirtyHoldingIds.has(holding.id) || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
                           aria-label={`Update ${holding.security.symbol} dividends`}
                           aria-busy={refreshingDividendHoldingIds.has(holding.id)}
-                          title={`Update ${holding.security.symbol} dividends`}
+                          title={holding.manageDividends === false ? 'Manage Dividends is off' : dirtyHoldingIds.has(holding.id) ? 'Save changes before updating dividends' : `Update ${holding.security.symbol} dividends`}
                         >
                           <span className={`material-symbols-outlined ${refreshingDividendHoldingIds.has(holding.id) ? 'holdings-spin' : ''}`} aria-hidden="true">currency_exchange</span>
                         </button>

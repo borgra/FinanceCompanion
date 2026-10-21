@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Holding } from '../../domain/holding';
 import type { HoldingRepository } from '../../domain/holdingRepository';
 import { ApiError } from '../../api/httpClient';
@@ -11,6 +11,12 @@ type Props = {
   onRefreshed: (holdings: Holding[]) => void;
 };
 
+type RefreshRun = {
+  cancelled: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+  resume?: () => void;
+};
+
 export function DistributionResearchPanel({ holdings, repository, onRefreshed }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState('');
@@ -18,44 +24,68 @@ export function DistributionResearchPanel({ holdings, repository, onRefreshed }:
   const [unavailable, setUnavailable] = useState<string[]>([]);
   const [failureDetails, setFailureDetails] = useState<string[]>([]);
   const [reloadError, setReloadError] = useState(false);
-  const securities = holdings.filter((holding, index, all) =>
-    holding.security.assetType !== 'Cash' && totalQuantity(holding) > 0
-    && all.findIndex((item) => totalQuantity(item) > 0 && item.security.symbol.toUpperCase() === holding.security.symbol.toUpperCase()
+  const activeRun = useRef<RefreshRun | null>(null);
+  useEffect(() => () => {
+    const run = activeRun.current;
+    if (!run) return;
+    run.cancelled = true;
+    clearTimeout(run.timer);
+    run.resume?.();
+  }, []);
+  const securities = holdings.filter((holding) =>
+    holding.manageDividends !== false && holding.security.assetType !== 'Cash' && totalQuantity(holding) > 0)
+    .filter((holding, index, all) =>
+    all.findIndex((item) => item.security.symbol.toUpperCase() === holding.security.symbol.toUpperCase()
       && item.security.exchange.toUpperCase() === holding.security.exchange.toUpperCase()) === index);
 
   const refresh = async (targets = securities) => {
+    if (activeRun.current) return;
+    const run: RefreshRun = { cancelled: false };
+    activeRun.current = run;
     setRefreshing(true);
     setFailures([]);
     setUnavailable([]);
     setFailureDetails([]);
     setReloadError(false);
     setMessage(`Researching 0 of ${targets.length} securities…`);
-    // Web research can take longer than a normal API call. Keep requests bounded
-    // and announce progress as each security completes.
+    // Leave a full provider cooldown after each completed attempt, including
+    // failures, before starting the next security.
     const results: PromiseSettledResult<Holding>[] = new Array(targets.length);
-    let next = 0;
-    let completed = 0;
-    const worker = async () => {
-      while (next < targets.length) {
-        const index = next++;
-        try {
-          const holding = await repository.refreshHoldingDividends(targets[index].id);
-          results[index] = { status: 'fulfilled', value: holding };
-        } catch (reason) { results[index] = { status: 'rejected', reason }; }
-        completed++;
-        setMessage(`Researched ${completed} of ${targets.length} securities…`);
+    for (let index = 0; index < targets.length; index++) {
+      if (run.cancelled) return;
+      setMessage(`Researching ${index} of ${targets.length} securities…`);
+      try {
+        const holding = await repository.refreshHoldingDividends(targets[index].id);
+        results[index] = { status: 'fulfilled', value: holding };
+      } catch (reason) { results[index] = { status: 'rejected', reason }; }
+      if (run.cancelled) return;
+      if (index < targets.length - 1) {
+        setMessage(`Researched ${index + 1} of ${targets.length} securities. Waiting 15 seconds before the next security…`);
+        await new Promise<void>((resolve) => {
+          run.resume = resolve;
+          run.timer = setTimeout(resolve, 15_000);
+        });
+        run.timer = undefined;
+        run.resume = undefined;
       }
-    };
-    await Promise.all(Array.from({ length: Math.min(2, targets.length) }, worker));
+    }
+    if (run.cancelled) return;
     const failed = results.flatMap((result, index) => result.status === 'rejected' ? [targets[index].security.symbol] : []);
     const missing = results.flatMap((result, index) => result.status === 'fulfilled' && result.value.security.dividendResearchStatus === 'unavailable' ? [targets[index].security.symbol] : []);
     setFailures(failed);
     setUnavailable(missing);
     setFailureDetails(results.flatMap((result, index) => result.status === 'rejected' && result.reason instanceof ApiError ? [`${targets[index].security.symbol}: ${result.reason.message}`] : []));
-    try { onRefreshed(await (repository.reloadHoldings ?? repository.listHoldings)()); }
-    catch { setReloadError(true); }
+    try {
+      const refreshed = await (repository.reloadHoldings ?? repository.listHoldings)();
+      if (run.cancelled) return;
+      onRefreshed(refreshed);
+    } catch {
+      if (run.cancelled) return;
+      setReloadError(true);
+    }
     setMessage(`${results.length - failed.length - missing.length} of ${results.length} securities refreshed.`);
     setRefreshing(false);
+    activeRun.current = null;
   };
 
   return <section className="distribution-research" aria-label="Distribution research">
@@ -97,6 +127,6 @@ export function DistributionResearchPanel({ holdings, repository, onRefreshed }:
           <SavedWebResearch evidence={security.dividendResearchSnapshot?.evidence} />
         </li>;
       })}</ul>
-    </details> : <p className="status-copy">Add a non-cash holding with a positive quantity to research distributions.</p>}
+    </details> : <p className="status-copy">Enable Manage Dividends on a non-cash holding with a positive quantity to research distributions.</p>}
   </section>;
 }

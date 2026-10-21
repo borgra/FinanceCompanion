@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { createMockHoldingRepository } from './holdingRepository';
 
 describe('mock holding repository dividend overrides', () => {
+  it('persists dividend management, preserves it on legacy updates, and skips disabled research', async () => {
+    const repository = createMockHoldingRepository();
+    const security = (await repository.searchSecurities('vti'))[0];
+    const draft = { security, accountPositions: [{ accountId: 'brokerage', quantity: 10 }] };
+    const holding = await repository.createHolding(draft);
+    expect(holding.manageDividends).toBe(true);
+    const disabled = await repository.updateHolding(holding.id, { ...draft, manageDividends: false });
+    await expect(repository.refreshHoldingDividends(holding.id)).resolves.toEqual(disabled);
+    expect((await repository.updateHolding(holding.id, draft)).manageDividends).toBe(false);
+    expect((await repository.updateHoldingsBatch([{ id: holding.id, draft }]))[0].manageDividends).toBe(false);
+    expect((await repository.listHoldings())[0].manageDividends).toBe(false);
+    expect((await repository.updateHolding(holding.id, { ...draft, manageDividends: true })).manageDividends).toBe(true);
+    expect((await repository.refreshHoldingDividends(holding.id)).security.dividendResearchProvider).toBe('stub');
+  });
+
   it('preserves distinct same-ex-date source facts when applying one manual override', async () => {
     const repository = createMockHoldingRepository();
     const security = (await repository.searchSecurities('vti'))[0];

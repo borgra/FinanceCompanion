@@ -337,6 +337,7 @@ class HoldingAccountPositionPayload(CamelModel):
 
 class HoldingPayload(CamelModel):
     id: str
+    manage_dividends: bool = Field(default=True, serialization_alias="manageDividends")
     security: SecurityMetadataPayload
     account_positions: list[HoldingAccountPositionPayload] = Field(serialization_alias="accountPositions")
     created_at: str = Field(serialization_alias="createdAt")
@@ -368,6 +369,7 @@ class SecurityMetadataWritePayload(SecurityMetadataPayload):
 
 
 class HoldingCreateRequest(CamelModel):
+    manage_dividends: bool = Field(default=True, serialization_alias="manageDividends")
     security: SecurityMetadataWritePayload
     account_positions: list[HoldingAccountPositionPayload] = Field(serialization_alias="accountPositions")
 
