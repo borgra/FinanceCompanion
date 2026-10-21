@@ -87,6 +87,8 @@ export type HoldingAccountPosition = {
 
 export type Holding = {
   id: string;
+  /** Missing on legacy holdings; defaults to enabled. */
+  manageDividends?: boolean;
   security: SecurityMetadata;
   accountPositions: HoldingAccountPosition[];
   createdAt: string;
@@ -94,6 +96,7 @@ export type Holding = {
 };
 
 export type HoldingDraft = {
+  manageDividends?: boolean;
   security: SecurityMetadata;
   accountPositions: HoldingAccountPosition[];
 };

@@ -1,8 +1,9 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SecurityDetailsDialog } from './SecurityDetailsDialog';
+import type { SecurityMetadata } from '../domain/holding';
 
 const security = {
   symbol: 'SCHD',
@@ -17,7 +18,13 @@ const security = {
   ],
 };
 
+const securityWithPayments = { ...security, payoutDetails: [
+  { exDividendDate: '2026-06-01', amount: 0.5, status: 'completed' as const, mode: 'manual' as const },
+  { exDividendDate: '2027-03-01', amount: 0.55, status: 'projected' as const },
+] };
+
 describe('SecurityDetailsDialog', () => {
+  afterEach(() => vi.restoreAllMocks());
   it('shows security details and the recorded corporate actions in separate tabs', async () => {
     const user = userEvent.setup();
     render(<SecurityDetailsDialog security={security} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendGrowthRate={vi.fn()} />);
@@ -143,6 +150,117 @@ describe('SecurityDetailsDialog', () => {
     expect(screen.getByText('Source unavailable')).toBeInTheDocument();
     rerender(<SecurityDetailsDialog security={security} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendGrowthRate={vi.fn()} />);
     expect(screen.getByText('No distribution events are available.')).toBeInTheDocument();
+  });
+
+  it('confirms removal, shows success, and preserves unsaved dividend and corporate action drafts', async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onRemovePayments = vi.fn().mockResolvedValue(undefined);
+    const props = { onClose: vi.fn(), onSaveCorporateActions: vi.fn(), onSaveDividendGrowthRate: vi.fn(), onRemovePayments };
+    const { rerender } = render(<SecurityDetailsDialog security={securityWithPayments} {...props} />);
+    await user.clear(screen.getByLabelText('Dividend growth rate (%)'));
+    await user.type(screen.getByLabelText('Dividend growth rate (%)'), '6.25');
+    await user.click(screen.getByRole('tab', { name: 'Corporate actions (1)' }));
+    await user.clear(screen.getByLabelText('Old shares'));
+    await user.type(screen.getByLabelText('Old shares'), '2');
+    await user.click(screen.getByRole('tab', { name: 'Details' }));
+    const remove = screen.getByRole('button', { name: 'Remove payments' });
+    expect(remove).toHaveAttribute('type', 'button');
+    expect(remove).toHaveClass('link-button-danger');
+    await user.click(remove);
+    expect(confirm).toHaveBeenCalledExactlyOnceWith('Remove all source, manual, and projected payments for SCHD? Holdings and dividend settings are kept. Refreshing distributions can load source payments again.');
+    expect(onRemovePayments).toHaveBeenCalledOnce();
+    rerender(<SecurityDetailsDialog security={security} {...props} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Payments removed.');
+    expect(screen.getByText('No distribution events are available.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove payments' })).toBeDisabled();
+    expect(screen.getByLabelText('Dividend growth rate (%)')).toHaveValue(6.25);
+    await user.click(screen.getByRole('tab', { name: 'Corporate actions (1)' }));
+    expect(screen.getByLabelText('Old shares')).toHaveValue(2);
+    expect(props.onSaveCorporateActions).not.toHaveBeenCalled();
+    expect(props.onSaveDividendGrowthRate).not.toHaveBeenCalled();
+  });
+
+  it('keeps payments when the confirmation is cancelled', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const onRemovePayments = vi.fn();
+    render(<SecurityDetailsDialog security={securityWithPayments} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendGrowthRate={vi.fn()} onRemovePayments={onRemovePayments} />);
+    await user.click(screen.getByRole('button', { name: 'Remove payments' }));
+    expect(onRemovePayments).not.toHaveBeenCalled();
+    expect(screen.getByText('2026-06-01 · Actual · $0.50 USD per share')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('blocks duplicate removal and other mutation controls while removal is pending', async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    let complete!: () => void;
+    const onRemovePayments = vi.fn().mockImplementation(() => new Promise<void>((resolve) => { complete = resolve; }));
+    const onSaveDividendGrowthRate = vi.fn();
+    const onSaveCorporateActions = vi.fn();
+    render(<SecurityDetailsDialog security={securityWithPayments} onClose={vi.fn()} onSaveCorporateActions={onSaveCorporateActions} onSaveDividendGrowthRate={onSaveDividendGrowthRate} onRemovePayments={onRemovePayments} />);
+    await user.clear(screen.getByLabelText('Dividend growth rate (%)'));
+    await user.type(screen.getByLabelText('Dividend growth rate (%)'), '6.25');
+    await user.click(screen.getByRole('button', { name: 'Remove payments' }));
+    const remove = screen.getByRole('button', { name: 'Removing payments…' });
+    expect(remove).toBeDisabled();
+    expect(remove).toHaveAttribute('aria-busy', 'true');
+    await user.click(remove);
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(onRemovePayments).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText('Dividend growth rate (%)')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+    fireEvent.submit(screen.getByRole('tabpanel'));
+    await user.click(screen.getByRole('tab', { name: 'Corporate actions (1)' }));
+    expect(screen.getByLabelText('Old shares')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Delete corporate action dated 2024-10-10' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    fireEvent.submit(screen.getByRole('tabpanel'));
+    expect(onSaveDividendGrowthRate).not.toHaveBeenCalled();
+    expect(onSaveCorporateActions).not.toHaveBeenCalled();
+    await act(async () => complete());
+    expect(screen.getByLabelText('Old shares')).toBeEnabled();
+  });
+
+  it('keeps records and shows an accessible error on failure, then allows retry', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onRemovePayments = vi.fn().mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce(undefined);
+    render(<SecurityDetailsDialog security={securityWithPayments} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendGrowthRate={vi.fn()} onRemovePayments={onRemovePayments} />);
+    await user.click(screen.getByRole('button', { name: 'Remove payments' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Unable to remove payments. Existing records are still shown. Try again.');
+    expect(screen.getByText('2026-06-01 · Actual · $0.50 USD per share')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove payments' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Remove payments' }));
+    expect(onRemovePayments).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Payments removed.');
+  });
+
+  it('hides removal without a callback and disables it when no saved payment or research data exists', () => {
+    const props = { onClose: vi.fn(), onSaveCorporateActions: vi.fn(), onSaveDividendGrowthRate: vi.fn() };
+    const { rerender } = render(<SecurityDetailsDialog security={securityWithPayments} {...props} />);
+    expect(screen.queryByRole('button', { name: 'Remove payments' })).not.toBeInTheDocument();
+    rerender(<SecurityDetailsDialog security={{ ...security, dividendResearchSnapshot: {}, dividendResearchWarnings: [], payoutDetails: [], sourcePayoutDetails: [], manualPayoutDetails: [], payoutAuditDetails: [] }} {...props} onRemovePayments={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Remove payments' })).toBeDisabled();
+  });
+
+  it.each<Partial<SecurityMetadata>>([
+    { dividendResearchRetrievedAt: '2026-10-21T12:00:00Z' },
+    { dividendResearchSnapshot: { evidence: ['Saved research'] } },
+    { dividendPreviousYear: 0.5 },
+    { dividendCurrentYear: 0.6 },
+    { estimatedFuturePayout: 0.7 },
+    { dividendStatus: 'paid' },
+    { sourcePayoutDetails: [{ exDividendDate: '2026-06-01', amount: 1 }] },
+    { manualPayoutDetails: [{ exDividendDate: '2026-06-01', amount: 1, mode: 'manual' }] },
+    { payoutAuditDetails: [{ exDividendDate: '2026-06-01', amount: 1, status: 'superseded' }] },
+  ])('allows removal when saved metadata exists without visible distribution events (%j)', (savedData) => {
+    render(<SecurityDetailsDialog security={{ ...security, ...savedData }} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendGrowthRate={vi.fn()} onRemovePayments={vi.fn()} />);
+    expect(screen.getByText('No distribution events are available.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove payments' })).toBeEnabled();
   });
 });
 

@@ -2,7 +2,7 @@
 
 **Status:** Live retrieval implemented; credential/RBAC configuration required for live use  
 **Owner:** Product / Engineering  
-**Last updated:** 2026-10-20
+**Last updated:** 2026-10-21
 
 The dividend retrieval and extraction design below is superseded by [Foundry Dividend History Agent](Foundry%20Dividend%20History%20Agent.md). Current refreshes use a single structured Responses call with the shared `infra/agents/` definition; deterministic forecasting, reconciliation, manual payouts, and repository persistence remain in place.
 
@@ -102,6 +102,9 @@ The live implementation uses Foundry's built-in Responses `web_search` tool for 
 - Show year choices for **Current year (Actual + forecast)**, **Previous year (Actual)**, and **Next year (Forecast)**, defaulting to the current year. Include ex-date, pay date when known, per-share amount, currency, type, status, and source link.
 - Mark estimates as **Projected** and declared items as **Announced**; never rely on color alone. Explain split-adjusted values and show original amount/basis on demand.
 - Provide refresh action, last researched time, partial/stale status, and warnings.
+- **Refresh Distribution Data** processes eligible securities sequentially, with a 15-second wait after each attempt before the next security. There is no initial or final wait. Waiting progress is announced, and leaving the view cancels queued requests.
+- **Manage Dividends** is a per-holding checkbox in Holdings, applied with **Save changes**. It defaults to enabled for new and existing holdings. Turning it off skips individual and bulk distribution research without deleting saved payouts or changing their income totals. Cash remains ineligible for research.
+- **Remove payments** in a holding's security details asks for confirmation, then clears that holding's source, manual, projected, and audit payments plus research history and cache. Holdings, quantities, corporate actions, dividend growth rate, and Manage Dividends are kept. Other holdings are unaffected; refreshing distributions can load source payments again.
 - States: loading; no distributions found; unsupported security; partial/unverified sources; stale data; provider/rate-limit failure with retry; AI configuration/permission failure; successful refresh.
 - Preserve manual payout records and identify them as user-entered. Do not imply the forecast is guaranteed or investment advice.
 - Support keyboard operation, screen readers, responsive layouts, and accessible status announcements.
@@ -109,6 +112,8 @@ The live implementation uses Foundry's built-in Responses `web_search` tool for 
 ## API and data contract
 
 Extend the existing `DividendResearchProvider`, `DividendResearchResult`, `RefreshHoldingDividends`, and `POST /api/v1/holdings/{holding_id}/dividends/refresh` flow. Keep the stub provider for tests and credential-free local use.
+
+Holdings expose a persisted `manageDividends` boolean, defaulting to `true` when absent from legacy data. Updates that omit the field preserve the saved setting. Disabled holdings bypass provider calls and are excluded from security-wide research updates.
 
 Each event should carry:
 

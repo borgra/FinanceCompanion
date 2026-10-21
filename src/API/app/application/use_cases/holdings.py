@@ -224,6 +224,53 @@ class ImportManualPayoutDetails:
             updated.append(self._repository.update_for_user(user_id, holding.id, refreshed))
         return updated, unmatched
 
+def _clear_holding_payment_data(holding: Holding, timestamp: str, *, preserve_growth_rate: bool) -> Holding:
+    return replace(
+        holding,
+        security=replace(
+            holding.security,
+            payout_details=[],
+            source_payout_details=[],
+            manual_payout_details=[],
+            payout_audit_details=[],
+            dividend_research_snapshot={},
+            dividend_research_retrieved_at=None,
+            dividend_research_provider=None,
+            dividend_research_source_url=None,
+            dividend_research_authoritative=None,
+            dividend_research_schema_version=None,
+            dividend_research_adjustment_basis=None,
+            dividend_research_warnings=[],
+            dividend_research_as_of=None,
+            dividend_research_status=None,
+            dividend_research_history_start=None,
+            dividend_research_forecast_end=None,
+            dividend_research_snapshot_id=None,
+            dividend_research_cache_key=None,
+            dividend_previous_year=None,
+            dividend_current_year=None,
+            dividend_growth_rate=holding.security.dividend_growth_rate if preserve_growth_rate else None,
+            estimated_future_payout=None,
+            dividend_status=None,
+        ),
+        updated_at=timestamp,
+    )
+
+
+class RemoveHoldingPaymentData:
+    def __init__(self, repository: HoldingRepository) -> None:
+        self._repository = repository
+
+    def execute(self, user_id: str, holding_id: str) -> Holding:
+        holding = next((item for item in self._repository.list_for_user(user_id) if item.id == holding_id), None)
+        if holding is None:
+            raise NotFoundError("Holding not found.")
+        if is_cash_security(holding.security):
+            return holding
+        cleared = _clear_holding_payment_data(holding, now_iso(), preserve_growth_rate=True)
+        return self._repository.update_for_user(user_id, holding_id, cleared)
+
+
 class PurgeHoldingPaymentData:
     def __init__(self, repository: HoldingRepository) -> None:
         self._repository = repository
@@ -235,36 +282,7 @@ class PurgeHoldingPaymentData:
             if is_cash_security(holding.security):
                 updated.append(holding)
                 continue
-            refreshed = replace(
-                holding,
-                security=replace(
-                    holding.security,
-                    payout_details=[],
-                    source_payout_details=[],
-                    manual_payout_details=[],
-                    payout_audit_details=[],
-                    dividend_research_snapshot={},
-                    dividend_research_retrieved_at=None,
-                    dividend_research_provider=None,
-                    dividend_research_source_url=None,
-                    dividend_research_authoritative=None,
-                    dividend_research_schema_version=None,
-                    dividend_research_adjustment_basis=None,
-                    dividend_research_warnings=[],
-                    dividend_research_as_of=None,
-                    dividend_research_status=None,
-                    dividend_research_history_start=None,
-                    dividend_research_forecast_end=None,
-                    dividend_research_snapshot_id=None,
-                    dividend_research_cache_key=None,
-                    dividend_previous_year=None,
-                    dividend_current_year=None,
-                    dividend_growth_rate=None,
-                    estimated_future_payout=None,
-                    dividend_status=None,
-                ),
-                updated_at=timestamp,
-            )
+            refreshed = _clear_holding_payment_data(holding, timestamp, preserve_growth_rate=False)
             updated.append(self._repository.update_for_user(user_id, holding.id, refreshed))
         return updated
 

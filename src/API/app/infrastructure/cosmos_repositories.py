@@ -522,6 +522,7 @@ def _holding_from_entity(entity: dict) -> Holding:
     return Holding(
         id=entity.get("entityId") or entity.get("id") or entity["RowKey"].split(":", 1)[1],
         security=_security_metadata_from_entity(entity),
+        manage_dividends=entity.get("manageDividends", True),
         account_positions=[
             _holding_account_position_from_dict(item)
             for item in positions_data
@@ -568,6 +569,7 @@ def _holding_to_entity(user_id: str, holding: Holding) -> dict:
         "PartitionKey": user_id,
         "RowKey": f"holding:{holding.id}",
         "entityId": holding.id,
+        "manageDividends": holding.manage_dividends,
         "securitySymbol": holding.security.symbol,
         "securityName": holding.security.name,
         "securityExchange": holding.security.exchange,

@@ -2,6 +2,45 @@ import { describe, expect, it } from 'vitest';
 import { createMockHoldingRepository } from './holdingRepository';
 
 describe('mock holding repository dividend overrides', () => {
+  it('removes only the selected holding payments and keeps dividend settings', async () => {
+    const repository = createMockHoldingRepository();
+    const security = (await repository.searchSecurities('vti'))[0];
+    const first = await repository.createHolding({
+      security: { ...security, dividendGrowthRate: 0.07 },
+      manageDividends: false,
+      accountPositions: [{ accountId: 'brokerage', quantity: 10 }],
+    });
+    const other = await repository.createHolding({
+      security: { ...security, symbol: 'OTHER' },
+      accountPositions: [{ accountId: 'brokerage', quantity: 3 }],
+    });
+    const cleared = await repository.removeHoldingPayments!(first.id);
+    expect(cleared.manageDividends).toBe(false);
+    expect(cleared.accountPositions).toEqual(first.accountPositions);
+    expect(cleared.security.dividendGrowthRate).toBe(0.07);
+    expect(cleared.security.payoutDetails).toEqual([]);
+    expect(cleared.security.sourcePayoutDetails).toEqual([]);
+    expect(cleared.security.manualPayoutDetails).toEqual([]);
+    expect(cleared.security.payoutAuditDetails).toEqual([]);
+    expect((await repository.listHoldings()).find((holding) => holding.id === other.id)).toEqual(other);
+    await expect(repository.removeHoldingPayments!('missing')).rejects.toThrow('Holding not found');
+  });
+
+  it('persists dividend management, preserves it on legacy updates, and skips disabled research', async () => {
+    const repository = createMockHoldingRepository();
+    const security = (await repository.searchSecurities('vti'))[0];
+    const draft = { security, accountPositions: [{ accountId: 'brokerage', quantity: 10 }] };
+    const holding = await repository.createHolding(draft);
+    expect(holding.manageDividends).toBe(true);
+    const disabled = await repository.updateHolding(holding.id, { ...draft, manageDividends: false });
+    await expect(repository.refreshHoldingDividends(holding.id)).resolves.toEqual(disabled);
+    expect((await repository.updateHolding(holding.id, draft)).manageDividends).toBe(false);
+    expect((await repository.updateHoldingsBatch([{ id: holding.id, draft }]))[0].manageDividends).toBe(false);
+    expect((await repository.listHoldings())[0].manageDividends).toBe(false);
+    expect((await repository.updateHolding(holding.id, { ...draft, manageDividends: true })).manageDividends).toBe(true);
+    expect((await repository.refreshHoldingDividends(holding.id)).security.dividendResearchProvider).toBe('stub');
+  });
+
   it('preserves distinct same-ex-date source facts when applying one manual override', async () => {
     const repository = createMockHoldingRepository();
     const security = (await repository.searchSecurities('vti'))[0];

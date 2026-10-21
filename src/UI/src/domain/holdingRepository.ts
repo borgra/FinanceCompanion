@@ -19,6 +19,7 @@ export type HoldingRepository = {
   importHoldingDetails?: (rows: HoldingImportRow[]) => Promise<HoldingImportResult>;
   importManualPayoutDetails?: (rows: PassiveIncomeImportRow[]) => Promise<HoldingImportResult>;
   purgePaymentData?: () => Promise<Holding[]>;
+  removeHoldingPayments?: (id: string) => Promise<Holding>;
   deleteHolding: (id: string) => Promise<void>;
   refreshHoldingSecurityDetails: (id: string) => Promise<Holding>;
   refreshHoldingDividends: (id: string) => Promise<Holding>;
@@ -228,6 +229,7 @@ export function createMockHoldingRepository(): HoldingRepository {
       const timestamp = nowIso();
       const next: Holding = {
         id: `holding-${crypto.randomUUID().slice(0, 8)}`,
+        manageDividends: draft.manageDividends ?? true,
         security: { ...draft.security },
         accountPositions: draft.accountPositions.map((position) => ({ ...position })),
         createdAt: timestamp,
@@ -294,13 +296,38 @@ export function createMockHoldingRepository(): HoldingRepository {
         updatedAt: nowIso(),
       }));
       return holdings.map((holding) => ({ ...holding, security: { ...holding.security } }));
-    },    updateHolding: async (id, draft) => {
+    },
+    removeHoldingPayments: async (id) => {
+      const existing = holdings.find((holding) => holding.id === id);
+      if (!existing) throw new Error('Holding not found.');
+      if (isCashSecurity(existing.security)) return { ...existing };
+      const updated: Holding = {
+        ...existing,
+        security: {
+          ...existing.security,
+          payoutDetails: [], sourcePayoutDetails: [], manualPayoutDetails: [], payoutAuditDetails: [],
+          dividendResearchSnapshot: {}, dividendResearchRetrievedAt: null,
+          dividendResearchProvider: null, dividendResearchSourceUrl: null,
+          dividendResearchAuthoritative: null, dividendResearchSchemaVersion: null,
+          dividendResearchAdjustmentBasis: null, dividendResearchWarnings: [],
+          dividendResearchAsOf: null, dividendResearchStatus: null,
+          dividendResearchHistoryStart: null, dividendResearchForecastEnd: null,
+          dividendResearchSnapshotId: null, dividendPreviousYear: null,
+          dividendCurrentYear: null, estimatedFuturePayout: null, dividendStatus: null,
+        },
+        updatedAt: nowIso(),
+      };
+      holdings = holdings.map((holding) => holding.id === id ? updated : holding);
+      return structuredClone(updated);
+    },
+    updateHolding: async (id, draft) => {
       const existing = holdings.find((holding) => holding.id === id);
       if (!existing) {
         throw new Error('Holding not found.');
       }
       const updated: Holding = {
         ...existing,
+        manageDividends: draft.manageDividends ?? existing.manageDividends ?? true,
         security: { ...draft.security },
         accountPositions: draft.accountPositions.map((position) => ({ ...position })),
         updatedAt: nowIso(),
@@ -317,7 +344,7 @@ export function createMockHoldingRepository(): HoldingRepository {
       const timestamp = nowIso();
       const nextHoldings = holdings.map((holding) => {
         const draft = changesById.get(holding.id);
-        return draft ? { ...holding, security: { ...draft.security }, accountPositions: draft.accountPositions.map((position) => ({ ...position })), updatedAt: timestamp } : holding;
+        return draft ? { ...holding, manageDividends: draft.manageDividends ?? holding.manageDividends ?? true, security: { ...draft.security }, accountPositions: draft.accountPositions.map((position) => ({ ...position })), updatedAt: timestamp } : holding;
       });
       holdings = nextHoldings;
       return nextHoldings.filter((holding) => changesById.has(holding.id)).map((holding) => ({ ...holding, security: { ...holding.security }, accountPositions: holding.accountPositions.map((position) => ({ ...position })) }));
@@ -361,7 +388,7 @@ export function createMockHoldingRepository(): HoldingRepository {
     refreshHoldingDividends: async (id) => {
       const existing = holdings.find((holding) => holding.id === id);
       if (!existing) throw new Error('Holding not found.');
-      if (isCashSecurity(existing.security)) {
+      if (isCashSecurity(existing.security) || existing.manageDividends === false) {
         return { ...existing, security: { ...existing.security }, accountPositions: existing.accountPositions.map((position) => ({ ...position })) };
       }
       const today = new Date();

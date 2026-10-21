@@ -209,6 +209,7 @@ def _holding_account_position_from_dict(data: dict) -> HoldingAccountPosition:
 def _holding_from_dict(data: dict) -> Holding:
     return Holding(
         id=data["id"],
+        manage_dividends=data.get("manageDividends", True),
         security=_security_metadata_from_dict(data["security"]),
         account_positions=[
             _holding_account_position_from_dict(item)

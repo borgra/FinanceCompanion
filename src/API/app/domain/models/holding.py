@@ -19,3 +19,4 @@ class Holding:
     account_positions: list[HoldingAccountPosition]
     created_at: str
     updated_at: str
+    manage_dividends: bool = True

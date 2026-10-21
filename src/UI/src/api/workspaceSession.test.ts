@@ -27,6 +27,21 @@ const workspace = (): Workspace => ({
 });
 
 describe('workspace session', () => {
+  it('reconciles payment removal for one holding without changing siblings', async () => {
+    const first: Holding = {
+      id: 'first', manageDividends: false,
+      security: { symbol: 'VTI', name: 'VTI', exchange: 'NYSE', assetType: 'ETF', currency: 'USD', payoutDetails: [{ exDividendDate: '2026-01-01', amount: 1 }] },
+      accountPositions: [{ accountId: 'account', quantity: 10 }], createdAt: '', updatedAt: '',
+    };
+    const sibling = { ...first, id: 'sibling' };
+    const cleared = { ...first, security: { ...first.security, payoutDetails: [], sourcePayoutDetails: [], manualPayoutDetails: [] } };
+    const client = { delete: vi.fn().mockResolvedValue(cleared) } as unknown as HttpClient;
+    const { holdingRepository } = createWorkspaceSession({ ...workspace(), holdings: [first, sibling] }, client);
+    await holdingRepository.removeHoldingPayments!(first.id);
+    expect(client.delete).toHaveBeenCalledExactlyOnceWith('/holdings/first/payouts');
+    expect(await holdingRepository.listHoldings()).toEqual([cleared, sibling]);
+  });
+
   it('reloads all holding research after a security-wide mutation without copying manual overrides', async () => {
     const first: Holding = {
       id: 'first', security: { symbol: 'TEST', name: 'Test', exchange: 'NYSE', assetType: 'Equity', currency: 'USD', manualPayoutDetails: [{ exDividendDate: '2026-01-01', amount: 1, mode: 'manual' }] },

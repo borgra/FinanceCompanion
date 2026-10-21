@@ -27,6 +27,7 @@ from app.application.use_cases.holdings import (
     ImportHoldingDetails,
     ImportManualPayoutDetails,
     PurgeHoldingPaymentData,
+    RemoveHoldingPaymentData,
     ListHoldings,
     UpdateHolding,
     UpdateHoldingsBatch,
@@ -91,6 +92,7 @@ class Container:
     import_holding_details: ImportHoldingDetails
     import_manual_payout_details: ImportManualPayoutDetails
     purge_holding_payment_data: PurgeHoldingPaymentData
+    remove_holding_payment_data: RemoveHoldingPaymentData
     delete_holding: DeleteHolding
     update_manual_payout_details: UpdateManualPayoutDetails
     search_securities: SearchSecurities
@@ -221,6 +223,7 @@ def build_container(
         import_holding_details=ImportHoldingDetails(holdings),
         import_manual_payout_details=ImportManualPayoutDetails(holdings),
         purge_holding_payment_data=PurgeHoldingPaymentData(holdings),
+        remove_holding_payment_data=RemoveHoldingPaymentData(holdings),
         delete_holding=DeleteHolding(holdings),
         update_manual_payout_details=UpdateManualPayoutDetails(holdings),
         search_securities=SearchSecurities(

@@ -255,6 +255,7 @@ export function createWorkspaceSession(
       await holdingApi.deleteHolding(id);
       state.holdings = (state.holdings ?? []).filter((holding) => holding.id !== id);
     },
+    removeHoldingPayments: async (id) => reconcileHolding(await holdingApi.removeHoldingPayments!(id)),
     refreshHoldingSecurityDetails: async (id) => reconcileHolding(await holdingApi.refreshHoldingSecurityDetails(id)),
     refreshHoldingDividends: async (id) => reconcileHolding(await holdingApi.refreshHoldingDividends(id)),
     refreshHeldSecurityDetails: async () => {
