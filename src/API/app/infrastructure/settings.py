@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     dividend_research_provider: Literal["stub", "azure_foundry"] | None = None
     azure_foundry_endpoint: str | None = None
     azure_foundry_deployment: str | None = None
+    azure_foundry_agent_name: str = Field(default="dividend-history-agent", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
     azure_foundry_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
     azure_foundry_api_version: str | None = None
     azure_foundry_auth_mode: Literal["entra", "key"] = "entra"

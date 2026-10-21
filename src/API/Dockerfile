@@ -5,10 +5,11 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /service
 
-COPY pyproject.toml ./
+COPY src/API/pyproject.toml ./
 RUN pip install --no-cache-dir --upgrade "pip>=26.2" && pip install --no-cache-dir .
 
-COPY app ./app
+COPY src/API/app ./app
+COPY infra/agents ./app/infrastructure/agents
 
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /service
 USER appuser

@@ -1,8 +1,8 @@
 services:
   api:
     build:
-      context: ./src/API
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/API/Dockerfile
     environment:
       FINANCE_COMPANION_ENVIRONMENT: development
       FINANCE_COMPANION_DATA_BACKEND: json

@@ -1,0 +1,15 @@
+**/.env
+**/.env.*
+**/.venv
+**/venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.egg-info
+**/dist
+**/.coverage
+**/htmlcov
+.git
+.local-data
+.local-dev-processes.json

@@ -4,6 +4,8 @@
 **Owner:** Product / Engineering  
 **Last updated:** 2026-10-20
 
+The dividend retrieval and extraction design below is superseded by [Foundry Dividend History Agent](Foundry%20Dividend%20History%20Agent.md). Current refreshes use a single structured Responses call with the shared `infra/agents/` definition; deterministic forecasting, reconciliation, manual payouts, and repository persistence remain in place.
+
 ## Summary
 
 Research a security’s distribution events from the web, normalize history to a consistent per-share basis, adjust for splits and reverse splits, and forecast regular distributions through the end of next calendar year. When a forecast is later announced or paid, replace its displayed estimate with the sourced event while retaining an audit trail.
@@ -209,9 +211,9 @@ Extend the existing payout record and repository instead of introducing a separa
 
 ### Live source strategy and configuration
 
-The application uses `DIVIDEND_RESEARCH_PROVIDER=azure_foundry` by default for AI research. A Responses search pass discovers cited identity/distribution/corporate-action claims, then a strict schema extraction pass imports them. Completed tool calls, actual search-source URLs, nearby URL citations, exact evidence excerpts, ticker/exchange identity and economic fields are checked before import. No Alpha Vantage account/key, source manifest, or hand-entered monthly history is required. The application performs all forecast arithmetic.
+Live AI research uses `DIVIDEND_RESEARCH_PROVIDER=azure_foundry`. Dividend refresh makes one Responses call with `web_search` and strict JSON output using the canonical instructions/schema in `infra/agents/`. The API checks ticker/exchange identity, positive exact amounts, date roles, and public HTTPS source URLs without a prose extraction pass. No Alpha Vantage account/key, source manifest, or hand-entered monthly history is required. The application performs all forecast arithmetic. Empty or failed research preserves saved records.
 
-Missing tax/regularity metadata is explicit: distributionType=other and regularityBasis=inferred_cadence_v1 when a deterministic recurring cadence is inferred. Known special/off-cycle outliers do not enter recurring forecast inputs. Ambiguous pre-split amounts remain unverified/excluded rather than guessing whether to normalize them. Saved snapshots include the AI answer, citations, public search actions and accepted claim excerpts; the Passive Income screen exposes them for inspection. Public-web extraction is not proof of complete source coverage, so imported results carry partial-status warnings.
+The dividend agent maps cash dividends to income on the current share basis. Explicitly special distributions do not enter recurring forecast inputs; deterministic recurrence inference remains available as `regularityBasis=inferred_cadence_v1`. Saved snapshots include the structured AI answer, citations, public search actions, and accepted event references; the Passive Income screen exposes them for inspection. Corporate actions are no longer retrieved by this provider. Public-web research is not proof of complete source coverage, so imported results carry partial-status warnings.
 
 Local native startup reads the ignored `.env.local` only, uses your host's Azure CLI login for Foundry Entra access, and persists to `.local-data/finance.json`. See [Local Live Distribution Testing](Local%20Live%20Distribution%20Testing.md) for the template, startup command, smoke check, and restart verification. The ordinary Docker stack remains a credential-free offline demo; host login is not copied into a container.
 

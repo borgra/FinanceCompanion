@@ -30,6 +30,7 @@ jobs:
       DIVIDEND_RESEARCH_PROVIDER: ${{ vars.DIVIDEND_RESEARCH_PROVIDER || 'stub' }}
       AZURE_FOUNDRY_ENDPOINT: ${{ vars.AZURE_FOUNDRY_ENDPOINT }}
       AZURE_FOUNDRY_DEPLOYMENT: ${{ vars.AZURE_FOUNDRY_DEPLOYMENT }}
+      AZURE_FOUNDRY_AGENT_NAME: ${{ vars.AZURE_FOUNDRY_AGENT_NAME || 'dividend-history-agent' }}
       AZURE_FOUNDRY_REASONING_EFFORT: ${{ vars.AZURE_FOUNDRY_REASONING_EFFORT }}
       AZURE_FOUNDRY_CAPACITY: ${{ vars.AZURE_FOUNDRY_CAPACITY || '100' }}
       AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID: ${{ vars.AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID }}
@@ -171,7 +172,7 @@ jobs:
               --name "${APP_NAME}-foundry" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --template-file infra/foundry.bicep \
-              --parameters appName="${APP_NAME}" location="${AZURE_LOCATION}" capacity="${AZURE_FOUNDRY_CAPACITY}" \
+              --parameters appName="${APP_NAME}" location="${AZURE_LOCATION}" capacity="${AZURE_FOUNDRY_CAPACITY}" agentName="${AZURE_FOUNDRY_AGENT_NAME}" \
               --query properties.outputs --output json --only-show-errors > foundry-outputs.json
             {
               echo "AZURE_FOUNDRY_ENDPOINT=$(jq -r '.projectEndpoint.value' foundry-outputs.json)"
@@ -180,6 +181,12 @@ jobs:
               echo "NEW_FOUNDRY_RESOURCE_ID=$(jq -r '.foundryResourceId.value' foundry-outputs.json)"
               echo "NEW_FOUNDRY_PROJECT_NAME=$(jq -r '.projectName.value' foundry-outputs.json)"
             } >> "${GITHUB_ENV}"
+
+      - name: Register dividend history agent
+        if: env.DIVIDEND_RESEARCH_PROVIDER == 'azure_foundry' && contains(env.AZURE_FOUNDRY_ENDPOINT, '/api/projects/')
+        shell: pwsh
+        run: |
+          ./infra/scripts/register-foundry-agent.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_AGENT_NAME
 
       - name: Deploy Runtime API
         env:
@@ -226,6 +233,7 @@ jobs:
                            dividendResearchProvider="${DIVIDEND_RESEARCH_PROVIDER}" \
                            azureFoundryEndpoint="${AZURE_FOUNDRY_ENDPOINT:-}" \
                            azureFoundryDeployment="${AZURE_FOUNDRY_DEPLOYMENT:-}" \
+                           azureFoundryAgentName="${AZURE_FOUNDRY_AGENT_NAME:-dividend-history-agent}" \
                            azureFoundryReasoningEffort="${AZURE_FOUNDRY_REASONING_EFFORT:-}" \
                            azureFoundryManagedIdentityResourceId="${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID:-}" \
                            azureFoundryManagedIdentityClientId="${MI_CLIENT_ID}" \

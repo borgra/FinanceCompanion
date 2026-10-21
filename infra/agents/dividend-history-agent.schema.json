@@ -1,0 +1,48 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "symbol",
+    "name",
+    "exchange",
+    "asset_type",
+    "currency",
+    "source_url",
+    "dividends",
+    "error"
+  ],
+  "properties": {
+    "symbol": { "type": "string" },
+    "name": { "type": ["string", "null"] },
+    "exchange": { "type": ["string", "null"] },
+    "asset_type": { "type": ["string", "null"], "enum": ["ETF", "Stock", null] },
+    "currency": { "type": "string", "enum": ["USD"] },
+    "source_url": { "type": ["string", "null"] },
+    "dividends": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ex_dividend_date",
+          "amount",
+          "declaration_date",
+          "record_date",
+          "payment_date",
+          "status",
+          "is_special"
+        ],
+        "properties": {
+          "ex_dividend_date": { "type": "string" },
+          "amount": { "type": "number" },
+          "declaration_date": { "type": ["string", "null"] },
+          "record_date": { "type": ["string", "null"] },
+          "payment_date": { "type": ["string", "null"] },
+          "status": { "type": "string", "enum": ["completed", "announced"] },
+          "is_special": { "type": "boolean" }
+        }
+      }
+    },
+    "error": { "type": ["string", "null"] }
+  }
+}

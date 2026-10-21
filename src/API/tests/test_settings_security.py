@@ -8,6 +8,33 @@ from app.infrastructure.settings import Settings
 from app.presentation.http.schemas import SecurityPayoutDetailsPayload
 
 
+def test_foundry_agent_configuration_defaults_and_environment_override(monkeypatch):
+    monkeypatch.delenv("FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME", raising=False)
+    assert Settings(_env_file=None).azure_foundry_agent_name == "dividend-history-agent"
+    monkeypatch.setenv("FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME", "income-history-agent")
+    assert Settings(_env_file=None).azure_foundry_agent_name == "income-history-agent"
+
+
+def test_foundry_reasoning_configuration_remains_optional():
+    assert Settings(_env_file=None, azure_foundry_reasoning_effort="").azure_foundry_reasoning_effort is None
+    assert Settings(_env_file=None, azure_foundry_reasoning_effort="low").azure_foundry_reasoning_effort == "low"
+
+
+def test_foundry_configuration_has_no_market_data_vendor_key_requirement():
+    settings = Settings(_env_file=None, dividend_research_provider="azure_foundry",
+        azure_foundry_endpoint="https://demo.services.ai.azure.com/api/projects/income",
+        azure_foundry_deployment="web-model", alpha_vantage_api_key=None)
+    settings.validate_security()
+
+
+@pytest.mark.parametrize("endpoint", ["https://127.0.0.1/private", "http://demo.openai.azure.com", "https://demo.openai.azure.com/unexpected", "https://demo.openai.azure.com?key=unsafe"])
+def test_foundry_configuration_rejects_unsafe_or_unsupported_endpoints(endpoint):
+    settings = Settings(_env_file=None, dividend_research_provider="azure_foundry",
+        azure_foundry_endpoint=endpoint, azure_foundry_deployment="web-model")
+    with pytest.raises(ValueError, match="Azure resource HTTPS endpoint"):
+        settings.validate_security()
+
+
 def test_non_development_requires_non_default_session_secret():
     settings = Settings(
         environment="production",
