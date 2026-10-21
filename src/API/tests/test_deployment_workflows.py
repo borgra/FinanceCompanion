@@ -31,9 +31,9 @@ def find_bash():
 BASH = find_bash()
 pytestmark = pytest.mark.skipif(not BASH, reason="Bash (Git Bash on Windows) is required")
 OPTIONAL_SETTINGS = (
-    "AZURE_FOUNDRY_ENDPOINT", "AZURE_FOUNDRY_DEPLOYMENT", "AZURE_FOUNDRY_AGENT_NAME", "AZURE_FOUNDRY_REASONING_EFFORT",
+    "AZURE_FOUNDRY_ENDPOINT", "AZURE_FOUNDRY_DEPLOYMENT", "AZURE_FOUNDRY_AGENT_NAME", "AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME", "AZURE_FOUNDRY_REASONING_EFFORT",
+    "AZURE_FOUNDRY_AGENT_VERSION", "AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION", "AZURE_FOUNDRY_RAI_POLICY_ID",
     "AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID", "AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID",
-    "LEGACY_ALPHA_VANTAGE_API_KEY", "ALPHA_VANTAGE_SECRET_REF",
 )
 
 
@@ -73,17 +73,16 @@ az() {
 }
 jq() {
   if [[ "$1" == -n ]]; then
-    local ss='' av=''
+    local ss=''
     shift
     while [[ "${1:-}" == --arg ]]; do
       case "$2" in
         ss) ss="$3" ;;
-        av) av="$3" ;;
         *) echo 'Unexpected jq argument' >&2; return 99 ;;
       esac
       shift 3
     done
-    printf '{"sessionSecret":{"value":"%s"},"alphaVantageApiKey":{"value":"%s"}}\n' "$ss" "$av"
+    printf '{"sessionSecret":{"value":"%s"}}\n' "$ss"
   elif [[ "$1" == -r ]]; then
     # Only external JSON selection is mocked; the real workflow controls all
     # fallback logic, shell expansion, command arguments and environment writes.
@@ -180,17 +179,9 @@ def test_foundry_discovery_propagates_azure_failure(tmp_path):
 def test_secret_configuration_does_not_require_legacy_market_data_key(tmp_path, empty_optional):
     result, values, calls = execute_step(tmp_path, "backend-deploy.yml", "Configure API secrets", empty_optional=empty_optional)
     assert result.returncode == 0, result.stderr
-    assert values["ALPHA_VANTAGE_SECRET_REF"] == ""
+    assert values == {}
     assert len(calls) == 2
     assert "cosmos-table-connection-string=" in calls[1] and "alpha-vantage-api-key=" not in calls[1]
-
-
-def test_secret_configuration_preserves_explicit_legacy_key(tmp_path):
-    result, values, calls = execute_step(tmp_path, "backend-deploy.yml", "Configure API secrets", {"LEGACY_ALPHA_VANTAGE_API_KEY": "offline-test-key"})
-    assert result.returncode == 0, result.stderr
-    assert values["ALPHA_VANTAGE_SECRET_REF"] == "secretref:alpha-vantage-api-key"
-    assert len(calls) == 3 and "alpha-vantage-api-key=offline-test-key" in calls[-1]
-
 
 @pytest.mark.parametrize("empty_optional", [False, True], ids=["unset", "empty"])
 def test_system_identity_does_not_require_user_assigned_identity(tmp_path, empty_optional):
@@ -220,6 +211,8 @@ def test_api_deployment_supports_optional_configuration(tmp_path, provider, empt
     assert f"FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER={provider}" in calls[0]
     assert "FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT=" in calls[0]
     assert "FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME=dividend-history-agent" in calls[0]
+    assert "FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME=stock-details-agent" in calls[0]
+    assert "--remove-env-vars FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY" in calls[0]
     if provider == "azure_foundry":
         assert "FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT=custom-model" in calls[0]
 
@@ -231,22 +224,22 @@ def test_infra_up_supports_stub_without_optional_foundry_settings_or_keys(tmp_pa
     assert len(calls) == 1 and "deployment group create" in calls[0]
     assert "dividendResearchProvider=stub" in calls[0]
     assert "azureFoundryAgentName=dividend-history-agent" in calls[0]
+    assert "azureFoundryStockDetailsAgentName=stock-details-agent" in calls[0]
     assert "azureFoundryManagedIdentityResourceId=" in calls[0]
-    assert json.loads((tmp_path / "secret-params").read_text())["alphaVantageApiKey"]["value"] == ""
+    assert set(json.loads((tmp_path / "secret-params").read_text())) == {"sessionSecret"}
 
 
 def test_infra_up_preserves_explicit_optional_configuration(tmp_path):
     result, _, calls = execute_step(tmp_path, "infra-up.yml", "Deploy Runtime API", {
         "AZURE_FOUNDRY_ENDPOINT": "https://example.openai.azure.com", "AZURE_FOUNDRY_DEPLOYMENT": "custom-model",
         "AZURE_FOUNDRY_REASONING_EFFORT": "medium", "AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID": "test-identity",
-        "LEGACY_ALPHA_VANTAGE_API_KEY": "offline-test-key",
     })
     assert result.returncode == 0, result.stderr
     assert len(calls) == 2 and "identity show --ids test-identity" in calls[0]
     assert "azureFoundryDeployment=custom-model" in calls[1]
     assert "azureFoundryReasoningEffort=medium" in calls[1]
     assert "azureFoundryManagedIdentityClientId=mock-managed-client" in calls[1]
-    assert json.loads((tmp_path / "secret-params").read_text())["alphaVantageApiKey"]["value"] == "offline-test-key"
+    assert set(json.loads((tmp_path / "secret-params").read_text())) == {"sessionSecret"}
 
 
 def test_infra_up_development_does_not_require_entra_configuration(tmp_path):
@@ -292,3 +285,66 @@ def test_backend_image_packages_canonical_agent_assets():
     workflow = (WORKFLOWS / "backend-deploy.yml").read_text(encoding="utf-8")
     assert "'infra/agents/**'" in workflow
     assert 'docker build -f "${API_PATH}/Dockerfile" -t "${IMAGE_NAME}" .' in workflow
+
+
+@pytest.mark.parametrize("workflow,step,argument", [
+    ("backend-deploy.yml", "Deploy API image", "FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME=custom-stock"),
+    ("infra-up.yml", "Deploy Runtime API", "azureFoundryStockDetailsAgentName=custom-stock"),
+])
+def test_stock_agent_name_override_reaches_runtime(tmp_path, workflow, step, argument):
+    result, _, calls = execute_step(tmp_path, workflow, step, {"AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME": "custom-stock"})
+    assert result.returncode == 0, result.stderr
+    assert argument in calls[-1]
+
+
+def test_workflows_register_both_kinds_only_for_project_endpoints():
+    for workflow in ("backend-deploy.yml", "infra-up.yml"):
+        source = (WORKFLOWS / workflow).read_text(encoding="utf-8")
+        block = source.split("      - name: Register Foundry agents\n", 1)[1].split("\n      - name:", 1)[0]
+        assert "contains(env.AZURE_FOUNDRY_ENDPOINT, '/api/projects/')" in block
+        assert "-AgentKind dividend-history" in block and "-AgentKind stock-details" in block
+        assert "$env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME" in block
+        assert "require distinct names" in block
+        assert "secrets.ALPHA_VANTAGE_API_KEY" not in source
+        assert "alphaVantageApiKey" not in source
+
+
+@pytest.mark.parametrize("missing,error", [
+    ("AZURE_FOUNDRY_RAI_POLICY_ID", "Set AZURE_FOUNDRY_RAI_POLICY_ID"),
+    ("AZURE_FOUNDRY_AGENT_VERSION", "Approve immutable"),
+    ("AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION", "Approve immutable"),
+])
+def test_live_deployment_requires_explicit_approvals(tmp_path, missing, error):
+    settings = {"AZURE_FOUNDRY_ENDPOINT": "https://example.services.ai.azure.com/api/projects/research", "AZURE_FOUNDRY_DEPLOYMENT": "luna", "AZURE_FOUNDRY_RAI_POLICY_ID": "/subscriptions/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/example/raiPolicies/research-injection-blocking-v1", "AZURE_FOUNDRY_AGENT_VERSION": "7", "AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION": "9"}
+    settings.pop(missing)
+    result, _, calls = execute_step(tmp_path, "backend-deploy.yml", "Validate distribution provider configuration", settings)
+    assert result.returncode != 0
+    assert error in result.stderr
+    assert not calls
+
+
+def test_live_workflows_keep_approval_values_explicit_and_preflight_without_inference():
+    for workflow in ("backend-deploy.yml", "infra-up.yml"):
+        source = (WORKFLOWS / workflow).read_text(encoding="utf-8")
+        assert "AZURE_FOUNDRY_AGENT_VERSION: ${{ vars.AZURE_FOUNDRY_AGENT_VERSION }}" in source
+        assert "AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION: ${{ vars.AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION }}" in source
+        assert source.count("-VerifyConfigurationOnly") == 2
+        assert "-RaiPolicyId $env:AZURE_FOUNDRY_RAI_POLICY_ID" in source
+        assert "-AgentVersion $env:AZURE_FOUNDRY_AGENT_VERSION" in source
+        assert "-AgentVersion $env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION" in source
+
+
+@pytest.mark.parametrize("workflow,step,prefix", [
+    ("backend-deploy.yml", "Deploy API image", "FINANCE_COMPANION_AZURE_FOUNDRY_"),
+    ("infra-up.yml", "Deploy Runtime API", "azureFoundry"),
+])
+def test_explicit_security_approvals_reach_runtime(tmp_path, workflow, step, prefix):
+    policy = "/subscriptions/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/example/raiPolicies/research-v1"
+    result, _, calls = execute_step(tmp_path, workflow, step, {"AZURE_FOUNDRY_AGENT_VERSION": "7", "AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION": "9", "AZURE_FOUNDRY_RAI_POLICY_ID": policy})
+    assert result.returncode == 0, result.stderr
+    if prefix.startswith("FINANCE"):
+        expected = {"AGENT_VERSION": "7", "STOCK_DETAILS_AGENT_VERSION": "9", "RAI_POLICY_ID": policy}
+    else:
+        expected = {"AgentVersion": "7", "StockDetailsAgentVersion": "9", "RaiPolicyId": policy}
+    for key, value in expected.items():
+        assert f"{prefix}{key}={value}" in calls[-1]

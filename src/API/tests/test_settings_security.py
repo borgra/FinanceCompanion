@@ -23,7 +23,8 @@ def test_foundry_reasoning_configuration_remains_optional():
 def test_foundry_configuration_has_no_market_data_vendor_key_requirement():
     settings = Settings(_env_file=None, dividend_research_provider="azure_foundry",
         azure_foundry_endpoint="https://demo.services.ai.azure.com/api/projects/income",
-        azure_foundry_deployment="web-model", alpha_vantage_api_key=None)
+        azure_foundry_deployment="web-model", azure_foundry_agent_version="1", azure_foundry_stock_details_agent_version="1",
+        azure_foundry_rai_policy_id="/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/finance/providers/Microsoft.CognitiveServices/accounts/demo/raiPolicies/research")
     settings.validate_security()
 
 
@@ -81,12 +82,20 @@ def test_auth_bypass_is_rejected_outside_local_development():
         settings.validate_security()
 
 
-def test_alpha_vantage_key_can_use_github_secret_name(monkeypatch):
-    monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "test-alpha-key")
+def test_stock_agent_configuration_default_override_and_validation(monkeypatch):
+    assert Settings(_env_file=None).azure_foundry_stock_details_agent_name == "stock-details-agent"
+    monkeypatch.setenv("FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME", "market-research")
+    assert Settings(_env_file=None).azure_foundry_stock_details_agent_name == "market-research"
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, azure_foundry_stock_details_agent_name="../bad")
 
-    settings = Settings()
 
-    assert settings.alpha_vantage_api_key == "test-alpha-key"
+def test_optional_stock_agent_version_is_validated_and_blank_is_unpinned(monkeypatch):
+    assert Settings(_env_file=None, azure_foundry_stock_details_agent_version="").azure_foundry_stock_details_agent_version is None
+    monkeypatch.setenv("FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION", "7")
+    assert Settings(_env_file=None).azure_foundry_stock_details_agent_version == "7"
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, azure_foundry_stock_details_agent_version="../../other-agent")
 
 
 def test_development_defaults_to_stub_dividend_research():
@@ -199,3 +208,32 @@ def test_search_securities_caches_repeated_queries_and_separates_task_from_user_
             details_status="AI-researched identity; market price unavailable",
         )
     ]
+
+
+@pytest.mark.parametrize("change", [
+    {"azure_foundry_agent_version": None}, {"azure_foundry_stock_details_agent_version": None},
+    {"azure_foundry_rai_policy_id": None}, {"azure_foundry_rai_policy_id": "research"},
+    {"azure_foundry_endpoint": "https://demo.openai.azure.com"},
+    {"azure_foundry_stock_details_agent_name": "dividend-history-agent"},
+])
+def test_live_research_requires_both_pinned_agents_and_explicit_policy(change):
+    values = dict(_env_file=None, dividend_research_provider="azure_foundry",
+        azure_foundry_endpoint="https://demo.services.ai.azure.com/api/projects/income", azure_foundry_deployment="web-model",
+        azure_foundry_agent_version="1", azure_foundry_stock_details_agent_version="1",
+        azure_foundry_rai_policy_id="/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/finance/providers/Microsoft.CognitiveServices/accounts/demo/raiPolicies/research")
+    with pytest.raises(ValueError):
+        Settings(**(values | change)).validate_security()
+
+
+@pytest.mark.parametrize("field", ["azure_foundry_agent_version", "azure_foundry_stock_details_agent_version"])
+@pytest.mark.parametrize("value", ["latest", "0", "-1", "1.0", "../1"])
+def test_approved_versions_cannot_select_mutable_or_malformed_aliases(field, value):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **{field: value})
+
+
+@pytest.mark.parametrize("field", ["azure_foundry_agent_name", "azure_foundry_stock_details_agent_name"])
+@pytest.mark.parametrize("value", ["x" * 64, "agent_name", "agent-", "-agent", "agent/name", "agent name"])
+def test_agent_names_match_the_registration_contract(field, value):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, **{field: value})

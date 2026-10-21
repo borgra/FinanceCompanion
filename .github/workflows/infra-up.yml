@@ -31,6 +31,10 @@ jobs:
       AZURE_FOUNDRY_ENDPOINT: ${{ vars.AZURE_FOUNDRY_ENDPOINT }}
       AZURE_FOUNDRY_DEPLOYMENT: ${{ vars.AZURE_FOUNDRY_DEPLOYMENT }}
       AZURE_FOUNDRY_AGENT_NAME: ${{ vars.AZURE_FOUNDRY_AGENT_NAME || 'dividend-history-agent' }}
+      AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME: ${{ vars.AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME || 'stock-details-agent' }}
+      AZURE_FOUNDRY_AGENT_VERSION: ${{ vars.AZURE_FOUNDRY_AGENT_VERSION }}
+      AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION: ${{ vars.AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION }}
+      AZURE_FOUNDRY_RAI_POLICY_ID: ${{ vars.AZURE_FOUNDRY_RAI_POLICY_ID }}
       AZURE_FOUNDRY_REASONING_EFFORT: ${{ vars.AZURE_FOUNDRY_REASONING_EFFORT }}
       AZURE_FOUNDRY_CAPACITY: ${{ vars.AZURE_FOUNDRY_CAPACITY || '100' }}
       AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID: ${{ vars.AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID }}
@@ -172,26 +176,38 @@ jobs:
               --name "${APP_NAME}-foundry" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --template-file infra/foundry.bicep \
-              --parameters appName="${APP_NAME}" location="${AZURE_LOCATION}" capacity="${AZURE_FOUNDRY_CAPACITY}" agentName="${AZURE_FOUNDRY_AGENT_NAME}" \
+              --parameters appName="${APP_NAME}" location="${AZURE_LOCATION}" capacity="${AZURE_FOUNDRY_CAPACITY}" agentName="${AZURE_FOUNDRY_AGENT_NAME}" stockDetailsAgentName="${AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME}" \
               --query properties.outputs --output json --only-show-errors > foundry-outputs.json
             {
               echo "AZURE_FOUNDRY_ENDPOINT=$(jq -r '.projectEndpoint.value' foundry-outputs.json)"
               echo "AZURE_FOUNDRY_DEPLOYMENT=$(jq -r '.deploymentName.value' foundry-outputs.json)"
               echo "AZURE_FOUNDRY_REASONING_EFFORT=$(jq -r '.reasoningEffort.value' foundry-outputs.json)"
+              echo "AZURE_FOUNDRY_RAI_POLICY_ID=$(jq -r '.raiPolicyId.value' foundry-outputs.json)"
               echo "NEW_FOUNDRY_RESOURCE_ID=$(jq -r '.foundryResourceId.value' foundry-outputs.json)"
               echo "NEW_FOUNDRY_PROJECT_NAME=$(jq -r '.projectName.value' foundry-outputs.json)"
             } >> "${GITHUB_ENV}"
 
-      - name: Register dividend history agent
+      - name: Validate research approvals
+        if: env.DIVIDEND_RESEARCH_PROVIDER == 'azure_foundry'
+        shell: bash
+        run: |
+          test -n "${AZURE_FOUNDRY_RAI_POLICY_ID:-}" || { echo "Set AZURE_FOUNDRY_RAI_POLICY_ID." >&2; exit 1; }
+          [[ "${AZURE_FOUNDRY_AGENT_VERSION:-}" =~ ^[1-9][0-9]{0,18}$ && "${AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION:-}" =~ ^[1-9][0-9]{0,18}$ ]] || { echo "Approve immutable AZURE_FOUNDRY_AGENT_VERSION and AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION." >&2; exit 1; }
+          [[ "${AZURE_FOUNDRY_ENDPOINT:-}" == https://*.services.ai.azure.com/api/projects/* ]] || { echo "Live research requires a project endpoint." >&2; exit 1; }
+
+      - name: Register Foundry agents
         if: env.DIVIDEND_RESEARCH_PROVIDER == 'azure_foundry' && contains(env.AZURE_FOUNDRY_ENDPOINT, '/api/projects/')
         shell: pwsh
         run: |
-          ./infra/scripts/register-foundry-agent.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_AGENT_NAME
+          if ($env:AZURE_FOUNDRY_AGENT_NAME -eq $env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME) { throw 'Dividend and stock agents require distinct names.' }
+          ./infra/scripts/register-foundry-agent.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_AGENT_NAME -AgentKind dividend-history -RaiPolicyId $env:AZURE_FOUNDRY_RAI_POLICY_ID
+          ./infra/scripts/register-foundry-agent.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME -AgentKind stock-details -RaiPolicyId $env:AZURE_FOUNDRY_RAI_POLICY_ID
+          ./infra/scripts/test-foundry.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_AGENT_NAME -AgentKind dividend-history -AgentVersion $env:AZURE_FOUNDRY_AGENT_VERSION -RaiPolicyId $env:AZURE_FOUNDRY_RAI_POLICY_ID -VerifyConfigurationOnly
+          ./infra/scripts/test-foundry.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME -AgentKind stock-details -AgentVersion $env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION -RaiPolicyId $env:AZURE_FOUNDRY_RAI_POLICY_ID -VerifyConfigurationOnly
 
       - name: Deploy Runtime API
         env:
           API_SESSION_SECRET: ${{ secrets.ENV_PROD_SESSION_SECRET || secrets.AZURE_API_SESSION_SECRET }}
-          LEGACY_ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           ENTRA_CLIENT_ID: ${{ vars.ENV_PROD_ENTRA_CLIENT_ID || vars.AZURE_ENTRA_CLIENT_ID }}
           ENTRA_TENANT_ID: ${{ vars.ENV_PROD_ENTRA_TENANT_ID || vars.AZURE_ENTRA_TENANT_ID }}
           ALLOWED_EMAIL: ${{ vars.ENV_PROD_ALLOWED_EMAIL || vars.AZURE_ALLOWED_EMAIL }}
@@ -213,8 +229,8 @@ jobs:
             fi
             SECRET_PARAMS="$(mktemp)"
             trap 'rm -f "${SECRET_PARAMS}"' EXIT
-            jq -n --arg ss "${API_SESSION_SECRET}" --arg av "${LEGACY_ALPHA_VANTAGE_API_KEY:-}" \
-              '{sessionSecret:{value:$ss},alphaVantageApiKey:{value:$av}}' > "${SECRET_PARAMS}"
+            jq -n --arg ss "${API_SESSION_SECRET}" \
+              '{sessionSecret:{value:$ss}}' > "${SECRET_PARAMS}"
             az deployment group create \
               --name "finance-companion-runtime-api-${{ github.run_id }}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
@@ -234,6 +250,10 @@ jobs:
                            azureFoundryEndpoint="${AZURE_FOUNDRY_ENDPOINT:-}" \
                            azureFoundryDeployment="${AZURE_FOUNDRY_DEPLOYMENT:-}" \
                            azureFoundryAgentName="${AZURE_FOUNDRY_AGENT_NAME:-dividend-history-agent}" \
+                           azureFoundryStockDetailsAgentName="${AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME:-stock-details-agent}" \
+                           azureFoundryAgentVersion="${AZURE_FOUNDRY_AGENT_VERSION:-}" \
+                           azureFoundryStockDetailsAgentVersion="${AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION:-}" \
+                           azureFoundryRaiPolicyId="${AZURE_FOUNDRY_RAI_POLICY_ID:-}" \
                            azureFoundryReasoningEffort="${AZURE_FOUNDRY_REASONING_EFFORT:-}" \
                            azureFoundryManagedIdentityResourceId="${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID:-}" \
                            azureFoundryManagedIdentityClientId="${MI_CLIENT_ID}" \
@@ -251,12 +271,14 @@ jobs:
               jq -r '.properties.outputs | to_entries[] | "| `" + .key + "` | `" + (.value.value // "") + "` |"' runtime-api-outputs.json
             } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Authorize API identity for the new Foundry project
-        if: env.NEW_FOUNDRY_RESOURCE_ID != ''
+      - name: Restrict Foundry runtime access
+        if: env.DIVIDEND_RESEARCH_PROVIDER == 'azure_foundry'
         shell: pwsh
         run: |
           $runtime = Get-Content runtime-api-outputs.json -Raw | ConvertFrom-Json
-          ./infra/scripts/configure-foundry-access.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -ResourceGroupName $env:AZURE_RESOURCE_GROUP -ContainerAppName $runtime.properties.outputs.containerAppName.value -FoundryResourceId $env:NEW_FOUNDRY_RESOURCE_ID -FoundryProjectName $env:NEW_FOUNDRY_PROJECT_NAME -EndpointKind Project -UserAssignedIdentityResourceId $env:AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID
+          $accountId = $env:AZURE_FOUNDRY_RAI_POLICY_ID -replace '/raiPolicies/[^/]+$', ''
+          $projectName = ([Uri]$env:AZURE_FOUNDRY_ENDPOINT).AbsolutePath.TrimEnd('/').Split('/')[-1]
+          ./infra/scripts/configure-foundry-access.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -ResourceGroupName $env:AZURE_RESOURCE_GROUP -ContainerAppName $runtime.properties.outputs.containerAppName.value -FoundryResourceId $accountId -FoundryProjectName $projectName -EndpointKind Project -UserAssignedIdentityResourceId $env:AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID
 
       - name: Deploy Optional Storage
         if: env.AZURE_ENABLE_BLOB_STORAGE == 'true'

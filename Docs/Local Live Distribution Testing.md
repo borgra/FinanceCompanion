@@ -1,11 +1,11 @@
 # Live distribution testing locally
 
-Foundry searches the public web for distribution history and corporate actions, then imports cited facts. You only configure your Foundry endpoint/deployment and sign in with Entra. No Alpha Vantage account, market-data key, separate search resource/key, or source files are required. Forecast arithmetic stays in application code.
+Foundry searches the public web for distribution history, then imports cited facts. Live research requires a project endpoint, deployment, explicitly approved versions of both agents, a blocking RAI policy ID and Entra sign-in with inference/metadata-read permissions. See [Research Agent Security](Research%20Agent%20Security.md) before rollout. No market-data key, separate search resource/key, or source files are required. Forecast arithmetic stays in application code.
 
 ## One-time prerequisites
 
 - Python 3.12 or newer, Node.js 24 LTS with npm 11, and Azure CLI installed.
-- A Foundry deployment supporting Responses, built-in `web_search`, and strict structured outputs. Search and model usage are billed by Azure; subscription policy must allow web search. Give your developer account inference access using [the Entra/RBAC guide](Foundry%20Entra%20RBAC.md). Browser sign-in is separate from server-to-Foundry authentication.
+- A verified `gpt-6-luna` Foundry deployment supporting Responses, built-in `web_search`, and strict structured outputs. Search and model usage are billed by Azure; subscription policy must allow web search. Give your developer account inference access using [the Entra/RBAC guide](Foundry%20Entra%20RBAC.md). Browser sign-in is separate from server-to-Foundry authentication.
 
 ## Configure and start
 
@@ -23,20 +23,39 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER=azure_foundry
 FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT=YOUR_FOUNDRY_ENDPOINT
 FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT=YOUR_DEPLOYMENT_NAME
+FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME=dividend-history-agent
+FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME=stock-details-agent
+FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_VERSION=YOUR_APPROVED_DIVIDEND_VERSION
+FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION=YOUR_APPROVED_STOCK_VERSION
+FINANCE_COMPANION_AZURE_FOUNDRY_RAI_POLICY_ID=YOUR_FULL_POLICY_ARM_ID
 FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT=low
 FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE=entra
 FINANCE_COMPANION_AZURE_FOUNDRY_API_VERSION=
 FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID=
 ```
 
-Use a project endpoint such as `https://RESOURCE.services.ai.azure.com/api/projects/PROJECT` or a direct resource endpoint such as `https://RESOURCE.openai.azure.com`. Both use Responses for web research. Keep API version and managed identity client ID empty locally. Do not put credentials in `VITE_` settings. Remove any Cosmos connection string from this JSON-backed local configuration.
+Use a project endpoint such as `https://RESOURCE.services.ai.azure.com/api/projects/PROJECT`. Both research flows require their approved registered versions and full policy ID; resource-only endpoints and API keys cannot run them. Keep API version and managed identity client ID empty locally. Do not put credentials in `VITE_` settings. Remove any Cosmos connection string from this JSON-backed local configuration.
 
 4. Sign in once with `az login --tenant YOUR_TENANT_ID` and, when needed, `az account set --subscription YOUR_SUBSCRIPTION_ID`. No Foundry API key is needed in Entra mode. Your user must have the role described in the RBAC guide; Azure CLI sign-in alone does not grant inference access.
 5. If the demo Docker stack is running, stop it with `docker compose -f docker-compose.local.yml down`. The native API and Docker API must not write `.local-data/finance.json` simultaneously.
 6. Run `./start-local.ps1`. It installs/updates dependencies in the repository's Python virtual environment and UI `node_modules`, starts both servers in the background, and waits for readiness. The normal credential-free Docker stack remains available for offline demonstration; it does not read these live settings.
 7. Open [the local app](http://localhost:5173), choose **Investing → Passive Income**, then **Refresh JEPQ distributions** under **Research status and sources**. The general **Refresh distribution data** button refreshes all held securities. Add JEPQ and a positive share quantity under Holdings first if it is not in your test data.
 
-Security search also uses Foundry web research, so adding JEPQ or another supported security needs no market-data account. Search does not invent a market price or payout history; distribution import occurs through the refresh action. Live market-price/technical-indicator refresh is unavailable in AI distribution mode, and saved prices are preserved. `stub` is explicitly demonstration-only.
+Security search also uses Foundry web research, so adding JEPQ or another supported security needs no market-data account. Search does not invent a market price or payout history; distribution import occurs through the refresh action. Holdings **Update all holdings** and the individual update action use the separate stock-details agent for sourced prices and optional metrics. Missing optional fields retain saved values; failed research preserves all saved details. The details dialog shows dated price/NAV evidence and sources. `stub` is explicitly demonstration-only.
+
+## Verify stock details
+
+Register both agents with `infra/scripts/deploy-foundry.ps1`, or use `register-foundry-agent.ps1 -AgentKind stock-details -RaiPolicyId '<full-policy-arm-id>'` and separately `-AgentKind dividend-history`. Agent kinds select canonical files; custom names do not select different instructions. Review returned versions and set each approved version explicitly. Registration never promotes a runtime version automatically.
+
+Run this opt-in, billable smoke after supplying your actual deployment and account resource ID:
+
+```powershell
+./infra/scripts/test-foundry.ps1 -SubscriptionId '<subscription-id>' -Endpoint '<endpoint>' -Deployment '<deployment-name>' -RaiPolicyId '/subscriptions/<subscription-id>/resourceGroups/<group>/providers/Microsoft.CognitiveServices/accounts/<account>/raiPolicies/research-injection-blocking-v1' -AgentVersion '<approved-version>' -AgentKind stock-details -Symbol MSFT -SecurityName 'Microsoft Corporation' -Exchange NASDAQ -AssetType Equity
+```
+
+The smoke checks management-plane model identity before inference, then makes one web-search/strict-output request with field evidence. A deployment alias is not proof of model identity. `-WhatIf` makes no Azure or model calls. Repeat with an ETF and an identifiable USD mutual fund (`-AssetType 'Mutual Fund'`) to verify actual coverage; optional metrics may be unavailable.
+
+In Holdings, refresh a saved listing, inspect its dated sources, reload the browser, then restart the API and confirm the accepted details and sources persist. Verify shares, cost basis, dividend settings and payment history remain intact. Update all skips successful research from the last 48 hours, while the individual action forces research. A failed or unsupported listing must preserve its previous details and timestamp.
 
 ## Verify retrieval and persistence
 
@@ -50,13 +69,11 @@ This is an opt-in live call to your configured Azure deployment. It refreshes an
 
 Open **Research status and sources → Saved AI research and citations** to inspect the saved answer and linked sources. These are AI-generated cited claims, not independently fetched publisher quotations. Imports are labeled partial because public-web coverage and extraction can be incomplete. The application rejects uncited/mismatched facts instead of filling missing months. Research has a 90-second budget per security, and the screen reports progress while refreshing multiple securities.
 
-After a failed refresh, the source link and saved research still belong to the last successful import. An accurate saved link does not prove that the new response passed validation. Listing identity can be verified from either a cited identity paragraph or current cited payment rows explicitly matching the ticker, listing exchange and USD amount. Missing optional share-basis wording retains the payment with an unverified basis; amounts requiring an unresolved split adjustment remain excluded from totals.
+After a failed refresh, the source link and saved research still belong to the last successful import. An accurate saved link does not prove that the new response passed validation. The returned structured listing must match the requested ticker, exchange, asset type and currency. Each dividend URL must be present in completed web-search tool sources. Unknown share basis and raw amounts without complete split evidence remain unverified and excluded from totals and forecasts.
 
-For Vanguard ETFs such as VOO and VYM, the identity link may point to a fund profile whose distribution table is not readable by web research. Distribution history links identify the sources used for imported payments separately. Research supplies exchange and alternative table URLs as discovery hints. If its first answer has no cited ex-date and USD amount rows, it makes at most one alternative-source search before extraction, within the same 90-second budget and reserving time for validation. Empty profiles, date-only schedules, and estimates are not imported as paid distributions; citation and listing checks still apply. If extraction supplies a tax classification that the cited row does not support, the payment is retained as Other with a warning rather than discarding its otherwise validated amount and dates.
+For funds whose issuer tables require JavaScript, the registered agent can research reputable alternative tables within its tool-call budget. Empty profiles, date-only schedules and estimates are not evidence of paid distributions. Unknown tax classification is returned as Other. These are cited AI claims; URL membership does not independently verify a publisher's numbers.
 
-A cited split outside the full research/forecast window, such as VOO's 2013 split, does not make current distributions unverified. Actions with missing or inconsistent date evidence still retain the conservative share-basis exclusion.
-
-Manually added tickers may start with Unknown exchange and asset type. A distribution refresh researches their identity rather than rejecting these missing fields. A full cited US-listed USD stock or ETF identity is required before importing payments for an unknown asset type, and the resolved exchange and asset type are saved with the holding. Common ETF labels and Schwab's legal exchange name, NYSE Arca, Inc., normalize to the supported identity. Split evidence accepts both N-for-M and explicit N new shares for M old shares, with the same ratio, direction, and date checks. Known unsupported asset types, non-US exchanges, and non-USD currencies still return unsupported, with warnings identifying the blocking saved field.
+Manually added tickers may start with Unknown exchange and asset type. A distribution refresh researches their identity rather than rejecting these missing fields. A complete supported US-listed USD stock or ETF identity is required before importing payments, and the resolved exchange and asset type are saved with the holding. Common ETF labels and Schwab's legal exchange name, NYSE Arca, Inc., normalize to the supported identity. The dividend agent does not return corporate-action history; it cannot certify normalization of raw historical amounts. Known unsupported asset types, non-US exchanges and non-USD currencies preserve saved data without importing results.
 
 Inspect the three year choices in Passive Income. JEPQ's observed recurring history should produce monthly projections when sufficient valid data is available. Real declared dates can fall near month boundaries; the calendar uses **ex-date**, not pay date. Recurrence/tax classification and share-basis uncertainty are shown as warnings rather than silently invented source facts. Events with unresolved split basis are excluded from totals. Historical and next-year amounts are per-share values multiplied by current quantities, not historical portfolio ownership.
 
@@ -76,3 +93,5 @@ Results persist in `.local-data/finance.json`; logs are in `.local-data/logs`. C
 | Port conflict/startup failure | Stop the other native/Docker stack; inspect `.local-data/logs/api.error.log` and `ui.error.log`. |
 
 Default automated tests use mocked HTTP and local persistence; they do not spend Azure/provider credits. The opt-in script above checks the configured live path. Never use `reset-local.ps1` or delete `.local-data` as a prerequisite for testing persistence.
+
+Both research flows require the registered agents' approved versions and live blocking policy. Missing or changed definitions/policies fail closed. The smoke script invokes a registered version; a model-only test is insufficient. See the security guide for configuration-only and adversarial smoke modes.

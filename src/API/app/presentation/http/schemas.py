@@ -281,6 +281,7 @@ class SecurityMetadataPayload(CamelModel):
     sma200: float | None = None
     details_updated_at: str | None = Field(default=None, serialization_alias="detailsUpdatedAt")
     details_status: str | None = Field(default=None, serialization_alias="detailsStatus")
+    details_provenance: dict = Field(default_factory=dict, serialization_alias="detailsProvenance")
     payout_details: list[SecurityPayoutDetailsPayload] = Field(
         default_factory=list,
         serialization_alias="payoutDetails",
@@ -358,6 +359,8 @@ class SecurityMetadataWritePayload(SecurityMetadataPayload):
 
     @model_validator(mode="after")
     def validate_snapshot_size(self) -> "SecurityMetadataWritePayload":
+        if len(json.dumps(self.details_provenance).encode("utf-16-le")) > 30_000:
+            raise ValueError("detailsProvenance exceeds the maximum allowed size.")
         if self.dividend_research_snapshot and len(json.dumps(self.dividend_research_snapshot)) > 500_000:
             raise ValueError("dividendResearchSnapshot exceeds the maximum allowed size.")
         return self

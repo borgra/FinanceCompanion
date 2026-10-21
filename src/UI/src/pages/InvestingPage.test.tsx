@@ -285,7 +285,7 @@ describe('InvestingPage', () => {
     expect(screen.getByText('No holdings have been added yet.')).toBeInTheDocument();
   });
 
-  it('updates all holdings manually with a three second throttle', async () => {
+  it('updates all holdings sequentially without an artificial throttle', async () => {
     const holdings: Holding[] = [
       {
         id: 'holding-cash',
@@ -380,18 +380,10 @@ describe('InvestingPage', () => {
         await Promise.resolve();
       });
 
-      expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
+      expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(2);
       expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(1, 'holding-vti');
       expect(confirm).not.toHaveBeenCalled();
 
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2999);
-      });
-      expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(1);
-
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(1);
-      });
       expect(screen.getByText('Holdings were updated.')).toBeInTheDocument();
       expect(refreshHoldingSecurityDetails).toHaveBeenCalledTimes(2);
       expect(refreshHoldingSecurityDetails).toHaveBeenNthCalledWith(2, 'holding-schd');

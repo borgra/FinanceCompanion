@@ -28,6 +28,8 @@ function Get-FinanceLocalConfig {
         FINANCE_COMPANION_SESSION_SECRET = 'local-dev-session-secret-change-me'
         FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER = 'stub'
         FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE = 'entra'
+        FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME = 'dividend-history-agent'
+        FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME = 'stock-details-agent'
         FINANCE_COMPANION_CORS_ORIGINS = '["http://localhost:5173"]'
         VITE_API_BASE_URL = 'http://localhost:8000/api/v1'
         VITE_AUTH_MODE = 'local'
@@ -52,8 +54,16 @@ function Assert-FinanceLocalConfig {
     if ($provider -notin @('stub', 'azure_foundry')) { throw 'Choose DIVIDEND_RESEARCH_PROVIDER=stub or azure_foundry.' }
     if ($provider -eq 'azure_foundry') {
         $required += @('FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT', 'FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT')
-        if ($Config['FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE'] -eq 'key') { $required += 'FINANCE_COMPANION_AZURE_FOUNDRY_API_KEY' }
-        elseif ($Config['FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE'] -ne 'entra') { throw 'Choose AZURE_FOUNDRY_AUTH_MODE=entra or key.' }
+        $required += @('FINANCE_COMPANION_AZURE_FOUNDRY_RAI_POLICY_ID', 'FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_VERSION', 'FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION')
+        if ($Config['FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE'] -ne 'entra') { throw 'Live research requires AZURE_FOUNDRY_AUTH_MODE=entra and a project endpoint.' }
+        foreach ($versionSetting in @('FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_VERSION', 'FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION')) {
+            if ($Config[$versionSetting] -and $Config[$versionSetting] -notmatch '^[1-9][0-9]{0,18}$') { throw "Configure an explicitly approved immutable numeric $versionSetting." }
+        }
+        if ($Config['FINANCE_COMPANION_AZURE_FOUNDRY_RAI_POLICY_ID'] -and $Config['FINANCE_COMPANION_AZURE_FOUNDRY_RAI_POLICY_ID'] -notmatch '^/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._()-]+/providers/Microsoft\.CognitiveServices/accounts/[A-Za-z0-9-]+/raiPolicies/[A-Za-z0-9._-]+$') { throw 'Configure a full ARM AZURE_FOUNDRY_RAI_POLICY_ID.' }
+        if ($Config['FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT'] -and $Config['FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT'] -notmatch '^https://[A-Za-z0-9-]+\.services\.ai\.azure\.com/api/projects/[A-Za-z0-9._-]+/?$') { throw 'Live research requires an Azure HTTPS Foundry project endpoint.' }
+    }
+    foreach ($agentSetting in @('FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME', 'FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME')) {
+        if ($Config[$agentSetting] -notmatch '^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$') { throw "Configure a valid $agentSetting (1-63 letters, digits or internal hyphens)." }
     }
     $bypass = $Config['FINANCE_COMPANION_DISABLE_AUTH_FOR_LOCAL_DEVELOPMENT'] -eq 'true'
     if (-not $bypass) {

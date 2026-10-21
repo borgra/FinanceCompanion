@@ -78,14 +78,25 @@ function Start-LocalChild {
     $label = if ($Mode -eq 'ApiOnly') { 'api' } else { 'ui' }
     New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
     $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -$Mode -ConfigFile `"$ConfigFile`""
-    return Start-Process -FilePath powershell.exe -ArgumentList $arguments -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDirectory "$label.log") -RedirectStandardError (Join-Path $logDirectory "$label.error.log") -PassThru
+    # Keep the same PowerShell runtime/module path as the launcher. A pwsh
+    # parent spawning Windows PowerShell can lose built-in module discovery.
+    $shellExecutable = (Get-Process -Id $PID).Path
+    return Start-Process -FilePath $shellExecutable -ArgumentList $arguments -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDirectory "$label.log") -RedirectStandardError (Join-Path $logDirectory "$label.error.log") -PassThru
 }
 
 function Stop-TrackedLocalProcess {
-    param([int]$ProcessId, [string]$StartedAt)
+    param([int]$ProcessId, [object]$StartedAt)
     $tracked = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
     if (-not $tracked) { return }
-    if (-not $StartedAt -or $tracked.StartTime.ToUniversalTime().ToString('O') -ne $StartedAt) { throw "PID $ProcessId does not match the saved startup time. Stop the old local server manually to avoid terminating an unrelated process." }
+    # ConvertFrom-Json may return ISO timestamps as DateTime objects (PowerShell
+    # 7), rather than strings. Compare exact instants without losing subsecond
+    # precision or accepting a reused PID.
+    $expectedStart = $null
+    if ($StartedAt -is [datetime]) { $expectedStart = $StartedAt.ToUniversalTime() }
+    elseif ($StartedAt) {
+        try { $expectedStart = [datetime]::Parse([string]$StartedAt, [cultureinfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime() } catch { }
+    }
+    if (-not $expectedStart -or $tracked.StartTime.ToUniversalTime().Ticks -ne $expectedStart.Ticks) { throw "PID $ProcessId does not match the saved startup time. Stop the old local server manually to avoid terminating an unrelated process." }
     & taskkill.exe /PID $ProcessId /T /F | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "Unable to stop local process $ProcessId." }
 }

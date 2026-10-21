@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.domain.dividend_research import DividendResearchProviderError, DividendResearchValidationError
 from app.domain.exceptions import AuthenticationError, DomainError, NotFoundError
-from app.infrastructure.alpha_vantage_security_details import SecurityDetailsUnavailableError
-from app.infrastructure.alpha_vantage_security_search import SecuritySearchUnavailableError
+from app.domain.exceptions import SecurityDetailsUnavailableError
+from app.domain.exceptions import SecuritySearchUnavailableError
 from app.domain.models import Account, BudgetCategory, BudgetSubCategory, NetWorth
 from app.infrastructure.in_memory_repositories import now_iso
 from app.presentation.http.dependencies import get_container, require_session_user

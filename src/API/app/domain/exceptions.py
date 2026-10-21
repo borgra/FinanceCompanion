@@ -16,3 +16,11 @@ class NotFoundError(DomainError):
 
 class ValidationError(DomainError):
     """Raised when input data is invalid."""
+
+
+class SecurityDetailsUnavailableError(DomainError):
+    """Stock details could not be refreshed; saved data remains available."""
+
+
+class SecuritySearchUnavailableError(DomainError):
+    """Security lookup could not be completed."""

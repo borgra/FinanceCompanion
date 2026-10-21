@@ -9,30 +9,49 @@ function global:az {
   $global:LASTEXITCODE = if ($global:FoundryDeployFail) { 1 } else { 0 }
   if ($global:FoundryDeployFail) { return }
   if (($args[0..1] -join ' ') -eq 'account get-access-token') { return 'offline-test-token' }
+  if (($args[0..1] -join ' ') -eq 'resource show') {
+    $id = $args[[Array]::IndexOf($args, '--ids') + 1]
+    if ($id -match '/raiPolicies/') {
+      $filters = @(@{ name = 'Jailbreak'; source = 'Prompt'; enabled = $true; blocking = $true }, @{ name = 'Indirect Attack'; source = 'Prompt'; enabled = $true; blocking = $true })
+      foreach ($category in @('Hate', 'Sexual', 'Violence', 'Selfharm')) { foreach ($source in @('Prompt', 'Completion')) { $filters += @{ name = $category; source = $source; severityThreshold = 'Medium'; enabled = $true; blocking = $true } } }
+      return (@{ id = $id; properties = @{ mode = 'Blocking'; basePolicyName = 'Microsoft.DefaultV2'; contentFilters = $filters } } | ConvertTo-Json -Depth 10)
+    }
+    return (@{ model = @{ name = 'gpt-6-luna'; format = 'OpenAI' }; raiPolicyName = 'research-injection-blocking-v1' } | ConvertTo-Json)
+  }
   if (($args[0..2] -join ' ') -ne 'deployment group create') { throw 'Unexpected Azure operation.' }
-  '{"foundryResourceId":{"value":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/ai"},"projectName":{"value":"distribution-research"},"projectEndpoint":{"value":"https://ai.services.ai.azure.com/api/projects/distribution-research"},"deploymentName":{"value":"gpt-6-luna"},"reasoningEffort":{"value":"low"},"agentName":{"value":"dividend-history-agent"}}'
+  '{"foundryResourceId":{"value":"/subscriptions/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/ai"},"projectName":{"value":"distribution-research"},"projectEndpoint":{"value":"https://ai.services.ai.azure.com/api/projects/distribution-research"},"deploymentName":{"value":"gpt-6-luna"},"reasoningEffort":{"value":"low"},"agentName":{"value":"dividend-history-agent"},"stockDetailsAgentName":{"value":"stock-details-agent"},"raiPolicyId":{"value":"/subscriptions/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/resourceGroups/rg/providers/Microsoft.CognitiveServices/accounts/ai/raiPolicies/research-injection-blocking-v1"}}'
 }
 function global:Invoke-RestMethod {
   param($Uri, $Headers, $Method, $ContentType, $TimeoutSec, $Body)
   $global:FoundryAgentCalls.Add(@{ Uri = $Uri; Method = $Method; Body = $Body; Headers = $Headers })
+  if ($Method -eq 'Post') { return @{ name = ([Uri]$Uri).AbsolutePath.Split('/')[-1]; version = '7'; definition = ($Body | ConvertFrom-Json).definition } }
   return @{ name = 'dividend-history-agent' }
 }
 try {
   & $deployScript -SubscriptionId 'sub' -WhatIf | Out-Null
   if ($global:FoundryDeployCalls.Count -ne 0) { throw 'WhatIf invoked Azure.' }
   $result = & $deployScript -SubscriptionId 'sub'
-  if ($global:FoundryDeployCalls.Count -ne 2 -or $result.deploymentName.value -ne 'gpt-6-luna' -or $result.agentName.value -ne 'dividend-history-agent') { throw 'Deployment did not return its public configuration.' }
+  if ($global:FoundryDeployCalls.Count -ne 7 -or $result.deploymentName.value -ne 'gpt-6-luna' -or $result.agentName.value -ne 'dividend-history-agent') { throw 'Deployment did not return its public configuration.' }
   $arguments = $global:FoundryDeployCalls[0]
-  foreach ($expected in @('--subscription', 'sub', 'capacity=100', 'modelName=gpt-6-luna', 'modelVersion=2026-09-22', 'agentName=dividend-history-agent')) {
+  foreach ($expected in @('--subscription', 'sub', 'capacity=100', 'modelName=gpt-6-luna', 'modelVersion=2026-09-22', 'agentName=dividend-history-agent', 'stockDetailsAgentName=stock-details-agent')) {
     if ($expected -notin $arguments) { throw "Missing deployment argument $expected" }
   }
-  if ($global:FoundryAgentCalls.Count -ne 2) { throw 'Expected an agent lookup and update.' }
+  if ($global:FoundryAgentCalls.Count -ne 4) { throw 'Expected both agents to receive a lookup and update.' }
   $registration = $global:FoundryAgentCalls[1]
   $body = $registration.Body | ConvertFrom-Json
   if ($registration.Uri -ne 'https://ai.services.ai.azure.com/api/projects/distribution-research/agents/dividend-history-agent?api-version=v1' -or $registration.Method -ne 'Post') { throw 'Incorrect agent registration route.' }
   if ($body.definition.kind -ne 'prompt' -or $body.definition.model -ne 'gpt-6-luna' -or $body.definition.tools[0].type -ne 'web_search' -or -not $body.definition.text.format.strict -or $body.definition.text.format.name -ne 'dividend_history_result') { throw 'Registration omitted the canonical structured web-search definition.' }
   $instructions = Get-Content (Join-Path $PSScriptRoot '../agents/dividend-history-agent.md') -Raw
   if ($body.definition.instructions -ne $instructions) { throw 'Registration did not load canonical instructions.' }
+  $stockRegistration = $global:FoundryAgentCalls[3]
+  $stockBody = $stockRegistration.Body | ConvertFrom-Json
+  if ($stockRegistration.Uri -notlike '*/agents/stock-details-agent?api-version=v1' -or $stockBody.definition.text.format.name -ne 'stock_details_result' -or $stockBody.definition.model -ne 'gpt-6-luna') { throw 'Stock agent did not register independently with the shared Luna deployment.' }
+  $stockInstructions = Get-Content (Join-Path $PSScriptRoot '../agents/stock-details-agent.md') -Raw
+  if ($stockBody.definition.instructions -ne $stockInstructions) { throw 'Stock registration lost canonical instructions.' }
+  $previousCalls = $global:FoundryDeployCalls.Count
+  $failed = $false
+  try { & $deployScript -SubscriptionId sub -AgentName same-agent -StockDetailsAgentName same-agent | Out-Null } catch { $failed = $true }
+  if (-not $failed -or $global:FoundryDeployCalls.Count -ne $previousCalls) { throw 'Agent name collision was not rejected before Azure calls.' }
   $global:FoundryDeployFail = $true
   $failed = $false
   try { & $deployScript -SubscriptionId 'sub' | Out-Null } catch { $failed = $true }

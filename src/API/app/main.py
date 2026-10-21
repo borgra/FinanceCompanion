@@ -37,7 +37,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return JSONResponse(status_code=403, content={"detail": "A trusted Origin is required for this request."})
         response = await call_next(request)
         store = getattr(app.state.container, "data_store", None)
-        if store is not None:
+        # Research refreshes persist atomically inside their conditional repository
+        # write. A second save could fail after an already committed success.
+        research_refresh = request.method == "POST" and request.url.path.endswith(("/security-details/refresh", "/dividends/refresh"))
+        if store is not None and not research_refresh:
             store.save()
         return response
 

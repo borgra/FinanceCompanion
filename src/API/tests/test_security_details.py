@@ -1,3 +1,11 @@
+from copy import deepcopy
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from app.domain.security_details import SecurityDetailsResult
+from app.domain.exceptions import SecurityDetailsUnavailableError
 from app.application.use_cases.security_details import (
     RefreshHeldSecurityDetails,
     RefreshHoldingSecurityDetails,
@@ -30,6 +38,13 @@ class FakeHoldingRepository:
         ]
         return holding
 
+    def update_batch_for_user(self, user_id, holdings, *, expected=None):
+        if expected is not None:
+            assert all(item in self.holdings for item in expected)
+        for item in holdings:
+            self.update_for_user(user_id, item.id, item)
+        return holdings
+
 
 class FakeSecurityDetailsProvider:
     def __init__(self):
@@ -37,20 +52,8 @@ class FakeSecurityDetailsProvider:
 
     def get_details(self, security: SecurityMetadata):
         self.requested_symbols.append(security.symbol)
-        return SecurityMetadata(
-            symbol=security.symbol,
-            name=security.name,
-            exchange=security.exchange,
-            asset_type=security.asset_type,
-            currency=security.currency,
-            price=321.45,
-            pe_ratio=24.6,
-            dividend_previous_year=3.4,
-            dividend_current_year=3.6,
-            dividend_growth_rate=0.0588,
-            dividend_status="recent",
-            sma20=318.2,
-        )
+        return SecurityDetailsResult(name=security.name, price=321.45, pe_ratio=24.6, sma20=318.2)
+
 
 
 def holding(
@@ -141,7 +144,7 @@ def test_refresh_holding_security_details_persists_merged_details():
     assert refreshed.security.dividend_research_adjustment_basis == "current_share_basis"
     assert refreshed.security.dividend_research_warnings == ["Non-authoritative stub data."]
     assert refreshed.security.sma20 == 318.2
-    assert refreshed.security.details_status == "fresh"
+    assert refreshed.security.details_status == "partial"
     assert refreshed.security.details_updated_at is not None
     assert repository.holdings[0].security.price == 321.45
 
@@ -195,26 +198,16 @@ def test_bulk_refresh_skips_details_updated_within_48_hours():
 def test_refresh_preserves_a_manually_saved_price_when_the_provider_returns_null():
     class NullPriceProvider:
         def get_details(self, security: SecurityMetadata):
-            return SecurityMetadata(
-                symbol=security.symbol,
-                name=security.name,
-                exchange=security.exchange,
-                asset_type=security.asset_type,
-                currency=security.currency,
-                price=None,
-            )
+            return SecurityDetailsResult(price=None)
 
     manually_priced = holding("holding-1")
     manually_priced.security.price = 325.25
     repository = FakeHoldingRepository([manually_priced])
 
-    refreshed = RefreshHoldingSecurityDetails(repository, NullPriceProvider()).execute(
-        "user-123",
-        "holding-1",
-    )
-
-    assert refreshed.security.price == 325.25
-    assert refreshed.security.details_updated_at is None
+    before = deepcopy(repository.holdings)
+    with pytest.raises(SecurityDetailsUnavailableError, match="valid price"):
+        RefreshHoldingSecurityDetails(repository, NullPriceProvider()).execute("user-123", "holding-1")
+    assert repository.holdings == before
 
 
 def test_cash_security_refreshes_return_unchanged_without_provider_calls():

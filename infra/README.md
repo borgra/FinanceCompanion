@@ -69,32 +69,40 @@ Deploy:
 .\infra\scripts\up.ps1 -SubscriptionId "<subscription-id>"
 ```
 
-Add `-EnableFoundry` to create and wire the dedicated Foundry deployment. Its default model is `gpt-6-luna`, version `2026-09-22`, on Global Standard with 100 quota units (100k TPM for this model). Quota allocation does not reserve paid provisioned throughput; model/search calls incur usage charges. The operator also needs `Microsoft.Authorization/roleAssignments/write` at the relevant Foundry scopes. `-FoundryCapacity` changes quota allocation.
-
-To provision only Foundry against the existing application, without replacing its running image:
+Live research requires an Entra-only Foundry project, a verified `gpt-6-luna` deployment, a blocking RAI policy, and separately approved immutable versions for both research agents. Provision/register before enabling the runtime:
 
 ```powershell
-./infra/scripts/deploy-foundry.ps1 -SubscriptionId '<subscription-id>' -ContainerAppName '<api-container-app-name>' -GrantCurrentUser
-./infra/scripts/test-foundry.ps1 -SubscriptionId '<subscription-id>' -Endpoint '<returned-project-endpoint>'
+./infra/scripts/deploy-foundry.ps1 -SubscriptionId '<subscription-id>' -GrantCurrentUser
 ```
 
-The first command creates the account/project/model, assigns scoped inference roles and registers `dividend-history-agent`. Registration uses the canonical instructions and schema in `infra/agents`; the API image bundles those same files for its single-call Responses fallback. Use `-AgentName` to override the registered name, or `-RegisterAgent:$false` for ARM-only provisioning. The second command makes one live, billable call combining web search and strict dividend JSON output, using those same files and an explicit reference date (`-AsOf`) when supplied. Use `-WhatIf` on the first command for a local preview; use `az deployment group what-if --template-file infra/foundry.bicep --parameters appName=finance-companion` for an Azure resource preview. No Azure/model keys are created or needed.
+The template pins model version `2026-09-22` with `NoAutoUpgrade`, shares its deployment between both agents, and attaches `research-injection-blocking-v1`. The policy uses `Microsoft.DefaultV2`, blocking Medium-or-higher baseline categories on prompts/completions, and blocking `Jailbreak` / `Indirect Attack` prompt filters. These names and ARM attachment follow [Azure's filter examples](https://learn.microsoft.com/en-us/azure/foundry-classic/foundry-models/how-to/configure-content-filters) and the [RAI resource schema](https://learn.microsoft.com/en-us/azure/templates/microsoft.cognitiveservices/2025-06-01/accounts/raipolicies).
 
-Registration requires Foundry User on the target project (or an inherited resource-group grant) for the signed-in operator or Infra Up OIDC principal. Resource Contributor alone does not include this data-plane access; have an administrator assign it before registering. After new role assignments, allow RBAC propagation and rerun `register-foundry-agent.ps1` if Azure reports access denied.
+The helper registers independent dividend and stock definitions with the full policy ARM ID in `rai_config.rai_policy_name`. It verifies policy existence, the baseline/attack filters, deployment attachment and underlying model before mutation. Registration reports immutable version identifiers; it never approves the latest version automatically. `-AgentName` / `-StockDetailsAgentName` customize distinct names, `-RegisterAgent:$false` provisions resources only, and `-WhatIf` makes no Azure calls. Existing deployments require an explicitly configured matching policy; registration does not silently alter their model or filters.
 
-The implementation uses the documented [Foundry v1 prompt-agent API](https://learn.microsoft.com/en-us/rest/api/microsoft-foundry/aiproject), which supports `tools: web_search` and `text.format: json_schema`. The guide's legacy `/assistants?api-version=2025-05-01` route uses a different agent/tool contract. Registration looks up the exact name, creates it on 404 and updates it otherwise; unchanged definitions reuse the existing version. The backend's one-call Responses request uses the named definition's local instructions/schema, so refreshing a holding does not require a registration lookup or another model call.
-
-To update an existing project's agent without provisioning resources:
+Review each returned version and run configuration checks, a benign capability smoke, and an adversarial probe for **both** kinds:
 
 ```powershell
-./infra/scripts/register-foundry-agent.ps1 -SubscriptionId '<subscription-id>' -Endpoint '<project-endpoint>' -Deployment '<model-deployment>'
+./infra/scripts/test-foundry.ps1 -SubscriptionId '<subscription-id>' -Endpoint '<project-endpoint>' -Deployment '<deployment>' -RaiPolicyId '<full-policy-arm-id>' -AgentKind stock-details -AgentVersion '<reviewed-numeric-version>' -VerifyConfigurationOnly
+./infra/scripts/test-foundry.ps1 -SubscriptionId '<subscription-id>' -Endpoint '<project-endpoint>' -Deployment '<deployment>' -RaiPolicyId '<full-policy-arm-id>' -AgentKind stock-details -AgentVersion '<reviewed-numeric-version>' -Symbol MSFT -SecurityName 'Microsoft Corporation' -Exchange NASDAQ -AssetType Equity
+./infra/scripts/test-foundry.ps1 -SubscriptionId '<subscription-id>' -Endpoint '<project-endpoint>' -Deployment '<deployment>' -RaiPolicyId '<full-policy-arm-id>' -AgentKind stock-details -AgentVersion '<reviewed-numeric-version>' -VerifyInjectionBlocking
 ```
 
-Offline checks (no Azure access):
+Repeat with `-AgentKind dividend-history` and its separately approved version. Configuration-only mode reads management metadata and the exact registered version without inference. Other modes are opt-in, billable calls. The injection probe requires Azure injection-filter evidence; a model refusal, unrelated HTTP 400, or successful unblocked answer fails the probe. This synthetic input test does not prove external web-document isolation or universal attack resistance. Region/model/tool support and actual filter enforcement still require live verification; none is claimed by offline tests.
+
+Stock capability checks validate schema, dated price/NAV basis, field evidence and tool-returned source URLs, using 8,000 output tokens and six tool calls. Supply `-Symbol`, `-SecurityName`, `-Exchange` and `-AssetType` for a stock, ETF and identifiable USD mutual fund. Both smoke modes and runtime reference the explicit agent version and inherit its instructions/tools/schema; they do not supply direct-model overrides or fall back to another endpoint. The [v1 reference](https://learn.microsoft.com/en-us/rest/api/microsoft-foundry/aiproject) documents version references and agent RAI configuration. [Azure cautions](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/add-hosted-agent-guardrails) that a nonexistent policy reference may fail open, so merely setting the ID is insufficient.
+
+Set `AZURE_FOUNDRY_RAI_POLICY_ID`, `AZURE_FOUNDRY_AGENT_VERSION` and `AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION` explicitly in the deployment environment after review/smoke. Neither workflow substitutes a latest version or a sample policy ID. Both workflows register definitions for project endpoints and preflight the approved versions without inference before runtime deployment. Live resource-only/key-auth configurations are rejected. `up.ps1` requires the corresponding `-AzureFoundryRaiPolicyId`, `-AzureFoundryAgentVersion` and `-AzureFoundryStockDetailsAgentVersion` values.
+
+The Foundry project's own platform service identity retains Microsoft's documented parent-account Foundry User prerequisite; it is separate from the API caller identity. The API runtime receives custom project-scoped read/invocation permissions plus account-scoped model/policy metadata reads through `foundry-runtime-access.bicep`; it cannot create/edit agents, policies, deployments or role assignments. The exact allowlist lives in `infra/roles/foundry-research-permissions.json`. `configure-foundry-access.ps1` defaults to `-AccessProfile Runtime`, audits inherited/group grants, and refuses broader effective roles. Azure grants are additive: an administrator must remove old broad grants before least privilege can hold. Human registration operators use explicit `-AccessProfile Developer`; keep their identity separate from the production API. See [Foundry RBAC](https://learn.microsoft.com/en-us/azure/foundry/concepts/rbac-foundry) and [permission definitions](https://learn.microsoft.com/en-us/azure/role-based-access-control/permissions/ai-machine-learning).
+
+The retired market-data key/parameters are removed. Backend deployment explicitly removes the old `FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY` environment reference as a migration step. Account-level secret revocation remains an operator task after checking external consumers; no saved finance data is removed. See [Research Agent Security](../Docs/Research%20Agent%20Security.md) for the application boundary and operational verification.
+
+Offline checks (every Azure/HTTP operation is mocked):
 
 ```powershell
 ./infra/tests/deploy-foundry.test.ps1
 ./infra/tests/foundry-agent.test.ps1
+./infra/tests/configure-foundry-access.test.ps1
 ```
 
 The script now runs staged deployments in observable tranches:
@@ -104,7 +112,7 @@ The script now runs staged deployments in observable tranches:
 3. `data`
 4. `runtime-base`
 5. `foundry` if enabled
-6. `runtime-api`, followed by Foundry API identity authorization when a new project was provisioned
+6. `runtime-api`, followed by restricted Foundry API identity authorization in live mode
 7. `storage` if enabled
 
 Each tranche prints its own elapsed time so you can see where Azure provisioning is spending time.
@@ -150,7 +158,7 @@ For live distribution retrieval and API-to-Foundry managed identity access, see
 in the GitHub Environment `deployment` selects `stub` (default) or
 `azure_foundry` in both Backend Deploy and Infra Up. When `azure_foundry` is selected and no endpoint is configured, Infra Up creates the dedicated Foundry tranche and authorizes the API identity. Backend Deploy discovers its endpoint/deployment from the persisted `${APP_NAME}-foundry` ARM deployment outputs. Supplying an existing endpoint/deployment bypasses creation; use `scripts/configure-foundry-access.ps1` to grant access to that existing project.
 
-The Infra Up identity needs resource creation, scoped role-assignment permissions for the Foundry tranche, and Foundry User to register the project agent. Infra Up registers the agent for project endpoints; direct Azure OpenAI resource endpoints use the bundled single-pass definition without project registration. Backend Deploy still needs no permission to grant inference roles. `AZURE_FOUNDRY_CAPACITY` defaults to `100` in Infra Up. Model availability, quota and tool policy are validated by Azure; unsupported regions or exhausted quota fail explicitly.
+Infrastructure automation needs resource creation, scoped custom-role/assignment permissions, policy/model metadata reads, and operator data-plane access to register both agents. Backend Deploy preflights the approved versions and applies restricted runtime access using its deployment identity. The runtime identity is separate and cannot register or edit agents. Direct resource endpoints are unsupported for live research. `AZURE_FOUNDRY_CAPACITY` defaults to `100` in Infra Up. Model availability, quota and tool policy are validated by Azure; unsupported regions or exhausted quota fail explicitly.
 
 ### Additional Variables And Secrets
 
@@ -164,7 +172,10 @@ For the runtime API tranche, set these repository values:
 | `AZURE_API_ENVIRONMENT` | Variable | API environment string, typically `production`. |
 | `AZURE_API_SESSION_SECRET` | Secret | Session signing secret for the API cookie/JWT. |
 | `AZURE_FOUNDRY_AGENT_NAME` | Optional variable | Named dividend history agent; defaults to `dividend-history-agent` in both workflows. |
-| `ALPHA_VANTAGE_API_KEY` | Optional secret | Legacy market-data adapter only; not needed for Foundry web research or security search. |
+| `AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME` | Optional variable | Independent stock details agent; defaults to `stock-details-agent` in both workflows. |
+| `AZURE_FOUNDRY_AGENT_VERSION` | Required in live mode | Explicitly reviewed immutable dividend-agent version; no default. |
+| `AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION` | Required in live mode | Explicitly reviewed immutable stock-agent version; no default. |
+| `AZURE_FOUNDRY_RAI_POLICY_ID` | Required in live mode | Full existing policy ARM ID; must match both agents and the model deployment. |
 
 ### Workflow Defaults
 

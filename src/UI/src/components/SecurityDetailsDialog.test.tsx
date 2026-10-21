@@ -25,6 +25,54 @@ const securityWithPayments = { ...security, payoutDetails: [
 
 describe('SecurityDetailsDialog', () => {
   afterEach(() => vi.restoreAllMocks());
+  it('shows dated AI price evidence, safe source links, and explicitly retained metrics', () => {
+    render(<SecurityDetailsDialog security={{ ...security, sector: 'Saved sector', detailsStatus: 'partial', detailsProvenance: {
+      schemaVersion: 1, provider: 'azure_foundry', agentName: 'stock-details-agent', deployment: 'gpt-6-luna', promptVersion: 'stock-details-agent-v1',
+      agentVersion: '1', executionMode: 'registered_agent',
+      retrievedAt: '2026-10-21T12:00:00Z', priceKind: 'nav', authoritative: false,
+      sources: [{ id: 'issuer', url: 'https://example.com/fund', title: 'Issuer fund details' }, { id: 'unsafe', url: 'javascript:alert(1)', title: 'Unsafe source' }],
+      fieldEvidence: [{ field: 'price', sourceIds: ['issuer', 'unsafe'], asOf: '2026-10-20' }],
+      warnings: ['Optional metrics were not available.'],
+    } }} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendSettings={vi.fn()} />);
+    const researched = screen.getByRole('region', { name: 'AI-researched details' });
+    expect(within(researched).getByText('Registered Azure agent: stock-details-agent · version 1')).toBeInTheDocument();
+    expect(within(researched).getByText('2026-10-21T12:00:00Z')).toHaveAttribute('dateTime', '2026-10-21T12:00:00Z');
+    expect(within(researched).getByText(/Published NAV · As of/)).toBeInTheDocument();
+    expect(within(researched).getByText('2026-10-20')).toHaveAttribute('dateTime', '2026-10-20');
+    const source = within(researched).getByRole('link', { name: 'Issuer fund details (opens in new tab)' });
+    expect(source).toHaveAttribute('href', 'https://example.com/fund');
+    expect(source).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(within(researched).queryByRole('link', { name: /Unsafe/ })).not.toBeInTheDocument();
+    expect(within(researched).getByText('Optional metrics were not available.')).toBeInTheDocument();
+    const retained = within(researched).getByText('Saved sector').closest('dd')!;
+    expect(retained).toHaveTextContent('Retained saved value · observation date unavailable in this research');
+    expect(retained.querySelector('time')).toBeNull();
+  });
+
+  it('identifies stub details and preserves legacy unknown observation dates', () => {
+    const props = { onClose: vi.fn(), onSaveCorporateActions: vi.fn(), onSaveDividendSettings: vi.fn() };
+    const { rerender } = render(<SecurityDetailsDialog security={{ ...security, detailsStatus: 'stub' }} {...props} />);
+    expect(screen.getByRole('heading', { name: 'Stub security details' })).toBeInTheDocument();
+    expect(screen.queryByText('AI-researched details')).not.toBeInTheDocument();
+    rerender(<SecurityDetailsDialog security={security} {...props} />);
+    expect(screen.getByText('Source and observation dates are unavailable for these saved values.')).toBeInTheDocument();
+  });
+
+  it('traps keyboard focus in the dialog and restores the initiating control', async () => {
+    const user = userEvent.setup();
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger); trigger.focus();
+    const { unmount } = render(<SecurityDetailsDialog security={security} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendSettings={vi.fn()} />);
+    const close = screen.getByRole('button', { name: 'Close security details' });
+    expect(close).toHaveFocus();
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(screen.getByLabelText('Dividend growth rate (%)'));
+    await user.tab();
+    expect(close).toHaveFocus();
+    unmount();
+    expect(trigger).toHaveFocus(); trigger.remove();
+  });
+
   it('shows security details and the recorded corporate actions in separate tabs', async () => {
     const user = userEvent.setup();
     render(<SecurityDetailsDialog security={security} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendSettings={vi.fn()} />);

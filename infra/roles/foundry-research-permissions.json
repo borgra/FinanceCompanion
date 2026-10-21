@@ -1,0 +1,12 @@
+{
+  "runtimeDataActions": [
+    "Microsoft.CognitiveServices/accounts/AIServices/agents/read",
+    "Microsoft.CognitiveServices/accounts/AIServices/responses/write",
+    "Microsoft.CognitiveServices/accounts/AIServices/endpoints/interact/action"
+  ],
+  "metadataActions": [
+    "Microsoft.CognitiveServices/accounts/read",
+    "Microsoft.CognitiveServices/accounts/deployments/read",
+    "Microsoft.CognitiveServices/accounts/raiPolicies/read"
+  ]
+}

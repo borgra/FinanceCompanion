@@ -3,9 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import fields, replace
 from datetime import UTC, datetime
+from functools import wraps
+from threading import RLock
 
 from app.application.dividend_payouts import merge_dividend_payouts, normalize_distribution_metadata
-from app.domain.exceptions import NotFoundError
+from app.domain.exceptions import NotFoundError, SecurityDetailsUnavailableError
 from app.domain.models import (
     Account,
     AccountColumn,
@@ -178,6 +180,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         sma200=_optional_float(data.get("sma200")),
         details_updated_at=data.get("detailsUpdatedAt"),
         details_status=data.get("detailsStatus"),
+        details_provenance=data.get("detailsProvenance") or {},
         payout_details=merge_dividend_payouts(source_payout_details, manual_payout_details),
         source_payout_details=source_payout_details,
         manual_payout_details=manual_payout_details,
@@ -222,6 +225,7 @@ def _holding_from_dict(data: dict) -> Holding:
 
 class InMemoryDataStore:
     def __init__(self, allowed_email: str | None = None) -> None:
+        self.holdings_lock = RLock()
         data = clone_seed_data(allowed_email=allowed_email)
         self.users = {
             item["id"]: User(
@@ -442,13 +446,23 @@ class InMemoryRetirementPlanRepository:
 
 
 
+def _holding_locked(method):
+    @wraps(method)
+    def locked(self, *args, **kwargs):
+        with self._store.holdings_lock:
+            return method(self, *args, **kwargs)
+    return locked
+
+
 class InMemoryHoldingRepository:
     def __init__(self, store: InMemoryDataStore) -> None:
         self._store = store
 
+    @_holding_locked
     def list_for_user(self, user_id: str) -> list[Holding]:
         return deepcopy(self._store.holdings.get(user_id, []))
 
+    @_holding_locked
     def create_for_user(self, user_id: str, holding: Holding) -> Holding:
         holding = deepcopy(holding)
         holding.security = normalize_security_metadata(holding.security)
@@ -456,6 +470,7 @@ class InMemoryHoldingRepository:
         items.append(holding)
         return deepcopy(holding)
 
+    @_holding_locked
     def update_for_user(self, user_id: str, holding_id: str, holding: Holding) -> Holding:
         holding = deepcopy(holding)
         holding.security = normalize_security_metadata(holding.security)
@@ -466,7 +481,8 @@ class InMemoryHoldingRepository:
                 return deepcopy(holding)
         raise NotFoundError("Holding not found.")
 
-    def update_batch_for_user(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
+    @_holding_locked
+    def update_batch_for_user(self, user_id: str, holdings: list[Holding], *, expected: list[Holding] | None = None) -> list[Holding]:
         holdings = [
             replace(holding, security=normalize_security_metadata(holding.security))
             for holding in holdings
@@ -475,10 +491,21 @@ class InMemoryHoldingRepository:
         existing_ids = {item.id for item in items}
         if any(holding.id not in existing_ids for holding in holdings):
             raise NotFoundError("Holding not found.")
+        if expected is not None:
+            current = {item.id: item for item in items}
+            if any(current.get(item.id) != item for item in expected):
+                raise SecurityDetailsUnavailableError("The holding changed before stock details could be saved. Try again.")
         updates = {holding.id: deepcopy(holding) for holding in holdings}
         next_items = [updates.get(item.id, deepcopy(item)) for item in items]
         self._store.holdings[user_id] = next_items
+        if expected is not None and hasattr(self._store, "save"):
+            try:
+                self._store.save()
+            except Exception:
+                self._store.holdings[user_id] = items
+                raise SecurityDetailsUnavailableError("Unable to save stock details. Saved details were kept.") from None
         return deepcopy(holdings)
+    @_holding_locked
     def delete_for_user(self, user_id: str, holding_id: str) -> None:
         items = self._store.holdings.setdefault(user_id, [])
         if not any(item.id == holding_id for item in items):

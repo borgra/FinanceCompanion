@@ -1,6 +1,7 @@
 from __future__ import annotations
-from dataclasses import replace
 from app.domain.models import SecurityMetadata
+from app.domain.security_details import SecurityDetailsResult
+from app.domain.exceptions import SecurityDetailsUnavailableError
 
 _FIXTURES = {
     'MSFT': ('Microsoft Corporation', 'NASDAQ', 'Equity', 510.0),
@@ -14,9 +15,9 @@ class StubSecuritySearchProvider:
         return [SecurityMetadata(symbol=s, name=n, exchange=e, asset_type=a, currency='USD', price=p) for s,(n,e,a,p) in _FIXTURES.items() if q in s or q in n.upper()][:8]
 
 class StubSecurityDetailsProvider:
-    def get_details(self, security: SecurityMetadata) -> SecurityMetadata:
+    def get_details(self, security: SecurityMetadata) -> SecurityDetailsResult:
         item = _FIXTURES.get(security.symbol.upper())
         if not item:
-            return replace(security, details_status='stub')
-        name, exchange, asset_type, price = item
-        return replace(security, name=name, exchange=exchange, asset_type=asset_type, currency='USD', price=price, details_status='stub')
+            raise SecurityDetailsUnavailableError("No offline fixture exists for this security. Saved details were kept.")
+        name, _exchange, _asset_type, price = item
+        return SecurityDetailsResult(name=name, price=price, status='stub')

@@ -10,13 +10,16 @@ param(
   [string] $EntraTenantId = "",
   [string] $AllowedEmail = "",
   [string] $SessionSecret = "",
-  [string] $AlphaVantageApiKey = "",
   [string] $Environment = "production",
   [ValidateSet('stub', 'azure_foundry')]
   [string] $DividendResearchProvider = 'stub',
   [string] $AzureFoundryEndpoint = '',
   [string] $AzureFoundryDeployment = '',
   [string] $AzureFoundryAgentName = 'dividend-history-agent',
+  [string] $AzureFoundryStockDetailsAgentName = 'stock-details-agent',
+  [string] $AzureFoundryAgentVersion = '',
+  [string] $AzureFoundryStockDetailsAgentVersion = '',
+  [string] $AzureFoundryRaiPolicyId = '',
   [string] $AzureFoundryReasoningEffort = '',
   [string] $AzureFoundryManagedIdentityResourceId = '',
   [switch] $EnableFoundry,
@@ -31,6 +34,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($AzureFoundryAgentName -eq $AzureFoundryStockDetailsAgentName) { throw 'Dividend and stock agents require distinct names.' }
+
 if ($SessionSecret.Length -lt 32 -or $SessionSecret.StartsWith('local-dev-session-secret')) {
   throw 'Supply a private, randomly generated SessionSecret of at least 32 characters before deploying.'
 }
@@ -39,6 +44,11 @@ if ([string]::IsNullOrWhiteSpace($AllowedEmail)) {
 }
 if ($Environment -ne 'development' -and ([string]::IsNullOrWhiteSpace($EntraClientId) -or [string]::IsNullOrWhiteSpace($EntraTenantId))) {
   throw 'Supply EntraClientId and EntraTenantId before deploying a non-development environment.'
+}
+
+if ($DividendResearchProvider -eq 'azure_foundry' -or $EnableFoundry) {
+  if ($AzureFoundryAgentVersion -notmatch '^[1-9][0-9]{0,18}$' -or $AzureFoundryStockDetailsAgentVersion -notmatch '^[1-9][0-9]{0,18}$') { throw 'Register and smoke test both definitions with deploy-foundry.ps1 first, then supply explicitly approved AzureFoundryAgentVersion and AzureFoundryStockDetailsAgentVersion.' }
+  if (-not $EnableFoundry -and -not $AzureFoundryRaiPolicyId) { throw 'Live runtime requires AzureFoundryRaiPolicyId.' }
 }
 
 function Invoke-DeploymentTranche {
@@ -100,11 +110,15 @@ Invoke-DeploymentTranche -Name "runtime-base" -Command {
 
 $newFoundry = $null
 if ($EnableFoundry) {
-  $newFoundry = & (Join-Path $PSScriptRoot 'deploy-foundry.ps1') -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -AppName $AppName -Location $Location -Capacity $FoundryCapacity -AgentName $AzureFoundryAgentName
+  $newFoundry = & (Join-Path $PSScriptRoot 'deploy-foundry.ps1') -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -AppName $AppName -Location $Location -Capacity $FoundryCapacity -AgentName $AzureFoundryAgentName -StockDetailsAgentName $AzureFoundryStockDetailsAgentName
   $AzureFoundryEndpoint = $newFoundry.projectEndpoint.value
   $AzureFoundryDeployment = $newFoundry.deploymentName.value
   $AzureFoundryReasoningEffort = $newFoundry.reasoningEffort.value
+  $AzureFoundryRaiPolicyId = $newFoundry.raiPolicyId.value
   $DividendResearchProvider = 'azure_foundry'
+} elseif ($DividendResearchProvider -eq 'azure_foundry' -and $AzureFoundryEndpoint -match '/api/projects/') {
+  $null = & (Join-Path $PSScriptRoot 'register-foundry-agent.ps1') -SubscriptionId $SubscriptionId -Endpoint $AzureFoundryEndpoint -Deployment $AzureFoundryDeployment -AgentName $AzureFoundryAgentName -AgentKind dividend-history -RaiPolicyId $AzureFoundryRaiPolicyId
+  $null = & (Join-Path $PSScriptRoot 'register-foundry-agent.ps1') -SubscriptionId $SubscriptionId -Endpoint $AzureFoundryEndpoint -Deployment $AzureFoundryDeployment -AgentName $AzureFoundryStockDetailsAgentName -AgentKind stock-details -RaiPolicyId $AzureFoundryRaiPolicyId
 }
 
 Invoke-DeploymentTranche -Name "runtime-api" -Command {
@@ -117,7 +131,6 @@ Invoke-DeploymentTranche -Name "runtime-api" -Command {
   try {
     @{
       sessionSecret = @{ value = $SessionSecret }
-      alphaVantageApiKey = @{ value = $AlphaVantageApiKey }
     } | ConvertTo-Json -Compress | Set-Content -LiteralPath $secretParamFile -Encoding utf8 -NoNewline
     az deployment group create `
       --name "${AppName}-runtime-api" `
@@ -139,6 +152,10 @@ Invoke-DeploymentTranche -Name "runtime-api" -Command {
                    azureFoundryEndpoint=$AzureFoundryEndpoint `
                    azureFoundryDeployment=$AzureFoundryDeployment `
                    azureFoundryAgentName=$AzureFoundryAgentName `
+                   azureFoundryStockDetailsAgentName=$AzureFoundryStockDetailsAgentName `
+                   azureFoundryAgentVersion=$AzureFoundryAgentVersion `
+                   azureFoundryStockDetailsAgentVersion=$AzureFoundryStockDetailsAgentVersion `
+                   azureFoundryRaiPolicyId=$AzureFoundryRaiPolicyId `
                    azureFoundryReasoningEffort=$AzureFoundryReasoningEffort `
                    azureFoundryManagedIdentityResourceId=$AzureFoundryManagedIdentityResourceId `
                    azureFoundryManagedIdentityClientId=$runtimeIdentityClientId `
@@ -148,10 +165,12 @@ Invoke-DeploymentTranche -Name "runtime-api" -Command {
   }
 }
 
-if ($newFoundry) {
+if ($DividendResearchProvider -eq 'azure_foundry') {
+  $foundryAccountId = $AzureFoundryRaiPolicyId -replace '/raiPolicies/[^/]+$', ''
+  $foundryProjectName = ([Uri]$AzureFoundryEndpoint).AbsolutePath.TrimEnd('/').Split('/')[-1]
   $apiName = az deployment group show --subscription $SubscriptionId --resource-group $ResourceGroupName --name "$AppName-runtime-api" --query properties.outputs.containerAppName.value --output tsv --only-show-errors
   if ($LASTEXITCODE -ne 0 -or -not $apiName) { throw 'Unable to resolve the runtime Container App name for Foundry RBAC.' }
-  & (Join-Path $PSScriptRoot 'configure-foundry-access.ps1') -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -ContainerAppName $apiName -FoundryResourceId $newFoundry.foundryResourceId.value -FoundryProjectName $newFoundry.projectName.value -EndpointKind Project -UserAssignedIdentityResourceId $AzureFoundryManagedIdentityResourceId
+  & (Join-Path $PSScriptRoot 'configure-foundry-access.ps1') -SubscriptionId $SubscriptionId -ResourceGroupName $ResourceGroupName -ContainerAppName $apiName -FoundryResourceId $foundryAccountId -FoundryProjectName $foundryProjectName -EndpointKind Project -UserAssignedIdentityResourceId $AzureFoundryManagedIdentityResourceId
 }
 
 if ($EnableBlobStorage) {

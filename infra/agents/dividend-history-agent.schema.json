@@ -30,7 +30,10 @@
           "record_date",
           "payment_date",
           "status",
-          "is_special"
+          "is_special",
+          "source_url",
+          "distribution_type",
+          "share_basis"
         ],
         "properties": {
           "ex_dividend_date": { "type": "string" },
@@ -39,7 +42,10 @@
           "record_date": { "type": ["string", "null"] },
           "payment_date": { "type": ["string", "null"] },
           "status": { "type": "string", "enum": ["completed", "announced"] },
-          "is_special": { "type": "boolean" }
+          "is_special": { "type": "boolean" },
+          "source_url": { "type": "string" },
+          "distribution_type": { "type": "string", "enum": ["income", "capital_gain", "return_of_capital", "other"] },
+          "share_basis": { "type": "string", "enum": ["raw", "current_share_basis", "unverified"] }
         }
       }
     },

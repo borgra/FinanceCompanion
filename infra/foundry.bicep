@@ -4,6 +4,9 @@ param appName string
 param location string = resourceGroup().location
 param projectName string = 'distribution-research'
 param agentName string = 'dividend-history-agent'
+param stockDetailsAgentName string = 'stock-details-agent'
+@description('Version this policy name when changing controls; approval also pins agent versions.')
+param raiPolicyName string = 'research-injection-blocking-v1'
 param deploymentName string = 'gpt-6-luna'
 param modelName string = 'gpt-6-luna'
 param modelVersion string = '2026-09-22'
@@ -57,7 +60,37 @@ resource project 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
   dependsOn: [model]
 }
 
+// Policy attachment protects direct Responses calls as well as registered agents.
+var promptBaseline = [for category in ['Hate', 'Sexual', 'Violence', 'Selfharm']: {
+  name: category
+  source: 'Prompt'
+  severityThreshold: 'Medium'
+  enabled: true
+  blocking: true
+}]
+var completionBaseline = [for category in ['Hate', 'Sexual', 'Violence', 'Selfharm']: {
+  name: category
+  source: 'Completion'
+  severityThreshold: 'Medium'
+  enabled: true
+  blocking: true
+}]
+resource researchPolicy 'Microsoft.CognitiveServices/accounts/raiPolicies@2025-06-01' = {
+  parent: foundry
+  name: raiPolicyName
+  properties: {
+    basePolicyName: 'Microsoft.DefaultV2'
+    mode: 'Blocking'
+    contentFilters: concat(promptBaseline, completionBaseline, [
+      { name: 'Jailbreak', source: 'Prompt', enabled: true, blocking: true }
+      { name: 'Indirect Attack', source: 'Prompt', enabled: true, blocking: true }
+    ])
+  }
+}
+
 // The project's service identity is separate from API and developer callers.
+// This platform service identity prerequisite is distinct from the API caller.
+// Runtime caller permissions are restricted separately by configure-foundry-access.
 var foundryUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '53ca6127-db72-4b80-b1b0-d745d6d5456d')
 resource projectServiceAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(foundry.id, project.id, foundryUserRoleId)
@@ -83,6 +116,7 @@ resource model 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
       version: modelVersion
     }
     versionUpgradeOption: 'NoAutoUpgrade'
+    raiPolicyName: researchPolicy.name
   }
 }
 
@@ -95,3 +129,6 @@ output modelVersion string = modelVersion
 output reasoningEffort string = 'low'
 
 output agentName string = agentName
+output stockDetailsAgentName string = stockDetailsAgentName
+
+output raiPolicyId string = researchPolicy.id

@@ -8,11 +8,12 @@ from copy import deepcopy
 from dataclasses import asdict, fields, replace
 from datetime import UTC, datetime
 
+from azure.core import MatchConditions
 from azure.core.exceptions import ResourceNotFoundError
 from azure.data.tables import TableClient, UpdateMode
 
 from app.application.dividend_payouts import merge_dividend_payouts, normalize_distribution_metadata
-from app.domain.exceptions import NotFoundError, ValidationError as DomainValidationError
+from app.domain.exceptions import NotFoundError, SecurityDetailsUnavailableError, ValidationError as DomainValidationError
 from app.domain.models import (
     Account,
     AccountColumn,
@@ -334,6 +335,7 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         sma200=_optional_float(data.get("sma200")),
         details_updated_at=data.get("detailsUpdatedAt"),
         details_status=data.get("detailsStatus"),
+        details_provenance=data.get("detailsProvenance") or {},
         payout_details=merge_dividend_payouts(source_payout_details, manual_payout_details),
         source_payout_details=source_payout_details,
         manual_payout_details=manual_payout_details,
@@ -387,6 +389,7 @@ def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
         "sma200": security.sma200,
         "detailsUpdatedAt": security.details_updated_at,
         "detailsStatus": security.details_status,
+        "detailsProvenance": security.details_provenance,
     }
 
 
@@ -479,6 +482,7 @@ def _security_details_to_dict(security: SecurityMetadata) -> dict:
         "sma200": security.sma200,
         "detailsUpdatedAt": security.details_updated_at,
         "detailsStatus": security.details_status,
+        "detailsProvenance": security.details_provenance,
     }
 
 
@@ -928,7 +932,7 @@ class CosmosHoldingRepository:
         self._client.upsert_entity(entity, mode=UpdateMode.REPLACE)
         return deepcopy(holding)
 
-    def update_batch_for_user(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
+    def update_batch_for_user(self, user_id: str, holdings: list[Holding], *, expected: list[Holding] | None = None) -> list[Holding]:
         holdings = [
             replace(holding, security=normalize_security_metadata(holding.security))
             for holding in holdings
@@ -942,7 +946,21 @@ class CosmosHoldingRepository:
             entities = [_holding_to_entity(user_id, holding) for holding in holdings]
             if sum(len(json.dumps(entity).encode("utf-8")) for entity in entities) > 3_500_000:
                 raise DomainValidationError("Holding batch exceeds the distribution storage transaction limit.")
-            self._client.submit_transaction([("upsert", entity, {"mode": UpdateMode.REPLACE}) for entity in entities])
+            if expected is not None:
+                snapshots = {item.id: item for item in expected}
+                operations = []
+                for holding, entity in zip(holdings, entities):
+                    current = self._client.get_entity(user_id, f"holding:{holding.id}")
+                    if _holding_from_entity(current) != snapshots.get(holding.id):
+                        raise SecurityDetailsUnavailableError("The holding changed before stock details could be saved. Try again.")
+                    etag = getattr(current, "metadata", {}).get("etag")
+                    if not etag:
+                        raise SecurityDetailsUnavailableError("Stock detail concurrency validation was unavailable. Saved details were kept.")
+                    operations.append(("update", entity, {"mode": UpdateMode.REPLACE,
+                        "etag": etag, "match_condition": MatchConditions.IfNotModified}))
+                self._client.submit_transaction(operations)
+            else:
+                self._client.submit_transaction([("upsert", entity, {"mode": UpdateMode.REPLACE}) for entity in entities])
         return deepcopy(holdings)
     def delete_for_user(self, user_id: str, holding_id: str) -> None:
         try:

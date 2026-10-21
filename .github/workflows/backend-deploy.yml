@@ -34,6 +34,10 @@ jobs:
       AZURE_FOUNDRY_ENDPOINT: ${{ vars.AZURE_FOUNDRY_ENDPOINT }}
       AZURE_FOUNDRY_DEPLOYMENT: ${{ vars.AZURE_FOUNDRY_DEPLOYMENT }}
       AZURE_FOUNDRY_AGENT_NAME: ${{ vars.AZURE_FOUNDRY_AGENT_NAME || 'dividend-history-agent' }}
+      AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME: ${{ vars.AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME || 'stock-details-agent' }}
+      AZURE_FOUNDRY_AGENT_VERSION: ${{ vars.AZURE_FOUNDRY_AGENT_VERSION }}
+      AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION: ${{ vars.AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION }}
+      AZURE_FOUNDRY_RAI_POLICY_ID: ${{ vars.AZURE_FOUNDRY_RAI_POLICY_ID }}
       AZURE_FOUNDRY_REASONING_EFFORT: ${{ vars.AZURE_FOUNDRY_REASONING_EFFORT }}
       AZURE_FOUNDRY_AUTH_MODE: ${{ vars.AZURE_FOUNDRY_AUTH_MODE || 'entra' }}
       AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID: ${{ vars.AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID }}
@@ -87,6 +91,9 @@ jobs:
             azure_foundry)
               test -n "${AZURE_FOUNDRY_ENDPOINT:-}" || { echo "Set AZURE_FOUNDRY_ENDPOINT in deployment environment variables." >&2; exit 1; }
               test -n "${AZURE_FOUNDRY_DEPLOYMENT:-}" || { echo "Set AZURE_FOUNDRY_DEPLOYMENT in deployment environment variables." >&2; exit 1; }
+              test -n "${AZURE_FOUNDRY_RAI_POLICY_ID:-}" || { echo "Set AZURE_FOUNDRY_RAI_POLICY_ID." >&2; exit 1; }
+              [[ "${AZURE_FOUNDRY_AGENT_VERSION:-}" =~ ^[1-9][0-9]{0,18}$ && "${AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION:-}" =~ ^[1-9][0-9]{0,18}$ ]] || { echo "Approve immutable AZURE_FOUNDRY_AGENT_VERSION and AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION." >&2; exit 1; }
+              [[ "${AZURE_FOUNDRY_ENDPOINT}" == https://*.services.ai.azure.com/api/projects/* ]] || { echo "Live research requires a project endpoint." >&2; exit 1; }
               test "${AZURE_FOUNDRY_AUTH_MODE}" = entra || { echo "Production deployment requires Foundry Entra managed identity authentication." >&2; exit 1; }
               ;;
             *) echo "Unknown DIVIDEND_RESEARCH_PROVIDER." >&2; exit 1 ;;
@@ -183,6 +190,24 @@ jobs:
             fi
             echo "AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID=${MI_CLIENT_ID}" >> "${GITHUB_ENV}"
 
+      - name: Restrict Foundry runtime access
+        if: env.DIVIDEND_RESEARCH_PROVIDER == 'azure_foundry'
+        shell: pwsh
+        run: |
+          $accountId = $env:AZURE_FOUNDRY_RAI_POLICY_ID -replace '/raiPolicies/[^/]+$', ''
+          $projectName = ([Uri]$env:AZURE_FOUNDRY_ENDPOINT).AbsolutePath.TrimEnd('/').Split('/')[-1]
+          ./infra/scripts/configure-foundry-access.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -FoundryResourceId $accountId -FoundryProjectName $projectName -EndpointKind Project -ContainerAppName $env:API_CONTAINER_APP_NAME -ResourceGroupName $env:AZURE_RESOURCE_GROUP -UserAssignedIdentityResourceId $env:AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID -AccessProfile Runtime
+
+      - name: Register Foundry agents
+        if: env.DIVIDEND_RESEARCH_PROVIDER == 'azure_foundry' && contains(env.AZURE_FOUNDRY_ENDPOINT, '/api/projects/')
+        shell: pwsh
+        run: |
+          if ($env:AZURE_FOUNDRY_AGENT_NAME -eq $env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME) { throw 'Dividend and stock agents require distinct names.' }
+          ./infra/scripts/register-foundry-agent.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_AGENT_NAME -AgentKind dividend-history -RaiPolicyId $env:AZURE_FOUNDRY_RAI_POLICY_ID
+          ./infra/scripts/register-foundry-agent.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME -AgentKind stock-details -RaiPolicyId $env:AZURE_FOUNDRY_RAI_POLICY_ID
+          ./infra/scripts/test-foundry.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_AGENT_NAME -AgentKind dividend-history -AgentVersion $env:AZURE_FOUNDRY_AGENT_VERSION -RaiPolicyId $env:AZURE_FOUNDRY_RAI_POLICY_ID -VerifyConfigurationOnly
+          ./infra/scripts/test-foundry.ps1 -SubscriptionId '${{ vars.AZURE_SUBSCRIPTION_ID }}' -Endpoint $env:AZURE_FOUNDRY_ENDPOINT -Deployment $env:AZURE_FOUNDRY_DEPLOYMENT -AgentName $env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME -AgentKind stock-details -AgentVersion $env:AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION -RaiPolicyId $env:AZURE_FOUNDRY_RAI_POLICY_ID -VerifyConfigurationOnly
+
       - name: Set image name
         run: |
           echo "IMAGE_NAME=${{ env.ACR_LOGIN_SERVER }}/api:${{ github.sha }}" >> "${GITHUB_ENV}"
@@ -199,7 +224,6 @@ jobs:
 
       - name: Configure API secrets
         env:
-          LEGACY_ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           API_SESSION_SECRET: ${{ secrets.ENV_PROD_SESSION_SECRET || secrets.AZURE_API_SESSION_SECRET }}
         uses: azure/cli@v3
         with:
@@ -220,17 +244,6 @@ jobs:
                 session-secret="${API_SESSION_SECRET}" \
               --only-show-errors --output none
 
-            ALPHA_VANTAGE_SECRET_REF=""
-            if [ -n "${LEGACY_ALPHA_VANTAGE_API_KEY:-}" ]; then
-              az containerapp secret set \
-                --name "${API_CONTAINER_APP_NAME}" \
-                --resource-group "${AZURE_RESOURCE_GROUP}" \
-                --secrets alpha-vantage-api-key="${LEGACY_ALPHA_VANTAGE_API_KEY}" \
-                --only-show-errors --output none
-              ALPHA_VANTAGE_SECRET_REF="secretref:alpha-vantage-api-key"
-            fi
-            echo "ALPHA_VANTAGE_SECRET_REF=${ALPHA_VANTAGE_SECRET_REF}" >> "${GITHUB_ENV}"
-
       - name: Deploy API image
         env:
           ENTRA_CLIENT_ID: ${{ vars.ENV_PROD_ENTRA_CLIENT_ID || vars.AZURE_ENTRA_CLIENT_ID }}
@@ -247,11 +260,11 @@ jobs:
               --name "${API_CONTAINER_APP_NAME}" \
               --resource-group "${AZURE_RESOURCE_GROUP}" \
               --image "${IMAGE_NAME}" \
+              --remove-env-vars FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY \
               --set-env-vars \
                 FINANCE_COMPANION_COSMOS_TABLE_CONNECTION_STRING=secretref:cosmos-table-connection-string \
                 FINANCE_COMPANION_COSMOS_TABLE_NAME="${COSMOS_TABLE_NAME}" \
                 FINANCE_COMPANION_SESSION_SECRET=secretref:session-secret \
-                FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY="${ALPHA_VANTAGE_SECRET_REF:-}" \
                 FINANCE_COMPANION_ENTRA_CLIENT_ID="${ENTRA_CLIENT_ID}" \
                 FINANCE_COMPANION_ENTRA_TENANT_ID="${ENTRA_TENANT_ID}" \
                 FINANCE_COMPANION_ALLOWED_EMAIL="${ALLOWED_EMAIL}" \
@@ -260,6 +273,10 @@ jobs:
                 FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT="${AZURE_FOUNDRY_ENDPOINT:-}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT="${AZURE_FOUNDRY_DEPLOYMENT:-}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME="${AZURE_FOUNDRY_AGENT_NAME:-dividend-history-agent}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME="${AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME:-stock-details-agent}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_VERSION="${AZURE_FOUNDRY_AGENT_VERSION:-}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION="${AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION:-}" \
+                FINANCE_COMPANION_AZURE_FOUNDRY_RAI_POLICY_ID="${AZURE_FOUNDRY_RAI_POLICY_ID:-}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT="${AZURE_FOUNDRY_REASONING_EFFORT:-}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE="${AZURE_FOUNDRY_AUTH_MODE}" \
                 FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID="${AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID:-}" \

@@ -4039,6 +4039,22 @@ button.security-result:hover {
   margin: 0;
 }
 
+.stock-details-evidence {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stock-detail-observation {
+  display: block;
+  margin-top: 0.3rem;
+  font-weight: normal;
+  line-height: 1.5;
+}
+
+.holdings-refresh-action[aria-disabled='true'] {
+  cursor: wait;
+}
+
 .security-details-grid div {
   padding: 10px;
   border: 1px solid var(--md-sys-color-outline-variant);

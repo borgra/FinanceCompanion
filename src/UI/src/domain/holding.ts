@@ -36,6 +36,26 @@ export type SecurityPayoutDetails = {
   excludedFromTotals?: boolean;
 };
 
+export type SecurityDetailsProvenance = {
+  schemaVersion: number;
+  provider: string;
+  agentName: string;
+  agentVersion?: string;
+  executionMode?: 'registered_agent';
+  deployment: string;
+  promptVersion: string;
+  retrievedAt: string;
+  priceKind: 'last_trade' | 'close' | 'nav' | null;
+  authoritative: false;
+  sources: Array<{ id: string; url: string; title: string }>;
+  fieldEvidence: Array<{
+    field: 'identity' | 'price' | 'sector' | 'industry' | 'pe_ratio' | 'thirty_day_yield' | 'fifty_two_week_low' | 'fifty_two_week_high' | 'sma20' | 'sma50' | 'sma200';
+    sourceIds: string[];
+    asOf: string;
+  }>;
+  warnings: string[];
+};
+
 export type SecurityMetadata = {
   symbol: string;
   name: string;
@@ -59,6 +79,7 @@ export type SecurityMetadata = {
   sma200?: number | null;
   detailsUpdatedAt?: string | null;
   detailsStatus?: string | null;
+  detailsProvenance?: SecurityDetailsProvenance | null;
   payoutDetails?: SecurityPayoutDetails[];
   sourcePayoutDetails?: SecurityPayoutDetails[];
   manualPayoutDetails?: SecurityPayoutDetails[];

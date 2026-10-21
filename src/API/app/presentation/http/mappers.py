@@ -288,6 +288,7 @@ def to_security_metadata(payload: SecurityMetadataPayload) -> SecurityMetadata:
         sma200=payload.sma200,
         details_updated_at=payload.details_updated_at,
         details_status=payload.details_status,
+        details_provenance=payload.details_provenance,
         payout_details=[
             to_security_payout_details(item)
             for item in payload.payout_details
@@ -346,6 +347,7 @@ def to_security_metadata_payload(item: SecurityMetadata) -> SecurityMetadataPayl
         sma200=item.sma200,
         details_updated_at=item.details_updated_at,
         details_status=item.details_status,
+        details_provenance=item.details_provenance,
         payout_details=[
             to_security_payout_details_payload(payout)
             for payout in item.payout_details

@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import replace
 
 from app.application.dividend_payouts import merge_dividend_payouts
@@ -5,7 +6,26 @@ from app.domain.exceptions import NotFoundError, ValidationError
 from app.domain.models import Holding, HoldingAccountPosition, SecurityPayoutDetails
 from app.domain.models.security_metadata import is_cash_security, normalize_security_metadata
 from app.domain.protocols import HoldingRepository
+from app.domain.security_details import DETAIL_FIELDS, listing_key
 from app.infrastructure.in_memory_repositories import now_iso
+
+
+def _preserve_stock_evidence(current, incoming):
+    """Clients may edit values, but cannot assign AI evidence to those edits."""
+    changed = {key for key in (*DETAIL_FIELDS, "name") if getattr(current, key) != getattr(incoming, key)}
+    if listing_key(current) != listing_key(incoming):
+        return replace(incoming, details_provenance={}, details_status="manual", details_updated_at=now_iso())
+    provenance = deepcopy(current.details_provenance)
+    if changed and provenance:
+        provenance["fieldEvidence"] = [item for item in provenance.get("fieldEvidence", [])
+            if item.get("field") not in changed and not ("name" in changed and item.get("field") == "identity")]
+        used = {source_id for item in provenance["fieldEvidence"] for source_id in item.get("sourceIds", [])}
+        provenance["sources"] = [source for source in provenance.get("sources", []) if source.get("id") in used]
+        if "price" in changed:
+            provenance["priceKind"] = None
+    return replace(incoming, details_provenance=provenance,
+        details_status="manual" if changed else current.details_status,
+        details_updated_at=now_iso() if changed else current.details_updated_at)
 
 
 class ListHoldings:
@@ -47,7 +67,8 @@ class CreateHolding:
             )
             return self._repository.update_for_user(user_id, existing.id, updated)
 
-        return self._repository.create_for_user(user_id, holding)
+        return self._repository.create_for_user(user_id, replace(holding,
+            security=replace(holding.security, details_provenance={})))
 
 
 class UpdateHolding:
@@ -56,6 +77,10 @@ class UpdateHolding:
 
     def execute(self, user_id: str, holding_id: str, holding: Holding) -> Holding:
         holding = replace(holding, security=normalize_security_metadata(holding.security))
+        current = next((item for item in self._repository.list_for_user(user_id) if item.id == holding_id), None)
+        if current is None:
+            raise NotFoundError("Holding not found.")
+        holding = replace(holding, security=_preserve_stock_evidence(current.security, holding.security))
         return self._repository.update_for_user(user_id, holding_id, holding)
 
 
@@ -70,12 +95,14 @@ class UpdateHoldingsBatch:
         ]
         if len(holdings) > 100:
             raise ValueError("A maximum of 100 holdings can be saved at once.")
-        existing_ids = {item.id for item in self._repository.list_for_user(user_id)}
+        existing = {item.id: item for item in self._repository.list_for_user(user_id)}
+        existing_ids = set(existing)
         requested_ids = [item.id for item in holdings]
         if len(requested_ids) != len(set(requested_ids)):
             raise ValueError("Each holding may appear only once.")
         if any(item_id not in existing_ids for item_id in requested_ids):
             raise NotFoundError("Holding not found.")
+        holdings = [replace(item, security=_preserve_stock_evidence(existing[item.id].security, item.security)) for item in holdings]
         return self._repository.update_batch_for_user(user_id, holdings)
 
 class ImportHoldingDetails:
@@ -137,7 +164,7 @@ class ImportHoldingDetails:
                 continue
             refreshed = replace(
                 holding,
-                security=replace(holding.security, name=name, price=price, dividend_growth_rate=dividend_growth_rate if has_dividend_growth_rate else holding.security.dividend_growth_rate, details_updated_at=timestamp, details_status="manual"),
+                security=_preserve_stock_evidence(holding.security, replace(holding.security, name=name, price=price, dividend_growth_rate=dividend_growth_rate if has_dividend_growth_rate else holding.security.dividend_growth_rate, details_updated_at=timestamp, details_status="manual")),
                 account_positions=merged_positions,
                 updated_at=timestamp,
             )

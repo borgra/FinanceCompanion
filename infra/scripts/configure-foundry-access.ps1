@@ -3,8 +3,9 @@
 Enable a Container App managed identity and grant scoped Foundry inference access.
 .DESCRIPTION
 Run as an administrator who can update the Container App identity and write role
-assignments at the target scope. -WhatIf previews changes. Existing inherited
-assignments are reused; this script never removes identities or assignments.
+assignments/custom roles at the target scope. -WhatIf previews changes. Runtime
+access audits broader grants and fails closed; it never silently removes assignments.
+Developer access is explicitly separate from runtime invocation permissions.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
@@ -21,10 +22,12 @@ param(
   [string] $UserAssignedIdentityResourceId = '',
   [string] $PrincipalObjectId = '',
   [ValidateSet('ServicePrincipal', 'User', 'Group')]
-  [string] $PrincipalType = 'ServicePrincipal'
+  [string] $PrincipalType = 'ServicePrincipal',
+  [ValidateSet('Runtime', 'Developer')][string] $AccessProfile = 'Runtime'
 )
 
 $ErrorActionPreference = 'Stop'
+if ($AccessProfile -eq 'Runtime' -and ($EndpointKind -ne 'Project' -or $PrincipalType -ne 'ServicePrincipal')) { throw 'Runtime access requires an Entra service principal and project endpoint. Use AccessProfile Developer only for operators.' }
 Set-StrictMode -Version Latest
 if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw 'Install Azure CLI and sign in with az login first.' }
 if ($EndpointKind -eq 'Project' -and $FoundryProjectName -notmatch '^[^/]+$') {
@@ -98,7 +101,7 @@ if (-not $PrincipalObjectId) {
     if (-not $PrincipalObjectId) {
       Write-Host 'The system principal will be created when this script is run without -WhatIf.'
       Write-Host "Planned inference scope: $FoundryResourceId$(if ($EndpointKind -eq 'Project') { '/projects/' + $FoundryProjectName })"
-      Write-Host $(if ($EndpointKind -eq 'Project') { 'Planned grants: Foundry User at project scope; Reader at parent resource scope.' } else { 'Planned grant: Cognitive Services OpenAI User at resource scope.' })
+      Write-Host $(if ($EndpointKind -eq 'Project') { 'Planned grants: restricted research invocation at project scope; policy/model metadata reads at account scope.' } else { 'Planned grant: Cognitive Services OpenAI User at resource scope.' })
       return
     }
     Write-Host 'Runtime setting: leave FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID empty (system-assigned identity).'
@@ -106,10 +109,33 @@ if (-not $PrincipalObjectId) {
 }
 
 Write-Host "Principal object ID: $PrincipalObjectId"
-if ($EndpointKind -eq 'Project') {
-  Ensure-Role -Scope "$FoundryResourceId/projects/$FoundryProjectName" -RoleId '53ca6127-db72-4b80-b1b0-d745d6d5456d' -Label 'Foundry User (formerly Azure AI User)'
+if ($AccessProfile -eq 'Runtime') {
+  $projectScope = "$FoundryResourceId/projects/$FoundryProjectName"
+  if (-not $PSCmdlet.ShouldProcess($projectScope, 'Audit effective roles and assign restricted research runtime/metadata roles')) { return }
+  $permissionContract = Get-Content (Join-Path $PSScriptRoot '../roles/foundry-research-permissions.json') -Raw | ConvertFrom-Json
+  $assignments = @(Invoke-AzureJson -Arguments @('role', 'assignment', 'list', '--assignee', $PrincipalObjectId, '--scope', $projectScope, '--include-inherited', '--include-groups'))
+  foreach ($assignment in $assignments) {
+    $roleDefinitions = @(Invoke-AzureJson -Arguments @('role', 'definition', 'list', '--name', $assignment.roleDefinitionId))
+    if ($roleDefinitions.Count -ne 1) { throw 'Unable to verify every runtime role definition; no roles were granted.' }
+    foreach ($permission in $roleDefinitions[0].permissions) {
+      foreach ($action in @($permission.actions)) {
+        if ($action -and $action -notmatch '/read$') { throw 'Runtime identity has a broader management role. Remove its broad/inherited grants through an administrator before continuing.' }
+      }
+      foreach ($action in @($permission.dataActions)) {
+        if ($action -and $action -notin $permissionContract.runtimeDataActions) { throw 'Runtime identity can edit agents or has other broad data access. Remove its broad/inherited grants through an administrator before continuing.' }
+      }
+    }
+  }
+  $segments = $FoundryResourceId -split '/'
+  $foundrySubscription = $segments[2]
+  $foundryGroup = $segments[4]
+  $accountName = $segments[8]
+  $null = Invoke-AzureJson -Arguments @('deployment', 'group', 'create', '--subscription', $foundrySubscription, '--resource-group', $foundryGroup, '--name', "research-runtime-access-$($PrincipalObjectId.Substring(0, 8))", '--template-file', (Join-Path $PSScriptRoot '../foundry-runtime-access.bicep'), '--parameters', "foundryAccountName=$accountName", "projectName=$FoundryProjectName", "principalId=$PrincipalObjectId")
+  Write-Host 'Assigned project-scoped research invocation and account-scoped policy/model metadata reads. No agent/policy/role write permissions are granted.'
+} elseif ($EndpointKind -eq 'Project') {
+  Ensure-Role -Scope "$FoundryResourceId/projects/$FoundryProjectName" -RoleId '53ca6127-db72-4b80-b1b0-d745d6d5456d' -Label 'Foundry User (operator development only)'
   Ensure-Role -Scope $FoundryResourceId -RoleId 'acdd72a7-3385-48ef-bd42-f606fba81ae7' -Label 'Reader (parent resource metadata only)'
 } else {
-  Ensure-Role -Scope $FoundryResourceId -RoleId '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' -Label 'Cognitive Services OpenAI User'
+  Ensure-Role -Scope $FoundryResourceId -RoleId '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' -Label 'Cognitive Services OpenAI User (operator only)'
 }
 Write-Host 'Allow RBAC propagation, then test a refresh from the running API. Token acquisition alone does not verify inference authorization.'

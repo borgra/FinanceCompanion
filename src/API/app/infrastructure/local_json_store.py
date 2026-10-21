@@ -30,7 +30,7 @@ def _camel(value):
         return str(value)
     if isinstance(value, dict):
         return {
-            ''.join(part if index == 0 else part[:1].upper() + part[1:] for index, part in enumerate(key.split('_'))): item if key == 'dividend_research_snapshot' else _camel(item)
+            ''.join(part if index == 0 else part[:1].upper() + part[1:] for index, part in enumerate(key.split('_'))): item if key in {'dividend_research_snapshot', 'details_provenance'} else _camel(item)
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -146,19 +146,20 @@ class LocalJsonDataStore(InMemoryDataStore):
             raise ValueError(f'Invalid local JSON data at {path}: {exc}') from exc
 
     def save(self):
-        self.persistence_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            'users': [_camel(asdict(item)) for item in self.users.values()],
-            'income_sources': {key: [_camel(asdict(item)) for item in items] for key, items in self.income_sources.items()},
-            'budget_categories': {key: [_camel(asdict(item)) for item in items] for key, items in self.budget_categories.items()},
-            'accounts': {key: [_camel(asdict(item)) for item in items] for key, items in self.accounts.items()},
-            'holdings': {key: [_camel(asdict(item)) for item in items] for key, items in self.holdings.items()},
-            'net_worth': {key: _camel(asdict(item)) for key, item in self.net_worth.items()},
-            'retirement_plans': {key: _camel(asdict(item)) for key, item in self.retirement_plans.items()},
-        }
-        temporary = self.persistence_path.with_suffix(self.persistence_path.suffix + '.tmp')
-        with temporary.open('w', encoding='utf-8', newline='') as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.write('\n')
-            handle.flush()
-        temporary.replace(self.persistence_path)
+        with self.holdings_lock:
+            self.persistence_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                'users': [_camel(asdict(item)) for item in self.users.values()],
+                'income_sources': {key: [_camel(asdict(item)) for item in items] for key, items in self.income_sources.items()},
+                'budget_categories': {key: [_camel(asdict(item)) for item in items] for key, items in self.budget_categories.items()},
+                'accounts': {key: [_camel(asdict(item)) for item in items] for key, items in self.accounts.items()},
+                'holdings': {key: [_camel(asdict(item)) for item in items] for key, items in self.holdings.items()},
+                'net_worth': {key: _camel(asdict(item)) for key, item in self.net_worth.items()},
+                'retirement_plans': {key: _camel(asdict(item)) for key, item in self.retirement_plans.items()},
+            }
+            temporary = self.persistence_path.with_suffix(self.persistence_path.suffix + '.tmp')
+            with temporary.open('w', encoding='utf-8', newline='') as handle:
+                json.dump(payload, handle, indent=2, sort_keys=True)
+                handle.write('\n')
+                handle.flush()
+            temporary.replace(self.persistence_path)

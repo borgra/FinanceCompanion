@@ -45,10 +45,6 @@ param allowedEmail string
 @minLength(32)
 param sessionSecret string
 
-@description('Alpha Vantage API key used to refresh security details.')
-@secure()
-param alphaVantageApiKey string = ''
-
 @description('The application environment setting (e.g. production, development).')
 param environment string = 'production'
 
@@ -61,6 +57,21 @@ param azureFoundryEndpoint string = ''
 
 @description('Existing structured-output-capable model deployment name.')
 param azureFoundryDeployment string = ''
+
+@description('Registered dividend history agent name.')
+param azureFoundryAgentName string = 'dividend-history-agent'
+
+@description('Registered stock details agent name. Shares the verified GPT-6 Luna deployment.')
+param azureFoundryStockDetailsAgentName string = 'stock-details-agent'
+
+@description('Explicitly approved immutable dividend agent version; required in live mode.')
+param azureFoundryAgentVersion string = ''
+
+@description('Explicitly approved immutable stock agent version; required in live mode.')
+param azureFoundryStockDetailsAgentVersion string = ''
+
+@description('Full ARM policy ID verified against both agent versions and the model deployment.')
+param azureFoundryRaiPolicyId string = ''
 
 @description('Reasoning effort for reasoning models; leave empty for models without this setting.')
 @allowed(['', 'none', 'low', 'medium', 'high'])
@@ -194,10 +205,6 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'session-secret'
           value: sessionSecret
         }
-        ...(empty(alphaVantageApiKey) ? [] : [{
-          name: 'alpha-vantage-api-key'
-          value: alphaVantageApiKey
-        }])
         {
           name: 'acr-password'
           value: acr.listCredentials().passwords[0].value
@@ -222,10 +229,6 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'FINANCE_COMPANION_SESSION_SECRET'
               secretRef: 'session-secret'
             }
-            ...(empty(alphaVantageApiKey) ? [] : [{
-              name: 'FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY'
-              secretRef: 'alpha-vantage-api-key'
-            }])
             {
               name: 'FINANCE_COMPANION_ENVIRONMENT'
               value: environment
@@ -242,6 +245,26 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT'
               value: azureFoundryDeployment
+            }
+            {
+              name: 'FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME'
+              value: azureFoundryAgentName
+            }
+            {
+              name: 'FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME'
+              value: azureFoundryStockDetailsAgentName
+            }
+            {
+              name: 'FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_VERSION'
+              value: azureFoundryAgentVersion
+            }
+            {
+              name: 'FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION'
+              value: azureFoundryStockDetailsAgentVersion
+            }
+            {
+              name: 'FINANCE_COMPANION_AZURE_FOUNDRY_RAI_POLICY_ID'
+              value: azureFoundryRaiPolicyId
             }
             {
               name: 'FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT'

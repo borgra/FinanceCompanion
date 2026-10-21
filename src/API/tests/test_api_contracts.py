@@ -6,6 +6,7 @@ from app.application.use_cases.security_details import (
 )
 from app.application.use_cases.security_search import SearchSecurities
 from app.domain.models import SecurityMetadata, SecurityPayoutDetails, VerifiedIdentity
+from app.domain.security_details import SecurityDetailsResult
 from app.infrastructure.settings import Settings
 from app.main import create_app
 from app.presentation.http.container import build_container
@@ -57,40 +58,10 @@ class FakeSecuritySearchProvider:
 
 
 class FakeSecurityDetailsProvider:
-    def get_details(self, security: SecurityMetadata) -> SecurityMetadata:
-        return SecurityMetadata(
-            symbol=security.symbol,
-            name=security.name,
-            exchange="NYSE Arca",
-            asset_type=security.asset_type,
-            currency=security.currency,
-            price=321.45,
-            sector="Diversified",
-            industry="Broad Market",
-            pe_ratio=24.2,
-            thirty_day_yield=0.013,
-            fifty_two_week_low=255,
-            fifty_two_week_high=320,
-            dividend_previous_year=3.55,
-            dividend_current_year=3.72,
-            dividend_growth_rate=0.0479,
-            estimated_future_payout=3.72,
-            dividend_status="recent",
-            sma20=312,
-            sma50=307,
-            sma200=291,
-            details_status="fresh",
-            payout_details=[
-                SecurityPayoutDetails(
-                    ex_dividend_date="2026-06-28",
-                    amount=0.45,
-                    declaration_date="2026-06-10",
-                    record_date="2026-06-29",
-                    payment_date="2026-07-02",
-                    source="dividends",
-                )
-            ],
-        )
+    def get_details(self, security: SecurityMetadata) -> SecurityDetailsResult:
+        return SecurityDetailsResult(name=security.name, price=321.45, sector="Diversified",
+            industry="Broad Market", pe_ratio=24.2, thirty_day_yield=0.013,
+            fifty_two_week_low=255, fifty_two_week_high=320, sma20=312, sma50=307, sma200=291)
 
 
 def build_test_client() -> TestClient:

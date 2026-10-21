@@ -11,6 +11,7 @@ import type { Account } from '../domain/account';
 import type { AccountRepository } from '../domain/accountRepository';
 import type { CorporateAction, Holding, HoldingImportRow, PassiveIncomeImportRow, SecurityMetadata } from '../domain/holding';
 import type { HoldingRepository } from '../domain/holdingRepository';
+import { needsSecurityRefresh, securityListingKey } from '../domain/securityDetails';
 
 type HoldingsPageProps = {
   accountRepository: AccountRepository;
@@ -40,17 +41,10 @@ const securitySymbolFromInput = (value: string) => value.trim().toUpperCase();
 const isValidSecuritySymbol = (value: string) => /^[A-Z0-9.-]+$/.test(value);
 const isCashSecurity = (security: SecurityMetadata) => security.assetType === 'Cash';
 
-const refreshThrottleMs = 3000;
-const refreshAllMaximumAgeMs = 48 * 60 * 60 * 1000;
 const HOLDINGS_IMPORT_MAX_BYTES = 1024 * 1024;
 const HOLDINGS_IMPORT_MAX_ROWS = 500;
 const PAYMENT_IMPORT_MAX_BYTES = 1024 * 1024;
 const PAYMENT_IMPORT_MAX_ROWS = 500;
-
-const wait = (milliseconds: number) =>
-  new Promise((resolve) => {
-    window.setTimeout(resolve, milliseconds);
-  });
 
 const formatLastUpdated = (value?: string | null) => {
   if (!value) {
@@ -68,11 +62,8 @@ const formatLastUpdated = (value?: string | null) => {
 const hasFreshPrice = (price?: number | null) =>
   typeof price === 'number' && Number.isFinite(price) && price > 0;
 
-const needsRefresh = (detailsUpdatedAt?: string | null, now = Date.now()) => {
-  if (!detailsUpdatedAt) return true;
-  const updatedAt = Date.parse(detailsUpdatedAt);
-  return !Number.isFinite(updatedAt) || now - updatedAt > refreshAllMaximumAgeMs;
-};
+const hasMissingResearchFields = (security: SecurityMetadata) => security.detailsStatus === 'partial'
+  && (!security.detailsProvenance || Boolean(security.detailsProvenance.warnings?.length));
 
 export const isHoldingsEligibleAccount = (account: Account) =>
   account.type === 'Investment' &&
@@ -179,13 +170,20 @@ const mergeRefreshedSecurityDetails = (
       return holding;
     }
 
-    if (!hasFreshPrice(next.security.price)) {
+    const currentDate = Date.parse(holding.security.detailsUpdatedAt ?? '');
+    const nextDate = Date.parse(next.security.detailsUpdatedAt ?? '');
+    if (!hasFreshPrice(next.security.price) || securityListingKey(next.security) !== securityListingKey(holding.security)
+      || (Number.isFinite(currentDate) && currentDate <= Date.now() && (!Number.isFinite(nextDate) || currentDate > nextDate))) {
       return holding;
     }
 
     return {
       ...holding,
-      security: next.security,
+      security: {
+        ...holding.security,
+        ...Object.fromEntries((['name', 'price', 'sector', 'industry', 'peRatio', 'thirtyDayYield', 'fiftyTwoWeekLow', 'fiftyTwoWeekHigh', 'sma20', 'sma50', 'sma200', 'detailsStatus', 'detailsUpdatedAt', 'detailsProvenance'] as const)
+          .map((field) => [field, next.security[field]])),
+      },
       updatedAt: next.updatedAt,
     };
   });
@@ -218,6 +216,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   const [refreshingHoldingIds, setRefreshingHoldingIds] = useState<Set<string>>(() => new Set());
   const [refreshingDividendHoldingIds, setRefreshingDividendHoldingIds] = useState<Set<string>>(() => new Set());
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const pendingDetailsRefresh = useRef(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [securityDetailsHolding, setSecurityDetailsHolding] = useState<Holding | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -525,29 +524,24 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const refreshHoldingDetails = async (holdingId: string) => {
+    if (pendingDetailsRefresh.current) return;
+    pendingDetailsRefresh.current = true;
+    const symbol = holdings.find((holding) => holding.id === holdingId)?.security.symbol ?? 'holding';
     setRefreshingHoldingIds((current) => new Set(current).add(holdingId));
     setError(null);
-    setSuccessMessage(null);
+    setSuccessMessage(`Updating ${symbol}…`);
     try {
       const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holdingId);
+      if (!hasFreshPrice(refreshed.security.price) || ['unavailable', 'unsupported'].includes(refreshed.security.detailsStatus ?? '')) throw new Error('Details unavailable');
       setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
-      setSuccessMessage(`${refreshed.security.symbol} was updated.`);
+      const persisted = await (holdingRepository.reloadHoldings?.() ?? holdingRepository.listHoldings());
+      setHoldings((current) => mergeRefreshedSecurityDetails(current, persisted));
+      setSuccessMessage(`${refreshed.security.symbol} was updated.${hasMissingResearchFields(refreshed.security) ? ' Some saved metrics could not be refreshed.' : refreshed.security.detailsStatus === 'stub' ? ' Stub data is shown.' : ''}`);
     } catch {
-      setHoldings((current) =>
-        current.map((holding) =>
-          holding.id === holdingId
-            ? {
-                ...holding,
-                security: {
-                  ...holding.security,
-                  detailsStatus: 'unavailable',
-                },
-              }
-            : holding,
-        ),
-      );
-      setError('Unable to update holding details.');
+      setSuccessMessage(null);
+      setError(`Unable to update ${symbol}. Saved details were kept; try again.`);
     } finally {
+      pendingDetailsRefresh.current = false;
       setRefreshingHoldingIds((current) => {
         const next = new Set(current);
         next.delete(holdingId);
@@ -577,39 +571,36 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
   };
 
   const refreshAllHoldingDetails = async () => {
-    const holdingsToRefresh = holdings.filter((holding) =>
-      !isCashSecurity(holding.security) && needsRefresh(holding.security.detailsUpdatedAt),
-    );
+    if (pendingDetailsRefresh.current) return;
+    const holdingsToRefresh = [...new Map(holdings.filter((holding) =>
+      !isCashSecurity(holding.security) && needsSecurityRefresh(holding.security.detailsUpdatedAt),
+    ).map((holding) => [securityListingKey(holding.security), holding])).values()];
     if (holdingsToRefresh.length === 0) {
+      setError(null);
+      setSuccessMessage(holdings.some((holding) => !isCashSecurity(holding.security)) ? 'All holdings were updated within the last 48 hours.' : 'No holdings need research.');
       return;
     }
 
+    pendingDetailsRefresh.current = true;
     setIsRefreshingAll(true);
     setError(null);
     setSuccessMessage(null);
     const failedSymbols: string[] = [];
+    let hasPartialResult = false;
+    let hasStubResult = false;
 
     try {
       for (const [index, holding] of holdingsToRefresh.entries()) {
+        setSuccessMessage(`Updating ${index + 1} of ${holdingsToRefresh.length} holdings…`);
         setRefreshingHoldingIds((current) => new Set(current).add(holding.id));
         try {
           const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holding.id);
+          if (!hasFreshPrice(refreshed.security.price) || ['unavailable', 'unsupported'].includes(refreshed.security.detailsStatus ?? '')) throw new Error('Details unavailable');
+          hasPartialResult ||= hasMissingResearchFields(refreshed.security);
+          hasStubResult ||= refreshed.security.detailsStatus === 'stub';
           setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
         } catch {
           failedSymbols.push(holding.security.symbol);
-          setHoldings((current) =>
-            current.map((item) =>
-              item.id === holding.id
-                ? {
-                    ...item,
-                    security: {
-                      ...item.security,
-                      detailsStatus: 'unavailable',
-                    },
-                  }
-                : item,
-            ),
-          );
         } finally {
           setRefreshingHoldingIds((current) => {
             const next = new Set(current);
@@ -618,17 +609,21 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
           });
         }
 
-        if (index < holdingsToRefresh.length - 1) {
-          await wait(refreshThrottleMs);
-        }
       }
 
+      const persisted = await (holdingRepository.reloadHoldings?.() ?? holdingRepository.listHoldings());
+      setHoldings((current) => mergeRefreshedSecurityDetails(current, persisted));
       if (failedSymbols.length > 0) {
-        setError(`Unable to update ${failedSymbols.join(', ')}.`);
+        setSuccessMessage(null);
+        setError(`Unable to update ${[...new Set(failedSymbols)].join(', ')}. Saved details were kept; try again.${failedSymbols.length < holdingsToRefresh.length ? ' Other holdings were updated.' : ''}`);
       } else {
-        setSuccessMessage('Holdings were updated.');
+        setSuccessMessage(`Holdings were updated.${hasPartialResult ? ' Some saved metrics could not be refreshed.' : hasStubResult ? ' Stub data is shown.' : ''}`);
       }
+    } catch {
+      setSuccessMessage(null);
+      setError('Unable to reload saved holdings. Try again to load the latest details.');
     } finally {
+      pendingDetailsRefresh.current = false;
       setIsRefreshingAll(false);
     }
   };
@@ -757,7 +752,9 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
               className="link-button holdings-refresh-action"
               type="button"
               onClick={() => void refreshAllHoldingDetails()}
-              disabled={holdings.length === 0 || isRefreshingAll || isSaving}
+              disabled={holdings.length === 0 || isSaving || (!isRefreshingAll && refreshingHoldingIds.size > 0) || refreshingDividendHoldingIds.size > 0}
+              aria-disabled={isRefreshingAll}
+              aria-busy={isRefreshingAll}
               aria-label="Update all holdings"
               title="Update all holdings"
             >
@@ -808,7 +805,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
             className="primary-action compact-add-action"
             type="button"
             onClick={() => void saveQuantityChanges()}
-            disabled={dirtyHoldingIds.size === 0 || isSaving}
+            disabled={dirtyHoldingIds.size === 0 || isSaving || isRefreshingAll || refreshingHoldingIds.size > 0}
           >
             {isSaving ? 'Saving...' : 'Save changes'}
           </button>
@@ -871,7 +868,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                         {isCashSecurity(holding.security) ? (
                           <span className="excel-cell-val">{holding.security.name}</span>
                         ) : (
-                          <button className="link-button holdings-security-link" type="button" disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)} onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
+                          <button className="link-button holdings-security-link" type="button" disabled={isSaving || isRefreshingAll || refreshingHoldingIds.size > 0 || refreshingDividendHoldingIds.has(holding.id)} onClick={(event) => { event.stopPropagation(); setSecurityDetailsHolding(holding); }} aria-label={`View ${holding.security.symbol} security details`}>{holding.security.name}</button>
                         )}
                         <small>{formatLastUpdated(holding.security.detailsUpdatedAt)}</small>
                         {holding.security.dividendResearchRetrievedAt ? <small>{holding.security.dividendResearchProvider === 'stub' ? 'Stub data' : 'Dividend data'} · {formatLastUpdated(holding.security.dividendResearchRetrievedAt)}</small> : null}
@@ -921,7 +918,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                           className="link-button holdings-refresh-action"
                           type="button"
                           onClick={() => void refreshHoldingDividends(holding)}
-                          disabled={isSaving || holding.manageDividends === false || dirtyHoldingIds.has(holding.id) || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
+                          disabled={isSaving || isRefreshingAll || holding.manageDividends === false || dirtyHoldingIds.has(holding.id) || refreshingHoldingIds.size > 0 || refreshingDividendHoldingIds.has(holding.id)}
                           aria-label={`Update ${holding.security.symbol} dividends`}
                           aria-busy={refreshingDividendHoldingIds.has(holding.id)}
                           title={holding.manageDividends === false ? 'Manage Dividends is off' : dirtyHoldingIds.has(holding.id) ? 'Save changes before updating dividends' : `Update ${holding.security.symbol} dividends`}
@@ -932,7 +929,9 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
                           className="link-button holdings-refresh-action"
                           type="button"
                           onClick={() => void refreshHoldingDetails(holding.id)}
-                          disabled={isSaving || refreshingHoldingIds.has(holding.id) || refreshingDividendHoldingIds.has(holding.id)}
+                          disabled={isSaving || isRefreshingAll || (!refreshingHoldingIds.has(holding.id) && refreshingHoldingIds.size > 0) || refreshingDividendHoldingIds.size > 0}
+                          aria-disabled={refreshingHoldingIds.has(holding.id)}
+                          aria-busy={refreshingHoldingIds.has(holding.id)}
                           aria-label={`Update ${holding.security.symbol} holding`}
                           title={`Update ${holding.security.symbol}`}
                         >

@@ -1,0 +1,45 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "symbol", "name", "exchange", "asset_type", "currency", "status", "price", "price_kind", "sector", "industry", "pe_ratio", "thirty_day_yield", "fifty_two_week_low", "fifty_two_week_high", "sma20", "sma50", "sma200", "sources", "field_evidence", "warnings", "error"],
+  "properties": {
+    "schema_version": {"type": "integer", "enum": [1]},
+    "symbol": {"type": "string"},
+    "name": {"type": "string"},
+    "exchange": {"type": "string"},
+    "asset_type": {"type": "string", "enum": ["Stock", "ETF", "Mutual Fund"]},
+    "currency": {"type": "string"},
+    "status": {"type": "string", "enum": ["complete", "partial", "unavailable", "unsupported"]},
+    "price": {"type": ["number", "null"]},
+    "price_kind": {"type": ["string", "null"], "enum": ["last_trade", "close", "nav", null]},
+    "sector": {"type": ["string", "null"]},
+    "industry": {"type": ["string", "null"]},
+    "pe_ratio": {"type": ["number", "null"]},
+    "thirty_day_yield": {"type": ["number", "null"]},
+    "fifty_two_week_low": {"type": ["number", "null"]},
+    "fifty_two_week_high": {"type": ["number", "null"]},
+    "sma20": {"type": ["number", "null"]},
+    "sma50": {"type": ["number", "null"]},
+    "sma200": {"type": ["number", "null"]},
+    "sources": {
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "url", "title"],
+        "properties": {"id": {"type": "string"}, "url": {"type": "string"}, "title": {"type": "string"}}
+      }
+    },
+    "field_evidence": {
+      "type": "array", "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["field", "source_ids", "as_of"],
+        "properties": {
+          "field": {"type": "string", "enum": ["identity", "price", "sector", "industry", "pe_ratio", "thirty_day_yield", "fifty_two_week_low", "fifty_two_week_high", "sma20", "sma50", "sma200"]},
+          "source_ids": {"type": "array", "items": {"type": "string"}},
+          "as_of": {"type": "string"}
+        }
+      }
+    },
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "error": {"type": ["string", "null"]}
+  }
+}

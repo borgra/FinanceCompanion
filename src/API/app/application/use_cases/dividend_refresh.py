@@ -14,6 +14,7 @@ from app.domain.distribution_forecasting import MODEL, forecast_distributions, n
 from app.domain.exceptions import NotFoundError
 from app.domain.models import Holding
 from app.domain.models.security_metadata import is_cash_security
+from app.domain.security_details import listing_key
 from app.domain.protocols import DividendResearchProvider, HoldingRepository
 from app.infrastructure.in_memory_repositories import now_iso
 
@@ -28,7 +29,7 @@ class RefreshHoldingDividends:
         self._today = today or (lambda: datetime.now(ZoneInfo("America/New_York")).date())
         self._freshness_seconds = freshness_seconds
         self._in_flight_lock = threading.Lock()
-        self._in_flight: set[tuple[str, str]] = set()
+        self._in_flight: set[tuple] = set()
 
     def execute(self, user_id: str, holding_id: str) -> Holding:
         holdings = self._repository.list_for_user(user_id)
@@ -41,7 +42,8 @@ class RefreshHoldingDividends:
         provider_cache_key = getattr(self._provider, "cache_key", None)
         if researched_at and provider_cache_key and holding.security.dividend_research_cache_key == provider_cache_key and holding.security.dividend_research_status in {"fresh", "partial"}:
             try:
-                if datetime.fromisoformat(researched_at.replace("Z", "+00:00")) > datetime.now(UTC) - timedelta(seconds=self._freshness_seconds):
+                now = datetime.now(UTC)
+                if now - timedelta(seconds=self._freshness_seconds) < datetime.fromisoformat(researched_at.replace("Z", "+00:00")) <= now:
                     return holding
             except (ValueError, TypeError):
                 pass
@@ -51,18 +53,23 @@ class RefreshHoldingDividends:
             currency=holding.security.currency, asset_type=holding.security.asset_type,
             retrieval_start=subtract_months(today, 60), retrieval_end=today, schema_version=2,
         )
-        in_flight_key = (user_id, holding.security.symbol.strip().casefold())
+        in_flight_key = (user_id, listing_key(holding.security))
         with self._in_flight_lock:
             if in_flight_key in self._in_flight:
                 raise DividendResearchProviderError("A distribution refresh for this security is already in progress.")
             self._in_flight.add(in_flight_key)
-        started = time.monotonic()
         try:
-            result = validate_dividend_research_result(self._provider.research(request), request)
+            return self._refresh_and_persist(user_id, holding_id, holding, holdings, request, today, provider_cache_key)
         finally:
             with self._in_flight_lock:
                 self._in_flight.discard(in_flight_key)
-        if result.status == "unavailable":
+
+    def _refresh_and_persist(self, user_id: str, holding_id: str, holding: Holding,
+            initial_holdings: list[Holding], request: DividendResearchRequest,
+            today: date, provider_cache_key: str | None) -> Holding:
+        started = time.monotonic()
+        result = validate_dividend_research_result(self._provider.research(request), request)
+        if result.status in {"unavailable", "unsupported"}:
             # An empty research result is not evidence that saved distributions
             # or projections have disappeared. Do not reconcile or persist it.
             raise DividendResearchProviderError("No reliable dividend history was available. Existing records were preserved; please retry later.")
@@ -82,6 +89,11 @@ class RefreshHoldingDividends:
         }
         if result.evidence_snapshot is not None:
             snapshot["evidence"] = result.evidence_snapshot
+            for target, source in (("agentName", "agent_name"), ("agentVersion", "agent_version"),
+                    ("executionMode", "execution_mode"), ("definitionHash", "definition_hash")):
+                value = result.evidence_snapshot.get(source, result.evidence_snapshot.get(target))
+                if isinstance(value, str) and value:
+                    snapshot[target] = value
         snapshot_id = stable_id("snapshot", snapshot)
         timestamp = now_iso()
         # Research can be slow. Merge onto current records, respecting opt-outs
@@ -90,15 +102,24 @@ class RefreshHoldingDividends:
         current_holding = next((item for item in holdings if item.id == holding_id), None)
         if current_holding is None:
             raise NotFoundError("Holding not found.")
+        original_key = listing_key(holding.security)
+        if listing_key(current_holding.security) != original_key:
+            raise DividendResearchProviderError("The holding changed during distribution research. Saved records were kept; try again.")
+        resolved_key = listing_key(replace(holding.security,
+            exchange=result.resolved_exchange or holding.security.exchange,
+            asset_type=result.resolved_asset_type or holding.security.asset_type))
+        previous_by_id = {item.id: item for item in initial_holdings}
         changed = []
+        expected = []
         for item in holdings:
             if not item.manage_dividends:
                 continue
-            equivalent_exchanges = {holding.security.exchange.casefold(), (result.resolved_exchange or holding.security.exchange).casefold()}
-            if result.resolved_exchange:
-                equivalent_exchanges.update({"united states", "us", "usa", "unknown", ""})
-            if item.security.symbol.casefold() != holding.security.symbol.casefold() or item.security.exchange.casefold() not in equivalent_exchanges:
+            if listing_key(item.security) not in {original_key, resolved_key}:
                 continue
+            prior = previous_by_id.get(item.id)
+            if prior and (item.security.dividend_research_retrieved_at != prior.security.dividend_research_retrieved_at
+                    or item.security.dividend_research_snapshot_id != prior.security.dividend_research_snapshot_id):
+                raise DividendResearchProviderError("Distribution research changed while this update was running. Saved records were kept; try again.")
             previous = item.security.source_payout_details
             prior_audit = list(item.security.payout_audit_details)
             if result.provenance.provider != "stub":
@@ -134,6 +155,12 @@ class RefreshHoldingDividends:
                 dividend_status="stub" if result.provenance.provider == "stub" else "researched",
             )
             changed.append(replace(item, security=security, updated_at=timestamp))
+            expected.append(item)
         logger.info("distribution_research security_id=%s source_count=%d event_count=%d status=%s latency_ms=%d", request.security_id, len({item.source_url for item in inputs}), len(visible) + len(projected), result.status, (time.monotonic() - started) * 1000)
-        persisted = self._repository.update_batch_for_user(user_id, changed) if changed else []
+        try:
+            persisted = self._repository.update_batch_for_user(user_id, changed, expected=expected) if changed else []
+        except NotFoundError:
+            raise
+        except Exception:
+            raise DividendResearchProviderError("Unable to save distribution research because the holding changed or storage is unavailable. Saved records were kept; try again.") from None
         return next((item for item in persisted if item.id == holding_id), current_holding)

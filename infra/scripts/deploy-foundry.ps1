@@ -8,7 +8,10 @@ param(
   [string]$ProjectName = 'distribution-research',
   [ValidatePattern('^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$')]
   [string]$AgentName = 'dividend-history-agent',
+  [ValidatePattern('^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$')]
+  [string]$StockDetailsAgentName = 'stock-details-agent',
   [switch]$RegisterAgent = $true,
+  [string]$RaiPolicyName = 'research-injection-blocking-v1',
   [string]$DeploymentName = 'gpt-6-luna',
   [string]$ModelName = 'gpt-6-luna',
   [string]$ModelVersion = '2026-09-22',
@@ -18,6 +21,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+if ($AgentName -eq $StockDetailsAgentName) { throw 'Dividend and stock agents require distinct names.' }
 function Invoke-FoundryAzureJson {
   param([string[]]$Arguments)
   $result = & az @Arguments --subscription $SubscriptionId --only-show-errors --output json
@@ -25,7 +29,7 @@ function Invoke-FoundryAzureJson {
   return (($result -join "`n") | ConvertFrom-Json)
 }
 $template = Join-Path $PSScriptRoot '../foundry.bicep'
-$parameters = @("appName=$AppName", "location=$Location", "projectName=$ProjectName", "agentName=$AgentName", "deploymentName=$DeploymentName", "modelName=$ModelName", "modelVersion=$ModelVersion", "capacity=$Capacity")
+$parameters = @("appName=$AppName", "location=$Location", "projectName=$ProjectName", "agentName=$AgentName", "stockDetailsAgentName=$StockDetailsAgentName", "raiPolicyName=$RaiPolicyName", "deploymentName=$DeploymentName", "modelName=$ModelName", "modelVersion=$ModelVersion", "capacity=$Capacity")
 if (-not $PSCmdlet.ShouldProcess("$ResourceGroupName / $DeploymentName ($ModelVersion), $Location, GlobalStandard capacity $Capacity", 'Create or update Foundry resource, project, model deployment and project service identity access')) {
   return
 }
@@ -44,11 +48,12 @@ if ($GrantCurrentUser) {
   # This switch is for a signed-in human, not an OIDC service principal in CI.
   $currentUser = & az ad signed-in-user show --query id --only-show-errors --output tsv
   if ($LASTEXITCODE -ne 0 -or -not $currentUser) { throw 'Unable to resolve the Azure CLI user. Use the RBAC setup script with an explicit principal instead.' }
-  & $access @accessOptions -PrincipalObjectId $currentUser -PrincipalType User
+  & $access @accessOptions -PrincipalObjectId $currentUser -PrincipalType User -AccessProfile Developer
 }
 Write-Host "Foundry endpoint: $($outputs.projectEndpoint.value)"
 Write-Host "Model deployment: $($outputs.deploymentName.value)"
 if ($RegisterAgent) {
-  $null = & (Join-Path $PSScriptRoot 'register-foundry-agent.ps1') -SubscriptionId $SubscriptionId -Endpoint $outputs.projectEndpoint.value -Deployment $outputs.deploymentName.value -AgentName $AgentName
+  $null = & (Join-Path $PSScriptRoot 'register-foundry-agent.ps1') -SubscriptionId $SubscriptionId -Endpoint $outputs.projectEndpoint.value -Deployment $outputs.deploymentName.value -AgentName $AgentName -AgentKind dividend-history -RaiPolicyId $outputs.raiPolicyId.value
+  $null = & (Join-Path $PSScriptRoot 'register-foundry-agent.ps1') -SubscriptionId $SubscriptionId -Endpoint $outputs.projectEndpoint.value -Deployment $outputs.deploymentName.value -AgentName $StockDetailsAgentName -AgentKind stock-details -RaiPolicyId $outputs.raiPolicyId.value
 }
 return $outputs

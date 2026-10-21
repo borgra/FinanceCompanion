@@ -25,9 +25,17 @@ The API also reads the repo-level `.env.local` file created for local full-stack
 
 To open the local app without signing in, set `FINANCE_COMPANION_DISABLE_AUTH_FOR_LOCAL_DEVELOPMENT=true` in `.env.local` (or `src/API/.env`). This is opt-in and only accepted when `FINANCE_COMPANION_ENVIRONMENT=development`; the API fails startup if it is enabled elsewhere. It uses the configured local development user ID, which defaults to the seeded `user-steve` account.
 
-In AI distribution mode, security lookup and distribution retrieval use Foundry web research with Entra. No Alpha Vantage account/key is needed. Live market-price/technical-indicator refresh is outside this mode; saved prices are preserved. Optional legacy market-data adapters require explicit selection and their own key.
+In live AI mode, security lookup, stock details, and distribution retrieval use Foundry web research with Entra. Stock details invoke the registered `stock-details-agent` by its verified immutable version on the shared `gpt-6-luna` deployment. Missing agents or changed guardrails fail closed; no inline model fallback is allowed. This path requires a project endpoint and Entra authentication. No market-data subscription/key is needed. Stub mode uses deterministic security search/details and dividends for memory, JSON and Docker development.
 
 Dividend research defaults to a deterministic, visibly non-authoritative stub when no provider is configured in development. Live AI mode is `azure_foundry`. The canonical Docker stack remains offline/stub. The production workflow selects its provider through GitHub Environment variables and defaults explicitly to stub.
+
+## Stock details research
+
+`POST /api/v1/holdings/{holding_id}/security-details/refresh` forces one listing refresh; `POST /api/v1/holdings/security-details/refresh` retains the 48-hour eligibility policy. Cash is skipped and matching listings fan out to the same user's holdings. Stock research has its own canonical instructions/schema under `infra/agents`, uses one Responses request with required web search and strict JSON, and keeps dividend/payment/forecast and position data intact.
+
+Accepted quotes are dated regular-session prices for USD equities/ETFs or published NAV for identifiable USD mutual funds, with source evidence. Missing optional metrics retain saved values; invalid identity, uncited/stale prices or provider failures preserve the entire saved record and last-success timestamp. Optional `security.detailsProvenance` persists compact field evidence, retrieval metadata and warnings in JSON/Cosmos. AI results remain partial; stubs remain visibly distinct. Inspect dated sources and retained-field observations in the security details dialog.
+
+The deployment alias must resolve to `gpt-6-luna`; verify metadata and data-plane capabilities with `infra/scripts/test-foundry.ps1 -AgentKind stock-details -AgentVersion '<approved-version>' -RaiPolicyId '<full-policy-arm-id>' ...` before enabling live mode. Both agents share endpoint and deployment, while their names and canonical definitions remain independent. The retired market-data adapters and key settings are removed. See [Research Agent Security](../../Docs/Research%20Agent%20Security.md) for enforced controls, rollout and Portal options.
 
 ## Distribution research and forecasts
 
@@ -54,11 +62,16 @@ FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER=azure_foundry
 FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT=https://YOUR-RESOURCE.services.ai.azure.com/api/projects/YOUR-PROJECT
 FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT=YOUR-PINNED-DEPLOYMENT
 FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME=dividend-history-agent
+FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME=stock-details-agent
+# Required explicit approvals for live research; never use latest.
+FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_VERSION=
+FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_VERSION=
+FINANCE_COMPANION_AZURE_FOUNDRY_RAI_POLICY_ID=
 FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT=low
 FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE=entra
 ```
 
-Both project and direct resource endpoints use Responses for web research, with `text.format` in the same call. The configured agent name is sent as metadata; runtime supplies the canonical definition inline so both endpoint types work without an extra agent lookup. Leave API_VERSION empty. Project endpoints require Entra. Local constrained `DefaultAzureCredential` uses your `az login`; production uses the API Container App's managed identity, with optional `FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID` to select a user-assigned identity. Web research requests the `https://ai.azure.com/.default` token scope. Configure an Azure deployment supporting Responses, web_search and strict structured outputs. See [Foundry Entra RBAC](../../Docs/Foundry%20Entra%20RBAC.md) for precise roles, scopes, setup scripts and deployment variables.
+Both dividend and stock research verify and invoke an explicitly approved registered version with an assigned blocking RAI policy. Resource-only endpoints, key authentication and inline model/instruction/tool/schema overrides cannot run these flows. The backend verifies live policy/model metadata on each research request; metadata failures stop inference. Leave API_VERSION empty. Local constrained `DefaultAzureCredential` uses your `az login`; production uses the API Container App's managed identity, with optional `FINANCE_COMPANION_AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID` for a user-assigned identity. Inference uses `https://ai.azure.com/.default`; policy/model verification uses `https://management.azure.com/.default`. Runtime needs only restricted invocation/agent reads and read-only policy/deployment metadata. Use the security rollout guide for the updated role separation.
 
 `infra/scripts/deploy-foundry.ps1` can provision the dedicated GPT-6 Luna deployment. Use `low` reasoning effort for it to keep research within the request budget; leave effort empty for models that do not support this setting.
 

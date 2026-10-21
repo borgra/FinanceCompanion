@@ -5,6 +5,7 @@ $global:FinanceFoundryMockCalls = [System.Collections.Generic.List[object]]::new
 $global:FinanceFoundryMockAssignments = [System.Collections.Generic.List[object]]::new()
 $global:FinanceFoundryMockAppHasIdentity = $false
 $global:FinanceFoundryMockFail = $false
+$global:FinanceFoundryRuntimeAssignments = @()
 
 function global:az {
   $global:FinanceFoundryMockCalls.Add(@($args))
@@ -13,10 +14,15 @@ function global:az {
   $command = $args[0..([Math]::Min(2, $args.Count - 1))] -join ' '
   if ($command -eq 'role assignment list') {
     if ('--all' -in $args -and '--scope' -in $args) { throw 'Azure CLI does not allow --all together with --scope.' }
+    if ('--query' -notin $args) { return ConvertTo-Json -InputObject @($global:FinanceFoundryRuntimeAssignments) -Compress }
     $query = $args[[Array]::IndexOf($args, '--query') + 1]
     $principal = [regex]::Match($query, "principalId=='([^']+)'").Groups[1].Value
     $role = [regex]::Match($query, "roleDefinitionId, '/([^']+)'").Groups[1].Value
     ConvertTo-Json -InputObject @($global:FinanceFoundryMockAssignments | Where-Object { $_.principalId -eq $principal -and $_.roleDefinitionId -like "*/$role" }) -Compress
+  } elseif ($command -eq 'role definition list') {
+    return '[{"permissions":[{"actions":[],"dataActions":["Microsoft.CognitiveServices/accounts/AIServices/agents/write"]}]}]'
+  } elseif ($command -eq 'deployment group create') {
+    return '{}'
   } elseif ($command -eq 'role assignment create') {
     $assignment = [PSCustomObject]@{
       name = $args[[Array]::IndexOf($args, '--name') + 1]
@@ -51,7 +57,7 @@ try {
     FoundryResourceId = '/subscriptions/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/resourceGroups/foundry/providers/Microsoft.CognitiveServices/accounts/models'
     FoundryProjectName = 'income'
   }
-  $user = @{ PrincipalObjectId = '11111111-1111-1111-1111-111111111111'; PrincipalType = 'User' }
+  $user = @{ PrincipalObjectId = '11111111-1111-1111-1111-111111111111'; PrincipalType = 'User'; AccessProfile = 'Developer' }
   & $accessScript @common @user -WhatIf
   Assert-AccessTest ($global:FinanceFoundryMockAssignments.Count -eq 0) 'WhatIf created role assignments.'
   & $accessScript @common @user
@@ -70,10 +76,23 @@ try {
   $newCalls = @($global:FinanceFoundryMockCalls | Select-Object -Skip $before)
   Assert-AccessTest (@($newCalls | Where-Object { ($_ -join ' ') -like '*identity assign*' }).Count -eq 0) 'WhatIf enabled an identity.'
   & $accessScript @common @app
-  Assert-AccessTest ($global:FinanceFoundryMockAssignments.Count -eq 5) 'System-assigned app identity was not authorized.'
+  Assert-AccessTest (@($global:FinanceFoundryMockCalls | Where-Object { ($_ -join ' ') -like '*deployment group create*principalId=22222222-2222-2222-2222-222222222222*' }).Count -eq 1) 'System-assigned app identity did not receive restricted role deployment.'
   & $accessScript @common @app -UserAssignedIdentityResourceId '/subscriptions/app/resourceGroups/app/providers/Microsoft.ManagedIdentity/userAssignedIdentities/runtime'
-  Assert-AccessTest ($global:FinanceFoundryMockAssignments.Count -eq 7) 'User-assigned identity was not authorized.'
-  Assert-AccessTest ($global:FinanceFoundryMockAssignments[5].principalId -eq '33333333-3333-3333-3333-333333333333') 'Assigned to client ID instead of principal ID.'
+  Assert-AccessTest (@($global:FinanceFoundryMockCalls | Where-Object { ($_ -join ' ') -like '*deployment group create*principalId=33333333-3333-3333-3333-333333333333*' }).Count -eq 1) 'User-assigned identity did not receive restricted roles for principal ID.'
+  Assert-AccessTest ($global:FinanceFoundryMockAssignments.Count -eq 3) 'Runtime reused broad built-in role assignments.'
+  $permissionContract = Get-Content (Join-Path $PSScriptRoot '../roles/foundry-research-permissions.json') -Raw | ConvertFrom-Json
+  Assert-AccessTest ($permissionContract.runtimeDataActions.Count -eq 3 -and 'Microsoft.CognitiveServices/accounts/AIServices/agents/write' -notin $permissionContract.runtimeDataActions) 'Runtime role can edit agents.'
+  Assert-AccessTest (@($permissionContract.metadataActions | Where-Object { $_ -notmatch '/read$' }).Count -eq 0) 'Metadata role can mutate policies or deployments.'
+  Assert-AccessTest ('Microsoft.CognitiveServices/accounts/raiPolicies/read' -in $permissionContract.metadataActions -and 'Microsoft.CognitiveServices/accounts/deployments/read' -in $permissionContract.metadataActions) 'Runtime cannot verify policy/model integrity.'
+  $audit = @($global:FinanceFoundryMockCalls | Where-Object { ($_ -join ' ') -like '*role assignment list*--assignee*' })
+  Assert-AccessTest (@($audit | Where-Object { '--include-groups' -notin $_ -or '--include-inherited' -notin $_ }).Count -eq 0) 'Runtime effective access audit omitted inherited/group grants.'
+  $beforeDeployments = @($global:FinanceFoundryMockCalls | Where-Object { ($_ -join ' ') -like '*deployment group create*' }).Count
+  $global:FinanceFoundryRuntimeAssignments = @(@{ roleDefinitionId = '/providers/Microsoft.Authorization/roleDefinitions/broad-role' })
+  $failed = $false
+  try { & $accessScript @common @app } catch { $failed = $true }
+  Assert-AccessTest $failed 'Runtime broad data-plane role was silently accepted.'
+  Assert-AccessTest (@($global:FinanceFoundryMockCalls | Where-Object { ($_ -join ' ') -like '*deployment group create*' }).Count -eq $beforeDeployments) 'Unsafe runtime identity received additional grants.'
+  $global:FinanceFoundryRuntimeAssignments = @()
 
   $global:FinanceFoundryMockFail = $true
   $failed = $false
@@ -82,5 +101,5 @@ try {
   Write-Host 'Foundry setup offline checks passed: WhatIf, project/resource scope, idempotency, system/user identity, and CLI failures.'
 } finally {
   Remove-Item Function:\global:az
-  Remove-Variable -Scope Global -Name FinanceFoundryMockCalls, FinanceFoundryMockAssignments, FinanceFoundryMockAppHasIdentity, FinanceFoundryMockFail -ErrorAction SilentlyContinue
+  Remove-Variable -Scope Global -Name FinanceFoundryMockCalls, FinanceFoundryMockAssignments, FinanceFoundryMockAppHasIdentity, FinanceFoundryMockFail, FinanceFoundryRuntimeAssignments -ErrorAction SilentlyContinue
 }

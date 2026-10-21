@@ -50,8 +50,6 @@ from app.infrastructure.in_memory_repositories import (
     InMemoryRetirementPlanRepository,
     InMemoryUserRepository,
 )
-from app.infrastructure.alpha_vantage_security_details import AlphaVantageSecurityDetailsProvider
-from app.infrastructure.alpha_vantage_security_search import AlphaVantageSecuritySearchProvider
 from app.infrastructure.security import JwtSessionTokenService
 from app.infrastructure.settings import Settings
 from app.infrastructure.stub_dividend_research import StubDividendResearchProvider
@@ -166,26 +164,38 @@ def build_container(
         issuer=settings.session_issuer,
         audience=settings.session_audience,
     )
-    local_fixture_security = settings.data_backend == "json" and settings.dividend_research_provider == "stub"
-    security_details = StubSecurityDetailsProvider() if local_fixture_security else AlphaVantageSecurityDetailsProvider(settings.alpha_vantage_api_key)
-    security_search = StubSecuritySearchProvider() if local_fixture_security else AlphaVantageSecuritySearchProvider(settings.alpha_vantage_api_key)
+    security_details = StubSecurityDetailsProvider()
+    security_search = StubSecuritySearchProvider()
     if settings.dividend_research_provider == "azure_foundry":
-        from app.infrastructure.foundry_web_research import FoundryWebDividendResearchProvider, FoundrySecuritySearchProvider, UnavailableMarketDetailsProvider
+        from app.infrastructure.foundry_web_research import FoundryWebDividendResearchProvider, FoundrySecuritySearchProvider
         dividend_research = FoundryWebDividendResearchProvider(
             endpoint=settings.azure_foundry_endpoint, deployment=settings.azure_foundry_deployment,
             agent_name=settings.azure_foundry_agent_name,
+            agent_version=settings.azure_foundry_agent_version,
+            rai_policy_id=settings.azure_foundry_rai_policy_id,
             reasoning_effort=settings.azure_foundry_reasoning_effort,
             auth_mode=settings.azure_foundry_auth_mode, api_key=settings.azure_foundry_api_key,
             environment=settings.environment,
             managed_identity_client_id=settings.azure_foundry_managed_identity_client_id,
         )
         security_search = FoundrySecuritySearchProvider(dividend_research)
-        security_details = UnavailableMarketDetailsProvider()
+        from app.infrastructure.foundry_stock_details import FoundryStockDetailsProvider
+        security_details = FoundryStockDetailsProvider(
+            endpoint=settings.azure_foundry_endpoint, deployment=settings.azure_foundry_deployment,
+            agent_name=settings.azure_foundry_stock_details_agent_name,
+            agent_version=settings.azure_foundry_stock_details_agent_version,
+            rai_policy_id=settings.azure_foundry_rai_policy_id,
+            reasoning_effort=settings.azure_foundry_reasoning_effort or "low",
+            auth_mode=settings.azure_foundry_auth_mode, api_key=settings.azure_foundry_api_key,
+            environment=settings.environment,
+            managed_identity_client_id=settings.azure_foundry_managed_identity_client_id,
+        )
     elif settings.dividend_research_provider == "stub":
         dividend_research = StubDividendResearchProvider()
     else:
         raise ValueError("A dividend research provider must be configured.")
 
+    single_details_refresh = RefreshHoldingSecurityDetails(holdings, security_details)
     return Container(
         settings=settings,
         authenticate_identity_user=AuthenticateIdentityUser(
@@ -229,14 +239,8 @@ def build_container(
         search_securities=SearchSecurities(
             security_search
         ),
-        refresh_holding_security_details=RefreshHoldingSecurityDetails(
-            holdings,
-            security_details,
-        ),
-        refresh_held_security_details=RefreshHeldSecurityDetails(
-            holdings,
-            security_details,
-        ),
+        refresh_holding_security_details=single_details_refresh,
+        refresh_held_security_details=RefreshHeldSecurityDetails(holdings, security_details, single_details_refresh),
         refresh_holding_dividends=RefreshHoldingDividends(holdings, dividend_research),
         session_tokens=session_tokens,
         data_store=data_store,

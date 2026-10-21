@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { createMockHoldingRepository } from './holdingRepository';
 
 describe('mock holding repository dividend overrides', () => {
+  it('labels deterministic security details as stub and preserves all dividend and position data', async () => {
+    const repository = createMockHoldingRepository();
+    const security = (await repository.searchSecurities('MSFT'))[0];
+    const created = await repository.createHolding({
+      security: { ...security, price: 1, peRatio: 12, dividendResearchSnapshot: { saved: true }, corporateActions: [], payoutAuditDetails: [], dividendResearchProvider: 'saved-provider' },
+      manageDividends: false, accountPositions: [{ accountId: 'brokerage', quantity: 10, costBasis: 123 }],
+    });
+    const updated = await repository.refreshHoldingSecurityDetails(created.id);
+    expect(updated.security).toMatchObject({ price: 510, peRatio: 12, detailsStatus: 'stub', detailsProvenance: { provider: 'stub', authoritative: false, sources: [] }, dividendResearchSnapshot: { saved: true }, dividendResearchProvider: 'saved-provider' });
+    expect(updated.accountPositions).toEqual(created.accountPositions);
+    expect(updated.manageDividends).toBe(false);
+    expect((await repository.listHoldings())[0].security.detailsProvenance).toMatchObject({ provider: 'stub' });
+    const unknown = await repository.createHolding({ security: { ...security, symbol: 'UNKNOWN' }, accountPositions: [] });
+    await expect(repository.refreshHoldingSecurityDetails(unknown.id)).rejects.toThrow('Saved details were kept');
+    expect((await repository.listHoldings()).find((entry) => entry.id === unknown.id)).toEqual(unknown);
+  });
+
   it('removes only the selected holding payments and keeps dividend settings', async () => {
     const repository = createMockHoldingRepository();
     const security = (await repository.searchSecurities('vti'))[0];

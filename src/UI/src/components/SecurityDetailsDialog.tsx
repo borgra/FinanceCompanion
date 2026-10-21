@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { CorporateAction, SecurityMetadata, SecurityPayoutDetails } from '../domain/holding';
+import type { CorporateAction, SecurityDetailsProvenance, SecurityMetadata, SecurityPayoutDetails } from '../domain/holding';
 
 type SecurityDetailsDialogProps = {
   security: SecurityMetadata;
@@ -36,22 +36,44 @@ const sourceLink = (value?: string | null) => {
   if (!value) return null;
   try {
     const url = new URL(value);
-    return ['https:', 'http:'].includes(url.protocol) ? url.href : null;
+    const host = url.hostname.toLowerCase();
+    return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password
+      && host.includes('.') && !host.endsWith('.local') && !host.endsWith('.localhost')
+      && !/^(127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)
+      ? url.href : null;
   } catch {
     return null;
   }
 };
+
+const detailFields: Array<{ key: keyof SecurityMetadata; field: SecurityDetailsProvenance['fieldEvidence'][number]['field']; label: string; formatter?: Intl.NumberFormat }> = [
+  { key: 'price', field: 'price', label: 'Price', formatter: currencyFormatter },
+  { key: 'sector', field: 'sector', label: 'Sector' },
+  { key: 'industry', field: 'industry', label: 'Industry' },
+  { key: 'peRatio', field: 'pe_ratio', label: 'P/E ratio' },
+  { key: 'thirtyDayYield', field: 'thirty_day_yield', label: '30-day SEC yield', formatter: percentFormatter },
+  { key: 'fiftyTwoWeekLow', field: 'fifty_two_week_low', label: '52-week low', formatter: currencyFormatter },
+  { key: 'fiftyTwoWeekHigh', field: 'fifty_two_week_high', label: '52-week high', formatter: currencyFormatter },
+  { key: 'sma20', field: 'sma20', label: '20-session SMA', formatter: currencyFormatter },
+  { key: 'sma50', field: 'sma50', label: '50-session SMA', formatter: currencyFormatter },
+  { key: 'sma200', field: 'sma200', label: '200-session SMA', formatter: currencyFormatter },
+];
 
 const isValidAction = (action: CorporateAction) =>
   Boolean(action.effectiveDate) && action.oldShares > 0 && action.newShares > 0 && action.oldShares !== action.newShares &&
   (action.type === 'stock_split' ? action.newShares > action.oldShares : action.newShares < action.oldShares);
 
 export function SecurityDetailsDialog({ security, manageDividends = true, onClose, onSaveCorporateActions, onSaveDividendSettings, onRemovePayments }: SecurityDetailsDialogProps) {
+  // Legacy and offline API responses may serialize missing provenance as {}.
+  const detailsProvenance = security.detailsProvenance && Array.isArray(security.detailsProvenance.sources)
+    && Array.isArray(security.detailsProvenance.fieldEvidence) && Array.isArray(security.detailsProvenance.warnings)
+    && typeof security.detailsProvenance.retrievedAt === 'string' ? security.detailsProvenance : null;
   const [activeTab, setActiveTab] = useState<'details' | 'actions'>('details');
   const [actionDrafts, setActionDrafts] = useState(() => cloneActions(security.corporateActions));
   const [isSavingActions, setIsSavingActions] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
   const [dividendGrowthRateDraft, setDividendGrowthRateDraft] = useState(() => toPercentDraft(security.dividendGrowthRate));
   const [manageDividendsDraft, setManageDividendsDraft] = useState(manageDividends);
   const [dividendGrowthRateBadInput, setDividendGrowthRateBadInput] = useState(false);
@@ -75,15 +97,26 @@ export function SecurityDetailsDialog({ security, manageDividends = true, onClos
     .sort((left, right) => right.exDividendDate.localeCompare(left.exDividendDate)), [security.payoutDetails]);
 
   useEffect(() => {
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButtonRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
       }
+      if (event.key === 'Tab') {
+        const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), summary, [tabindex="0"]') ?? []);
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault(); last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); first?.focus();
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => { window.removeEventListener('keydown', handleKeyDown); trigger?.focus(); };
   }, [onClose]);
 
   const actionsChanged = JSON.stringify(actionDrafts) !== JSON.stringify(savedActions);
@@ -158,7 +191,7 @@ export function SecurityDetailsDialog({ security, manageDividends = true, onClos
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <section className="modal-container security-details-modal" role="dialog" aria-modal="true" aria-labelledby="security-details-title" onClick={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="modal-container security-details-modal" role="dialog" aria-modal="true" aria-labelledby="security-details-title" onClick={(event) => event.stopPropagation()}>
         <div className="security-details-heading">
           <div><h2 id="security-details-title">{security.symbol} security details</h2><p>{security.name}</p></div>
           <button ref={closeButtonRef} className="link-button holdings-refresh-action" type="button" onClick={onClose} aria-label="Close security details"><span className="material-symbols-outlined" aria-hidden="true">close</span></button>
@@ -171,9 +204,31 @@ export function SecurityDetailsDialog({ security, manageDividends = true, onClos
 
         {activeTab === 'details' ? (
           <form id="security-details-panel" role="tabpanel" aria-labelledby="security-details-tab" noValidate onSubmit={(event) => void saveDividendSettings(event)}>
-            <dl className="security-details-grid">
-              <div><dt>Symbol</dt><dd>{security.symbol}</dd></div><div><dt>Exchange</dt><dd>{security.exchange}</dd></div><div><dt>Asset type</dt><dd>{security.assetType}</dd></div><div><dt>Currency</dt><dd>{security.currency}</dd></div><div><dt>Price</dt><dd>{formatOptional(security.price, currencyFormatter)}</dd></div><div><dt>Sector</dt><dd>{security.sector || 'Not available'}</dd></div><div><dt>Industry</dt><dd>{security.industry || 'Not available'}</dd></div><div><dt>P/E ratio</dt><dd>{formatOptional(security.peRatio)}</dd></div><div><dt>30-day yield</dt><dd>{formatOptional(security.thirtyDayYield, percentFormatter)}</dd></div><div><dt>52-week low</dt><dd>{formatOptional(security.fiftyTwoWeekLow, currencyFormatter)}</dd></div><div><dt>52-week high</dt><dd>{formatOptional(security.fiftyTwoWeekHigh, currencyFormatter)}</dd></div>
-            </dl>
+            <section aria-labelledby="stock-details-heading" className="stock-details-evidence">
+              <h3 id="stock-details-heading">{security.detailsStatus === 'stub' || detailsProvenance?.provider === 'stub' ? 'Stub security details' : detailsProvenance ? 'AI-researched details' : 'Saved security details'}</h3>
+              {detailsProvenance ? <>
+                {detailsProvenance.executionMode === 'registered_agent' ? <p className="status-copy">Registered Azure agent: {detailsProvenance.agentName} · version {detailsProvenance.agentVersion}</p> : null}
+                <p className="status-copy">Last successful retrieval: <time dateTime={detailsProvenance.retrievedAt}>{detailsProvenance.retrievedAt}</time> · {security.detailsStatus}</p>
+                <p className="status-copy">{detailsProvenance.provider === 'stub' ? 'Deterministic demonstration data; not market research.' : 'AI-researched market data may be delayed and is non-authoritative. Observation dates apply only to the fields shown.'}</p>
+                {detailsProvenance.warnings.length ? <ul aria-label="Security detail warnings">{detailsProvenance.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul> : null}
+              </> : <p className="status-copy">Source and observation dates are unavailable for these saved values.</p>}
+              <dl className="security-details-grid">
+                <div><dt>Symbol</dt><dd>{security.symbol}</dd></div><div><dt>Exchange</dt><dd>{security.exchange}</dd></div><div><dt>Asset type</dt><dd>{security.assetType}</dd></div><div><dt>Currency</dt><dd>{security.currency}</dd></div>
+                {detailFields.map(({ key, field, label, formatter }) => {
+                  const value = security[key];
+                  const evidence = detailsProvenance?.fieldEvidence.find((entry) => entry.field === field);
+                  const basis = field === 'price' ? ({ last_trade: 'Regular-session last trade', close: 'Regular-session close', nav: 'Published NAV' }[detailsProvenance?.priceKind ?? 'close']) : null;
+                  return <div key={key}><dt>{label}</dt><dd>
+                    {typeof value === 'number' ? formatOptional(value, formatter) : typeof value === 'string' && value ? value : 'Not available'}
+                    {value != null && detailsProvenance ? <small className="stock-detail-observation">{evidence ? <>{evidence.sourceIds.every((id) => id.startsWith('saved-')) ? 'Retained saved value · ' : ''}{basis ? `${basis} · ` : ''}As of <time dateTime={evidence.asOf}>{evidence.asOf}</time>{evidence.sourceIds.map((id) => {
+                      const source = detailsProvenance.sources.find((entry) => entry.id === id);
+                      const href = sourceLink(source?.url);
+                      return href && source ? <span key={id}> · <a href={href} target="_blank" rel="noopener noreferrer">{source.title} (opens in new tab)</a></span> : null;
+                    })}</> : detailsProvenance.provider === 'stub' ? 'Demonstration fixture · no market observation date' : 'Retained saved value · observation date unavailable in this research'}</small> : null}
+                  </dd></div>;
+                })}
+              </dl>
+            </section>
             <label className="configuration-checkbox" htmlFor="manage-dividends">
               <input id="manage-dividends" type="checkbox" checked={manageDividendsDraft} disabled={isMutationPending} aria-describedby="manage-dividends-help" onChange={(event) => { setManageDividendsDraft(event.target.checked); setDividendSettingsError(null); setDividendSettingsSaved(false); }} />
               <span>Manage Dividends</span>

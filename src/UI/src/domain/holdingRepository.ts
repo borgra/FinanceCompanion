@@ -8,6 +8,7 @@ import type {
   SecurityDetailsRefreshResult,
   SecurityMetadata,
 } from './holding';
+import { needsSecurityRefresh, securityListingKey } from './securityDetails';
 
 export type HoldingRepository = {
   searchSecurities: (query: string) => Promise<SecurityMetadata[]>;
@@ -30,18 +31,21 @@ export type HoldingRepository = {
 const mergeRefreshedSecurity = (
   current: SecurityMetadata,
   refreshed: SecurityMetadata,
-): SecurityMetadata => ({
-  ...current,
-  ...refreshed,
-  dividendPreviousYear: current.dividendPreviousYear,
-  dividendCurrentYear: current.dividendCurrentYear,
-  dividendGrowthRate: current.dividendGrowthRate,
-  estimatedFuturePayout: current.estimatedFuturePayout,
-  dividendStatus: current.dividendStatus,
-  payoutDetails: current.payoutDetails,
-  sourcePayoutDetails: current.sourcePayoutDetails,
-  manualPayoutDetails: current.manualPayoutDetails,
-});
+): SecurityMetadata => {
+  const timestamp = nowIso();
+  const fields = ['price', 'sector', 'industry', 'peRatio', 'thirtyDayYield', 'fiftyTwoWeekLow', 'fiftyTwoWeekHigh', 'sma20', 'sma50', 'sma200'] as const;
+  return {
+    ...current,
+    ...Object.fromEntries(fields.filter((field) => refreshed[field] != null).map((field) => [field, refreshed[field]])),
+    detailsStatus: 'stub',
+    detailsUpdatedAt: timestamp,
+    detailsProvenance: {
+      schemaVersion: 1, provider: 'stub', agentName: 'stub-security-details', deployment: 'offline',
+      promptVersion: 'stub-v1', retrievedAt: timestamp, priceKind: 'close', authoritative: false,
+      sources: [], fieldEvidence: [], warnings: ['Deterministic demonstration data; not market research.'],
+    },
+  };
+};
 
 const nowIso = () => new Date().toISOString();
 const isCashSecurity = (security: SecurityMetadata) => security.assetType === 'Cash';
@@ -69,17 +73,6 @@ const mergeDividendPayouts = (
   });
   return merged.sort((left, right) =>
     (left.paymentDate || left.exDividendDate).localeCompare(right.paymentDate || right.exDividendDate));
-};
-
-const needsSecurityRefresh = (updatedAt?: string | null) => {
-  if (!updatedAt) {
-    return false;
-  }
-  const updatedDate = new Date(updatedAt);
-  if (Number.isNaN(updatedDate.getTime())) {
-    return false;
-  }
-  return Date.now() - updatedDate.getTime() > 48 * 60 * 60 * 1000;
 };
 
 const securityCatalog: SecurityMetadata[] = [
@@ -201,7 +194,7 @@ export function createMockHoldingRepository(): HoldingRepository {
       })),
     createHolding: async (draft) => {
       const existing = holdings.find(
-        (holding) => holding.security.symbol.toLowerCase() === draft.security.symbol.toLowerCase(),
+        (holding) => securityListingKey(holding.security) === securityListingKey(draft.security),
       );
       if (existing) {
         const existingPositionByAccount = new Map(
@@ -364,21 +357,20 @@ export function createMockHoldingRepository(): HoldingRepository {
         return { ...existing, security: { ...existing.security }, accountPositions: existing.accountPositions.map((position) => ({ ...position })) };
       }
       const catalogSecurity = securityCatalog.find(
-        (item) => item.symbol === existing.security.symbol,
+        (item) => securityListingKey(item) === securityListingKey(existing.security),
       );
       if (!catalogSecurity || !Number.isFinite(catalogSecurity.price) || !catalogSecurity.price || catalogSecurity.price <= 0) {
-        return { ...existing, security: { ...existing.security }, accountPositions: existing.accountPositions.map((position) => ({ ...position })) };
+        throw new Error('No demonstration details are available for this listing. Saved details were kept.');
       }
       const updated: Holding = {
         ...existing,
         security: {
           ...mergeRefreshedSecurity(existing.security, catalogSecurity),
-          detailsStatus: 'fresh',
-          detailsUpdatedAt: nowIso(),
         },
         updatedAt: nowIso(),
       };
-      holdings = holdings.map((holding) => (holding.id === id ? updated : holding));
+      holdings = holdings.map((holding) => securityListingKey(holding.security) === securityListingKey(existing.security)
+        ? { ...holding, security: mergeRefreshedSecurity(holding.security, catalogSecurity), updatedAt: updated.updatedAt } : holding);
       return {
         ...updated,
         security: { ...updated.security },
@@ -449,40 +441,21 @@ export function createMockHoldingRepository(): HoldingRepository {
       return { ...updated, security: { ...updated.security } };
     },
     refreshHeldSecurityDetails: async () => {
-      const refreshed = await Promise.all(
-        holdings.map((holding) => {
-          if (isCashSecurity(holding.security)) {
-            return holding;
-          }
-          if (!needsSecurityRefresh(holding.security.detailsUpdatedAt)) {
-            return holding;
-          }
-          const catalogSecurity = securityCatalog.find(
-            (item) => item.symbol === holding.security.symbol,
-          );
-          if (!catalogSecurity || !Number.isFinite(catalogSecurity.price) || !catalogSecurity.price || catalogSecurity.price <= 0) {
-            return holding;
-          }
-          const updated: Holding = {
-            ...holding,
-            security: {
-              ...mergeRefreshedSecurity(holding.security, catalogSecurity),
-              detailsStatus: 'fresh',
-              detailsUpdatedAt: nowIso(),
-            },
-            updatedAt: nowIso(),
-          };
-          return updated;
-        }),
-      );
-      holdings = refreshed;
+      const eligible = new Set(holdings.filter((holding) => !isCashSecurity(holding.security) && needsSecurityRefresh(holding.security.detailsUpdatedAt)).map((holding) => securityListingKey(holding.security)));
+      const failedSymbols = new Set<string>();
+      holdings = holdings.map((holding) => {
+        if (!eligible.has(securityListingKey(holding.security))) return holding;
+        const catalogSecurity = securityCatalog.find((item) => securityListingKey(item) === securityListingKey(holding.security));
+        if (!catalogSecurity) { failedSymbols.add(holding.security.symbol); return holding; }
+        return { ...holding, security: mergeRefreshedSecurity(holding.security, catalogSecurity), updatedAt: nowIso() };
+      });
       return {
-        holdings: refreshed.map((holding) => ({
+        holdings: holdings.map((holding) => ({
           ...holding,
           security: { ...holding.security },
           accountPositions: holding.accountPositions.map((position) => ({ ...position })),
         })),
-        failedSymbols: [],
+        failedSymbols: [...failedSymbols],
       };
     },
     updateManualPayoutDetails: async (id, payouts) => {

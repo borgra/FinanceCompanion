@@ -3,7 +3,7 @@ from typing import Literal
 from urllib.parse import urlsplit
 import re
 
-from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _env_files = []
@@ -37,18 +37,14 @@ class Settings(BaseSettings):
     allowed_email: str = "steveborgra@gmail.com"
     cosmos_table_connection_string: str | None = Field(default=None, repr=False)
     cosmos_table_name: str = "finance"
-    alpha_vantage_api_key: str | None = Field(
-        default=None,
-        repr=False,
-        validation_alias=AliasChoices(
-            "FINANCE_COMPANION_ALPHA_VANTAGE_API_KEY",
-            "ALPHA_VANTAGE_API_KEY",
-        ),
-    )
     dividend_research_provider: Literal["stub", "azure_foundry"] | None = None
     azure_foundry_endpoint: str | None = None
     azure_foundry_deployment: str | None = None
-    azure_foundry_agent_name: str = Field(default="dividend-history-agent", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+    azure_foundry_agent_name: str = Field(default="dividend-history-agent", min_length=1, max_length=63, pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+    azure_foundry_agent_version: str | None = Field(default=None, pattern=r"^[1-9][0-9]{0,18}$")
+    azure_foundry_rai_policy_id: str | None = None
+    azure_foundry_stock_details_agent_name: str = Field(default="stock-details-agent", min_length=1, max_length=63, pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+    azure_foundry_stock_details_agent_version: str | None = Field(default=None, pattern=r"^[1-9][0-9]{0,18}$")
     azure_foundry_reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
     azure_foundry_api_version: str | None = None
     azure_foundry_auth_mode: Literal["entra", "key"] = "entra"
@@ -67,7 +63,7 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173", "https://finance-companion-ui.example.com"]
     )
 
-    @field_validator("azure_foundry_reasoning_effort", mode="before")
+    @field_validator("azure_foundry_reasoning_effort", "azure_foundry_stock_details_agent_version", "azure_foundry_agent_version", "azure_foundry_rai_policy_id", mode="before")
     @classmethod
     def blank_reasoning_effort(cls, value):
         return None if value == "" else value
@@ -95,6 +91,17 @@ class Settings(BaseSettings):
                 raise ValueError("Foundry key authentication requires an API key.")
             if project_endpoint and self.azure_foundry_auth_mode != "entra":
                 raise ValueError("Foundry project endpoints require Entra authentication.")
+            if not project_endpoint or not endpoint.hostname.endswith(".services.ai.azure.com") or self.azure_foundry_auth_mode != "entra":
+                raise ValueError("Registered research agents require a Foundry project HTTPS endpoint and Entra authentication.")
+            if not self.azure_foundry_agent_version or not self.azure_foundry_stock_details_agent_version:
+                raise ValueError("Both research agents require explicitly approved immutable agent versions.")
+            if self.azure_foundry_agent_name == self.azure_foundry_stock_details_agent_name:
+                raise ValueError("Dividend and stock research must use distinct registered agents.")
+            if not self.azure_foundry_rai_policy_id or not re.fullmatch(
+                r"/subscriptions/[0-9a-fA-F-]{36}/resourceGroups/[A-Za-z0-9._()-]+/providers/Microsoft.CognitiveServices/accounts/[A-Za-z0-9-]+/raiPolicies/[A-Za-z0-9._-]+",
+                self.azure_foundry_rai_policy_id,
+            ):
+                raise ValueError("Research agents require an explicit full Azure RAI policy resource ID.")
         if self.disable_auth_for_local_development and self.environment != "development":
             raise ValueError("Authentication can only be disabled in the local development environment.")
 
