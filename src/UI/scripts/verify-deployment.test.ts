@@ -72,6 +72,7 @@ describe('deployment verification retries', () => {
         initialDelayMs: 10,
         maxDelayMs: 10,
         now: () => elapsed,
+        monotonicNow: () => elapsed,
       }),
     ).rejects.toThrow('Deployment verification failed after 4 attempt(s) over 25ms: /assets/index-Bb-0b7Gg.js returned 404.');
 
@@ -91,10 +92,35 @@ describe('deployment verification retries', () => {
         initialDelayMs: 1,
         maxDelayMs: 1,
         now: () => 0,
+        monotonicNow: () => 0,
       }),
     ).rejects.toThrow(/Deployment verification failed after \d+ attempt\(s\) over 5ms/);
 
-    expect(requestImpl.mock.calls.filter(([url]) => new URL(url).pathname === '/').length).toBeLessThanOrEqual(6);
+    expect(requestImpl.mock.calls.filter(([url]) => new URL(url).pathname === '/')).toHaveLength(6);
+  });
+
+  it('counts time spent verifying when a fixed clock shortens the final retry delay', async () => {
+    let elapsed = 0;
+    const requestImpl = successfulRequest(() => {
+      elapsed = 4.25;
+      return response('', 404);
+    });
+    const sleep = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      verifyWithRetry('https://example.test', {
+        requestImpl,
+        sleep,
+        timeoutMs: 5,
+        initialDelayMs: 1,
+        maxDelayMs: 1,
+        now: () => 0,
+        monotonicNow: () => elapsed,
+      }),
+    ).rejects.toThrow('Deployment verification failed after 2 attempt(s) over 5ms');
+
+    expect(sleep).toHaveBeenCalledExactlyOnceWith(0.75);
+    expect(requestImpl.mock.calls.filter(([url]) => new URL(url).pathname === '/')).toHaveLength(2);
   });
 
   it('fails immediately for a non-hashed asset 404 without waiting or retrying', async () => {
