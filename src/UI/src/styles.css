@@ -3908,57 +3908,6 @@ button.security-result:hover {
   animation: slideUp var(--md-sys-motion-duration-medium) var(--md-sys-motion-easing-standard);
 }
 
-.payment-editor-modal {
-  width: min(860px, calc(100% - 32px));
-}
-
-.payment-editor-table {
-  display: flex;
-  max-height: min(48vh, 420px);
-  flex-direction: column;
-  gap: 8px;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.payment-editor-row {
-  display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(130px, 1fr) minmax(110px, 0.8fr) 32px;
-  gap: 8px;
-  align-items: end;
-  padding: 8px;
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: var(--md-sys-shape-corner-s);
-}
-
-.payment-editor-row label {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-  color: var(--md-sys-color-on-surface-variant);
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-.payment-editor-row input {
-  min-width: 0;
-  height: 34px;
-  padding: 5px 7px;
-}
-
-.payment-editor-row .link-button {
-  min-height: 34px;
-  width: 32px;
-  padding: 0;
-}
-
-@media (max-width: 640px) {
-  .payment-editor-row {
-    grid-template-columns: 1fr 1fr 1fr 32px;
-  }
-}
-
 .modal-container h2 {
   font-family: var(--md-sys-font-display);
   font-size: 1.35rem;

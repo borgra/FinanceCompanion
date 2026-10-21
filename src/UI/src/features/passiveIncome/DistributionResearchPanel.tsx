@@ -127,6 +127,6 @@ export function DistributionResearchPanel({ holdings, repository, onRefreshed }:
           <SavedWebResearch evidence={security.dividendResearchSnapshot?.evidence} />
         </li>;
       })}</ul>
-    </details> : <p className="status-copy">Enable Manage Dividends on a non-cash holding with a positive quantity to research distributions.</p>}
+    </details> : <p className="status-copy">Enable Manage Dividends in security details for a non-cash holding with a positive quantity to research distributions.</p>}
   </section>;
 }
