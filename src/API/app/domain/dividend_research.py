@@ -89,6 +89,7 @@ class DividendResearchResult:
     status: str = "fresh"
     resolved_exchange: str | None = None
     evidence_snapshot: dict | None = None
+    resolved_asset_type: str | None = None
 
 
 class DividendResearchValidationError(ValueError):
@@ -125,6 +126,8 @@ def validate_dividend_research_result(result: DividendResearchResult, request: D
         raise DividendResearchValidationError("Dividend research exchange does not match the holding.")
     if result.status not in {"fresh", "partial", "unavailable", "unsupported"}:
         raise DividendResearchValidationError("Dividend research status is invalid.")
+    if result.resolved_asset_type is not None and result.resolved_asset_type not in {"ETF", "Stock"}:
+        raise DividendResearchValidationError("Resolved research asset type must be ETF or Stock.")
     try:
         retrieved_at = datetime.fromisoformat(result.retrieved_at.replace("Z", "+00:00"))
         if retrieved_at.tzinfo is None:

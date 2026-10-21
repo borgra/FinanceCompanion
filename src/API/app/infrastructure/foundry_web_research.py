@@ -31,10 +31,11 @@ from app.infrastructure.alpha_vantage_security_search import SecuritySearchUnava
 
 MAX_SOURCE_BYTES = 500_000
 
-PROMPT_VERSION = "cited-web-distributions-v5"
+PROMPT_VERSION = "cited-web-distributions-v6"
 SUPPORTED_EXCHANGES = {"NASDAQ", "NYSE", "NYSE ARCA", "AMEX", "NYSE AMERICAN", "BATS", "CBOE"}
 UNKNOWN_EXCHANGES = {"", "UNKNOWN", "US", "USA", "UNITED STATES"}
-ALIASES = {"XNAS": "NASDAQ", "XNYS": "NYSE", "NYSEARCA": "NYSE ARCA", "ARCX": "NYSE ARCA", "NYSE MKT": "NYSE AMERICAN", "NASDAQ GLOBAL SELECT": "NASDAQ"}
+ALIASES = {"XNAS": "NASDAQ", "XNYS": "NYSE", "NYSEARCA": "NYSE ARCA", "ARCX": "NYSE ARCA", "NYSE ARCA, INC": "NYSE ARCA", "NYSE ARCA INC": "NYSE ARCA", "NYSE MKT": "NYSE AMERICAN", "NASDAQ GLOBAL SELECT": "NASDAQ"}
+UNKNOWN_ASSET_TYPES = {"", "unknown"}
 
 
 def _source_authority(url: str) -> Literal["issuer", "regulatory", "exchange", "secondary"]:
@@ -127,13 +128,20 @@ def _split_ratio_in_excerpt(fact: WebAction) -> bool:
     if bool(re.search(r"\breverse\b", direction_text)) != reverse or "effective" not in text:
         return False
     ratios = re.findall(r"(?<![\w.])(\d+(?:\.\d+)?)\s*(?:-\s*for\s*-|for)\s*(\d+(?:\.\d+)?)(?![\w.])", text)
+    ratios += re.findall(r"(?<![\w.])(\d+(?:\.\d+)?)\s+new\s+shares?\s+for\s+(\d+(?:\.\d+)?)\s+old\s+shares?\b", text)
     return any(Decimal(new) == Decimal(str(fact.new_shares)) and Decimal(old) == Decimal(str(fact.old_shares)) for new, old in ratios)
 
 
 
 def canonical_exchange(value: str) -> str:
-    value = value.strip().upper()
+    value = ' '.join(value.strip().rstrip('.').upper().split())
     return ALIASES.get(value, value)
+
+
+def canonical_asset_type(value: str) -> str:
+    value = ' '.join(value.strip().lower().split())
+    return {'etf': 'ETF', 'etfs': 'ETF', 'exchange traded fund': 'ETF', 'exchange-traded fund': 'ETF',
+            'stock': 'Stock', 'common stock': 'Stock', 'equity': 'Stock'}.get(value, value)
 
 
 def _exchange_in_excerpt(exchange: str, excerpt: str) -> bool:
@@ -380,7 +388,7 @@ class FoundryWebDividendResearchProvider:
                 and bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-]{0,23}", identity.symbol))
                 and self._supported_claim(evidence, identity.evidence_excerpt, identity.source_url)
                 and bool(re.search(r"\b(?:ticker|symbol)\s*[:=]\s*" + re.escape(identity.symbol) + r"(?![\w.-])", text, re.I))
-                and bool(re.search(r"\bexchange\s*[:=]\s*" + re.escape(identity.exchange) + r"(?![\w])", text, re.I))
+                and _exchange_in_excerpt(identity.exchange, text)
                 and identity.name.casefold() in text.casefold()
                 and bool(re.search(r"\bcurrency\s*(?:[:=]\s*)?USD\b", text, re.I))
                 and bool(re.search(r"\basset type\s*(?:[:=]\s*)?" + identity.asset_type + r"\b", text, re.I)))
@@ -468,16 +476,24 @@ class FoundryWebDividendResearchProvider:
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-]{0,23}", request.symbol.strip()):
             raise DividendResearchValidationError("Dividend research symbol is invalid.")
         exchange = canonical_exchange(request.exchange)
-        if request.asset_type.lower() not in {"stock", "common stock", "equity", "etf"} or request.currency != "USD" or exchange not in SUPPORTED_EXCHANGES | UNKNOWN_EXCHANGES:
-            return DividendResearchResult(request.schema_version, request.symbol, timestamp, "raw", [], [], ["AI web research currently supports US-listed USD stocks and ETFs."], DividendResearchProvenance("azure_foundry", None, False), exchange=request.exchange, status="unsupported")
+        asset_type = canonical_asset_type(request.asset_type)
+        unsupported = []
+        if asset_type not in {"Stock", "ETF"} | UNKNOWN_ASSET_TYPES:
+            unsupported.append(f"Unsupported saved asset type: {request.asset_type[:64]}.")
+        if request.currency != 'USD':
+            unsupported.append(f"Unsupported saved currency: {request.currency[:16]}; research currently requires USD.")
+        if exchange not in SUPPORTED_EXCHANGES | UNKNOWN_EXCHANGES:
+            unsupported.append(f"Unsupported saved exchange: {request.exchange[:64]}.")
+        if unsupported:
+            return DividendResearchResult(request.schema_version, request.symbol, timestamp, "raw", [], [], ["AI web research currently supports US-listed USD stocks and ETFs.", *unsupported], DividendResearchProvenance("azure_foundry", None, False), exchange=request.exchange, status="unsupported")
         deadline = time.monotonic() + 90
         research_task = "Find distribution history and split/reverse-split actions for this exact security. Resolve and cite identity, full fund/company name, listed exchange, USD currency and ETF/Stock asset type first. Do not mix other listings with the same ticker. Prioritize complete trailing 24 calendar months of actual distributions and any declared future distributions; include older observations up to the input start where available. Search and open exchange dividend-history pages (for example https://www.nasdaq.com/market-activity/etf/<symbol>/dividend-history or https://www.nasdaq.com/market-activity/stocks/<symbol>/dividend-history) and complete unrounded dividend tables rather than date-only PDF calendars or JS-only product pages. Check for months with two ex-dividend dates (such as ETFs with both an early-December and a year-end December 31 ex-dividend date paid in January) and report every distinct ex-dividend date with its exact unrounded per-share amount. Each payment claim line must explicitly label Ticker, Exchange, Ex-date, Amount with currency, payment/declaration/record dates if known, paid/completed versus announced, regular versus special only when supported, type only when supported, and share basis if known. Each split claim needs ticker/exchange, effective date and explicit new-for-old ratio, including whether reverse. Cite EACH fact line. State source gaps; do not invent missing months or dates."
         symbol = request.symbol.lower()
-        is_etf = request.asset_type.lower() == 'etf'
-        history_pages = [
-            f"https://www.nasdaq.com/market-activity/{'etf' if is_etf else 'stocks'}/{symbol}/dividend-history",
-            f"https://stockanalysis.com/{'etf' if is_etf else 'stocks'}/{symbol}/dividend/",
-        ]
+        history_types = ['etf', 'stocks'] if asset_type in UNKNOWN_ASSET_TYPES else ['etf' if asset_type == 'ETF' else 'stocks']
+        history_pages = [url for kind in history_types for url in (
+            f"https://www.nasdaq.com/market-activity/{kind}/{symbol}/dividend-history",
+            f"https://stockanalysis.com/{kind}/{symbol}/dividend/",
+        )]
         research_task += " If an issuer profile (including investor.vanguard.com ETF profiles) renders no distribution table, use it only for identity and immediately switch to an accessible history table. A dividend yield, date-only schedule, or estimated year-end distribution is not a paid per-share history. Try the supplied history_pages and other reputable tables; these are discovery hints, not evidence until searched, opened and cited."
         prompt = json.dumps({
             "symbol": request.symbol, "exchange": request.exchange, "currency": request.currency,
@@ -505,6 +521,8 @@ class FoundryWebDividendResearchProvider:
         identity_source = identity.source_url
         if full_identity and not listing_matches:
             raise DividendResearchValidationError(f"Cited research ticker and exchange ({identity.symbol.upper()} / {resolved}) do not match the holding ({request.symbol.upper()} / {exchange}). Existing records were preserved.")
+        if not full_identity and asset_type in UNKNOWN_ASSET_TYPES:
+            raise DividendResearchValidationError("Research could not verify the holding's asset type from a cited stock or ETF identity. Existing records were preserved.")
         if not full_identity:
             identity_source = self._listing_from_payments(extracted.payments, evidence, request)
             if not identity_source:
@@ -614,7 +632,8 @@ class FoundryWebDividendResearchProvider:
         evidence["facts"] = facts
         result = DividendResearchResult(request.schema_version, request.symbol, timestamp, "raw", payments, actions, list(dict.fromkeys(warnings)),
             DividendResearchProvenance("azure_foundry", identity_source, False, self._deployment, PROMPT_VERSION, stable_id("web", evidence)),
-            exchange=request.exchange, status="partial" if payments else "unavailable", resolved_exchange=resolved, evidence_snapshot=evidence)
+            exchange=request.exchange, status="partial" if payments else "unavailable", resolved_exchange=resolved, evidence_snapshot=evidence,
+            resolved_asset_type=identity.asset_type if full_identity else None)
         return validate_dividend_research_result(result, request)
 
     def search_securities(self, query: str) -> list[SecurityMetadata]:
