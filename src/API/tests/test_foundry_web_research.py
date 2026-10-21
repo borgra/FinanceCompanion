@@ -211,6 +211,119 @@ def vym_research():
     return data
 
 
+def schv_research(exchange='NYSE Arca, Inc.'):
+    """Synthetic paid rows for SCHV identity/eligibility contracts, not market data."""
+    data = voo_research()
+    data['identity'].update(symbol='SCHV', exchange=exchange, name='Schwab U.S. Large-Cap Value ETF',
+        evidence_excerpt=f'Ticker: SCHV; Exchange: {exchange}; Name: Schwab U.S. Large-Cap Value ETF; Asset type: ETF; Currency: USD.')
+    for item in data['payments']:
+        item['evidence_excerpt'] = item['evidence_excerpt'].replace('Ticker: VOO', 'Ticker: SCHV').replace('Exchange: NYSE Arca', f'Exchange: {exchange}').replace(f"Amount: USD {item['amount_per_share']}", 'Amount: USD 0.2')
+        item['amount_per_share'] = '0.2'
+    return data
+
+
+@pytest.mark.parametrize('exchange', ['NYSE Arca, Inc.', 'NYSE Arca, Inc', 'NYSE  Arca, Inc.', 'ARCX', 'Unknown'])
+@pytest.mark.parametrize('asset_type', ['ETF', 'Unknown', '', '  ', ' ETF ', 'Exchange Traded Fund'])
+def test_schv_resolves_supported_etf_identity_instead_of_rejecting_saved_labels(exchange, asset_type):
+    req = DividendResearchRequest('SCHV', exchange, 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2, asset_type=asset_type)
+    result = provider(schv_research()).research(req)
+    assert result.status == 'partial' and len(result.payments) == 8
+    assert result.resolved_exchange == 'NYSE ARCA'
+    assert result.resolved_asset_type == 'ETF'
+    events, _ = normalize_research(result, req)
+    assert len(forecast_distributions(events, req)[0]) == 5
+
+
+def test_unknown_asset_type_requires_full_cited_identity_not_only_payment_rows():
+    def remove_identity_citation(response):
+        response['output'][1]['content'][0]['annotations'].pop(0)
+    req = DividendResearchRequest('SCHV', 'NYSE ARCA', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2, asset_type='Unknown')
+    with pytest.raises(DividendResearchValidationError, match='asset type'):
+        provider(schv_research(), change_grounded=remove_identity_citation).research(req)
+
+
+def test_unknown_asset_type_discovers_both_etf_and_stock_history_paths():
+    calls = []
+    req = DividendResearchRequest('SCHV', 'Unknown', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2, asset_type='Unknown')
+    provider(schv_research(), calls=calls).research(req)
+    prompt = json.loads(calls[0]['input'][1]['content'][0]['text'])
+    assert {url.split('/')[3] for url in prompt['history_pages'] if 'stockanalysis.com' in url} == {'etf', 'stocks'}
+
+
+def test_invalid_resolved_asset_type_cannot_reach_saved_security_metadata():
+    from dataclasses import replace
+    from app.domain.dividend_research import validate_dividend_research_result
+    req = DividendResearchRequest('SCHV', 'Unknown', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2, asset_type='Unknown')
+    result = provider(schv_research()).research(req)
+    with pytest.raises(DividendResearchValidationError, match='asset type'):
+        validate_dividend_research_result(replace(result, resolved_asset_type='Mutual Fund'), req)
+
+
+@pytest.mark.parametrize('change, field', [({'currency': 'CAD'}, 'currency'), ({'exchange': 'TSX'}, 'exchange'), ({'asset_type': 'Mutual Fund'}, 'asset type')])
+def test_unsupported_saved_metadata_names_the_blocking_field_without_searching(change, field):
+    values = dict(symbol='SCHV', exchange='NYSE ARCA', currency='USD', retrieval_start=date(2021, 10, 20), retrieval_end=date(2026, 10, 20), schema_version=2, asset_type='ETF')
+    calls = []
+    result = provider(schv_research(), calls=calls).research(DividendResearchRequest(**(values | change)))
+    assert result.status == 'unsupported' and not calls
+    assert any(field in warning.lower() and next(iter(change.values())) in warning for warning in result.warnings)
+
+
+def test_manually_added_schv_refresh_persists_resolved_type_and_exchange():
+    from app.application.use_cases.dividend_refresh import RefreshHoldingDividends
+    from app.domain.models import Holding, SecurityMetadata, SecurityPayoutDetails
+    from app.infrastructure.in_memory_repositories import InMemoryDataStore, InMemoryHoldingRepository
+    store = InMemoryDataStore()
+    manual = SecurityPayoutDetails('2026-05-10', 0.9, mode='manual', source='user')
+    original = Holding('schv', SecurityMetadata('SCHV', 'SCHV', 'Unknown', 'Unknown', 'USD', price=30, manual_payout_details=[manual]), [], '', '')
+    store.holdings['owner'] = [original]
+    repository = InMemoryHoldingRepository(store)
+    refreshed = RefreshHoldingDividends(repository, provider(schv_research()), today=lambda: date(2026, 10, 20)).execute('owner', 'schv')
+    assert refreshed.security.exchange == 'NYSE ARCA' and refreshed.security.asset_type == 'ETF'
+    assert refreshed.security.price == 30 and refreshed.security.manual_payout_details[0].amount == 0.9
+    assert len([item for item in refreshed.security.source_payout_details if item.status == 'completed']) == 8
+    assert len([item for item in refreshed.security.source_payout_details if item.status == 'projected']) == 5
+    assert repository.list_for_user('owner')[0] == refreshed
+
+
+def test_schv_security_search_accepts_issuer_legal_exchange_name():
+    matches = provider(schv_research()).search_securities('SCHV')
+    assert len(matches) == 1
+    assert matches[0].symbol == 'SCHV' and matches[0].exchange == 'NYSE ARCA'
+
+
+@pytest.mark.parametrize('ratio, new_shares, old_shares, accepted', [
+    ('3 new shares for 1 old share', 3.0, 1.0, True),
+    ('1 new share for 3 old shares', 1.0, 3.0, True),
+    ('3 old shares for 1 new share', 3.0, 1.0, False),
+    ('3 shares and 1 share', 3.0, 1.0, False),
+])
+def test_schwab_split_ratio_with_explicit_new_and_old_share_roles(ratio, new_shares, old_shares, accepted):
+    data = schv_research()
+    reverse = new_shares < old_shares
+    direction = 'reverse split' if reverse else 'forward split, not reverse'
+    data['corporate_actions'] = [dict(effective_date='2024-10-10', type='reverse_stock_split' if reverse else 'stock_split',
+        new_shares=new_shares, old_shares=old_shares, source_url=SOURCE,
+        evidence_excerpt=f'Ticker: SCHV; Exchange: NYSE Arca; Effective date: 2024-10-10; Ratio: {ratio}; Type: {direction}.')]
+    req = DividendResearchRequest('SCHV', 'Unknown', 'USD', date(2021, 10, 20), date(2026, 10, 20), schema_version=2, asset_type='Unknown')
+    result = provider(data).research(req)
+    assert len(result.corporate_actions) == int(accepted)
+    assert all((item.share_basis == 'current_share_basis') == accepted for item in result.payments)
+    events, _ = normalize_research(result, req)
+    assert bool(forecast_distributions(events, req)[0]) == accepted
+
+
+def test_unknown_asset_type_can_resolve_a_cited_stock_identity():
+    data = research()
+    data['identity'].update(symbol='TEST', name='Example Inc', asset_type='Stock',
+        evidence_excerpt='Ticker: TEST; Exchange: NASDAQ; Name: Example Inc; Asset type: Stock; Currency: USD.')
+    for item in data['payments']:
+        item['evidence_excerpt'] = item['evidence_excerpt'].replace('Ticker: JEPQ', 'Ticker: TEST')
+    req = DividendResearchRequest('TEST', 'Unknown', 'USD', date(2021, 9, 4), date(2026, 9, 4), schema_version=2, asset_type='Unknown')
+    result = provider(data).research(req)
+    assert result.resolved_asset_type == 'Stock' and result.resolved_exchange == 'NASDAQ'
+    assert len(result.payments) == 9
+
+
 def fallback_provider(initial, supplemental, extracted, calls, *, fail_fallback=False):
     instance = provider()
     def handle(req):

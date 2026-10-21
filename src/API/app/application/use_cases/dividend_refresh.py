@@ -62,8 +62,9 @@ class RefreshHoldingDividends:
         finally:
             with self._in_flight_lock:
                 self._in_flight.discard(in_flight_key)
-        if result.resolved_exchange:
-            request = replace(request, exchange=result.resolved_exchange)
+        if result.resolved_exchange or result.resolved_asset_type:
+            request = replace(request, exchange=result.resolved_exchange or request.exchange,
+                asset_type=result.resolved_asset_type or request.asset_type)
         inputs, actions = normalize_research(result, request)
         inputs, source_warnings = select_source_events(inputs)
         projected, forecast_warnings = forecast_distributions(inputs, request)
@@ -103,6 +104,7 @@ class RefreshHoldingDividends:
             security = replace(
                 item.security, payout_details=merge_dividend_payouts(source, manual),
                 exchange=result.resolved_exchange or item.security.exchange,
+                asset_type=result.resolved_asset_type or item.security.asset_type,
                 source_payout_details=source, manual_payout_details=manual,
                 payout_audit_details=audit,
                 corporate_actions=actions if actions or (item.security.dividend_research_provider == "stub" and result.provenance.provider != "stub") else item.security.corporate_actions,
