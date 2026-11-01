@@ -75,6 +75,9 @@ class SecurityMetadata:
     sma200: float | None = None
     details_updated_at: str | None = None
     details_status: str | None = None
+    price_as_of: str | None = None
+    price_source_url: str | None = None
+    price_basis: str | None = None
     payout_details: list[SecurityPayoutDetails] = field(default_factory=list)
     source_payout_details: list[SecurityPayoutDetails] = field(default_factory=list)
     manual_payout_details: list[SecurityPayoutDetails] = field(default_factory=list)

@@ -7,7 +7,7 @@ from dataclasses import asdict, replace
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.domain.dividend_research import DividendResearchProviderError, DividendResearchValidationError
-from app.domain.exceptions import AuthenticationError, DomainError, NotFoundError
+from app.domain.exceptions import AuthenticationError, DomainError, NotFoundError, ResearchRateLimitError, ResearchControlUnavailableError, ResearchConflictError
 from app.infrastructure.alpha_vantage_security_details import SecurityDetailsUnavailableError
 from app.infrastructure.alpha_vantage_security_search import SecuritySearchUnavailableError
 from app.domain.models import Account, BudgetCategory, BudgetSubCategory, NetWorth
@@ -68,6 +68,12 @@ router = APIRouter()
 
 
 def _domain_error_to_http(exc: DomainError) -> HTTPException:
+    if isinstance(exc, ResearchConflictError):
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    if isinstance(exc, ResearchRateLimitError):
+        return HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc), headers={"Retry-After": str(exc.retry_after)})
+    if isinstance(exc, ResearchControlUnavailableError):
+        return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     if isinstance(exc, AuthenticationError):
         return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc))
     if isinstance(exc, NotFoundError):

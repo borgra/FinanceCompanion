@@ -59,6 +59,9 @@ export type SecurityMetadata = {
   sma200?: number | null;
   detailsUpdatedAt?: string | null;
   detailsStatus?: string | null;
+  priceAsOf?: string | null;
+  priceSourceUrl?: string | null;
+  priceBasis?: string | null;
   payoutDetails?: SecurityPayoutDetails[];
   sourcePayoutDetails?: SecurityPayoutDetails[];
   manualPayoutDetails?: SecurityPayoutDetails[];

@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     local_json_path: str = ".local-data/finance.json"
     disable_auth_for_local_development: bool = False
     local_development_user_id: str = "user-steve"
-    allowed_email: str = "steveborgra@gmail.com"
+    allowed_email: str = "user@example.test"
     cosmos_table_connection_string: str | None = Field(default=None, repr=False)
     cosmos_table_name: str = "finance"
     alpha_vantage_api_key: str | None = Field(
@@ -125,3 +125,5 @@ class Settings(BaseSettings):
             raise ValueError("The local JSON data backend can only be used in the development environment.")
         if self.data_backend == "json" and self.cosmos_table_connection_string:
             raise ValueError("The local JSON data backend is mutually exclusive with Cosmos Table storage.")
+        if self.environment != "development" and "allowed_email" not in self.model_fields_set:
+            raise ValueError("An allowed user email must be explicitly configured outside local development.")

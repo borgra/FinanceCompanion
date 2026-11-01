@@ -25,6 +25,23 @@ const securityWithPayments = { ...security, payoutDetails: [
 
 describe('SecurityDetailsDialog', () => {
   afterEach(() => vi.restoreAllMocks());
+  it.each([
+    ['latest_close', 'Latest closing price'],
+    ['delayed_quote', 'Delayed quote'],
+  ])('shows %s price date and source without implying a real-time quote', (priceBasis, label) => {
+    render(<SecurityDetailsDialog security={{ ...security, priceBasis, priceAsOf: '2026-10-30', priceSourceUrl: 'https://www.nasdaq.com/market-activity/etf/schd' }} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendSettings={vi.fn()} />);
+
+    expect(screen.getByText(new RegExp(label))).toHaveTextContent('AI web research; prices may be delayed.');
+    expect(screen.getByText('2026-10-30')).toHaveAttribute('datetime', '2026-10-30');
+    expect(screen.getByRole('link', { name: 'View price source' })).toHaveAttribute('href', 'https://www.nasdaq.com/market-activity/etf/schd');
+  });
+
+  it('does not render an unsafe price source link', () => {
+    render(<SecurityDetailsDialog security={{ ...security, priceBasis: 'delayed_quote', priceSourceUrl: 'javascript:alert(1)' }} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendSettings={vi.fn()} />);
+    expect(screen.queryByRole('link', { name: 'View price source' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Delayed quote/)).toBeInTheDocument();
+  });
+
   it('shows security details and the recorded corporate actions in separate tabs', async () => {
     const user = userEvent.setup();
     render(<SecurityDetailsDialog security={security} onClose={vi.fn()} onSaveCorporateActions={vi.fn()} onSaveDividendSettings={vi.fn()} />);

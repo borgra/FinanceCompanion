@@ -73,6 +73,9 @@ export function SecurityDetailsDialog({ security, manageDividends = true, onClos
   const distributions = useMemo(() => (security.payoutDetails ?? [])
     .filter((payout) => payout.status !== 'superseded')
     .sort((left, right) => right.exDividendDate.localeCompare(left.exDividendDate)), [security.payoutDetails]);
+  const priceSource = sourceLink(security.priceSourceUrl);
+  const priceBasisLabel = security.priceBasis === 'latest_close' ? 'Latest closing price'
+    : security.priceBasis === 'delayed_quote' ? 'Delayed quote' : null;
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -174,6 +177,13 @@ export function SecurityDetailsDialog({ security, manageDividends = true, onClos
             <dl className="security-details-grid">
               <div><dt>Symbol</dt><dd>{security.symbol}</dd></div><div><dt>Exchange</dt><dd>{security.exchange}</dd></div><div><dt>Asset type</dt><dd>{security.assetType}</dd></div><div><dt>Currency</dt><dd>{security.currency}</dd></div><div><dt>Price</dt><dd>{formatOptional(security.price, currencyFormatter)}</dd></div><div><dt>Sector</dt><dd>{security.sector || 'Not available'}</dd></div><div><dt>Industry</dt><dd>{security.industry || 'Not available'}</dd></div><div><dt>P/E ratio</dt><dd>{formatOptional(security.peRatio)}</dd></div><div><dt>30-day yield</dt><dd>{formatOptional(security.thirtyDayYield, percentFormatter)}</dd></div><div><dt>52-week low</dt><dd>{formatOptional(security.fiftyTwoWeekLow, currencyFormatter)}</dd></div><div><dt>52-week high</dt><dd>{formatOptional(security.fiftyTwoWeekHigh, currencyFormatter)}</dd></div>
             </dl>
+            {priceBasisLabel ? (
+              <p className="status-copy">
+                {priceBasisLabel}{security.priceAsOf ? <> as of <time dateTime={security.priceAsOf}>{security.priceAsOf}</time></> : null}.
+                {' '}AI web research; prices may be delayed.
+                {priceSource ? <> <a href={priceSource} target="_blank" rel="noreferrer">View price source</a></> : null}
+              </p>
+            ) : null}
             <label className="configuration-checkbox" htmlFor="manage-dividends">
               <input id="manage-dividends" type="checkbox" checked={manageDividendsDraft} disabled={isMutationPending} aria-describedby="manage-dividends-help" onChange={(event) => { setManageDividendsDraft(event.target.checked); setDividendSettingsError(null); setDividendSettingsSaved(false); }} />
               <span>Manage Dividends</span>

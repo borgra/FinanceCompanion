@@ -1,5 +1,6 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { SecurityDetailsDialog } from '../components/SecurityDetailsDialog';
+import { ApiError } from '../api/httpClient';
 import {
   FinanceMoneyCellInput,
   FinanceMoneyCellValue,
@@ -398,7 +399,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setHoldings((current) =>
       current.map((holding) =>
         holding.id === holdingId
-          ? { ...holding, security: { ...holding.security, price } }
+          ? { ...holding, security: { ...holding.security, price, priceAsOf: null, priceSourceUrl: null, priceBasis: null, detailsStatus: 'manual' } }
           : holding,
       ),
     );
@@ -532,7 +533,11 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
       const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holdingId);
       setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
       setSuccessMessage(`${refreshed.security.symbol} was updated.`);
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 429) {
+        setError(error.message);
+        return;
+      }
       setHoldings((current) =>
         current.map((holding) =>
           holding.id === holdingId
@@ -588,6 +593,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
     setError(null);
     setSuccessMessage(null);
     const failedSymbols: string[] = [];
+    let rateLimitMessage: string | null = null;
 
     try {
       for (const [index, holding] of holdingsToRefresh.entries()) {
@@ -595,7 +601,12 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
         try {
           const refreshed = await holdingRepository.refreshHoldingSecurityDetails(holding.id);
           setHoldings((current) => mergeRefreshedSecurityDetails(current, [refreshed]));
-        } catch {
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 429) {
+            rateLimitMessage = error.message;
+            failedSymbols.push(...holdingsToRefresh.slice(index).map((item) => item.security.symbol));
+            break;
+          }
           failedSymbols.push(holding.security.symbol);
           setHoldings((current) =>
             current.map((item) =>
@@ -624,7 +635,7 @@ export function HoldingsPage({ accountRepository, holdingRepository }: HoldingsP
       }
 
       if (failedSymbols.length > 0) {
-        setError(`Unable to update ${failedSymbols.join(', ')}.`);
+        setError(rateLimitMessage ? `${rateLimitMessage} Pending: ${failedSymbols.join(', ')}.` : `Unable to update ${failedSymbols.join(', ')}.`);
       } else {
         setSuccessMessage('Holdings were updated.');
       }

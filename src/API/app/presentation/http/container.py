@@ -108,6 +108,7 @@ def build_container(
     verifier: IdentityTokenVerifier | None = None,
 ) -> Container:
     data_store = None
+    table_client = None
     if settings.data_backend == "json":
         from pathlib import Path
         data_store = LocalJsonDataStore(settings.allowed_email, Path(settings.local_json_path))
@@ -137,6 +138,7 @@ def build_container(
             settings.cosmos_table_connection_string,
             settings.cosmos_table_name,
         )
+        table_client = client
         try:
             client.create_table()
         except ResourceExistsError:
@@ -167,10 +169,16 @@ def build_container(
         audience=settings.session_audience,
     )
     local_fixture_security = settings.data_backend == "json" and settings.dividend_research_provider == "stub"
+    price_admission = None
     security_details = StubSecurityDetailsProvider() if local_fixture_security else AlphaVantageSecurityDetailsProvider(settings.alpha_vantage_api_key)
     security_search = StubSecuritySearchProvider() if local_fixture_security else AlphaVantageSecuritySearchProvider(settings.alpha_vantage_api_key)
     if settings.dividend_research_provider == "azure_foundry":
-        from app.infrastructure.foundry_web_research import FoundryWebDividendResearchProvider, FoundrySecuritySearchProvider, UnavailableMarketDetailsProvider
+        from app.infrastructure.foundry_web_research import FoundryWebDividendResearchProvider, FoundrySecuritySearchProvider
+        from app.infrastructure.foundry_security_details import FoundrySecurityDetailsProvider
+        from app.infrastructure.price_research_admission import PriceResearchAdmission, MemoryAdmissionState, TableAdmissionState
+        if settings.environment != "development" and table_client is None:
+            raise ValueError("Deployed Foundry price research requires Cosmos Table storage for shared usage controls.")
+        price_admission = PriceResearchAdmission(TableAdmissionState(table_client) if table_client is not None else MemoryAdmissionState())
         dividend_research = FoundryWebDividendResearchProvider(
             endpoint=settings.azure_foundry_endpoint, deployment=settings.azure_foundry_deployment,
             agent_name=settings.azure_foundry_agent_name,
@@ -180,7 +188,7 @@ def build_container(
             managed_identity_client_id=settings.azure_foundry_managed_identity_client_id,
         )
         security_search = FoundrySecuritySearchProvider(dividend_research)
-        security_details = UnavailableMarketDetailsProvider()
+        security_details = FoundrySecurityDetailsProvider(dividend_research)
     elif settings.dividend_research_provider == "stub":
         dividend_research = StubDividendResearchProvider()
     else:
@@ -232,10 +240,12 @@ def build_container(
         refresh_holding_security_details=RefreshHoldingSecurityDetails(
             holdings,
             security_details,
+            price_admission,
         ),
         refresh_held_security_details=RefreshHeldSecurityDetails(
             holdings,
             security_details,
+            price_admission,
         ),
         refresh_holding_dividends=RefreshHoldingDividends(holdings, dividend_research),
         session_tokens=session_tokens,

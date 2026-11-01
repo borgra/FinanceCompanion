@@ -10,6 +10,9 @@ from app.domain.models import (
     SecurityPayoutDetails,
 )
 from app.infrastructure.in_memory_repositories import now_iso
+from dataclasses import replace
+import pytest
+from app.domain.exceptions import NotFoundError, ResearchConflictError
 
 
 class FakeHoldingRepository:
@@ -233,3 +236,60 @@ def test_cash_security_refreshes_return_unchanged_without_provider_calls():
     assert individual == cash
     assert bulk.holdings[0] == cash
     assert provider.requested_symbols == ["VTI"]
+
+
+@pytest.mark.parametrize("bulk", [False, True])
+def test_refresh_preserves_quantity_settings_and_payments_edited_during_research(bulk):
+    original = holding("holding-1")
+    repository = FakeHoldingRepository([original])
+
+    class ConcurrentEditProvider(FakeSecurityDetailsProvider):
+        def get_details(self, security):
+            current = replace(original,
+                account_positions=[HoldingAccountPosition("acc-taxable-brokerage", 999, 500)],
+                manage_dividends=False,
+                security=replace(original.security, manual_payout_details=[SecurityPayoutDetails("2026-10-01", 9, mode="manual")]))
+            repository.update_for_user("user-123", original.id, current)
+            return super().get_details(security)
+
+    if bulk:
+        updated = RefreshHeldSecurityDetails(repository, ConcurrentEditProvider()).execute("user-123").holdings[0]
+    else:
+        updated = RefreshHoldingSecurityDetails(repository, ConcurrentEditProvider()).execute("user-123", original.id)
+    assert updated.security.price == 321.45
+    assert updated.account_positions[0].quantity == 999
+    assert updated.manage_dividends is False
+    assert updated.security.manual_payout_details[0].amount == 9
+
+
+@pytest.mark.parametrize("bulk", [False, True])
+def test_refresh_preserves_price_edits_made_during_research(bulk):
+    original = holding("holding-1")
+    repository = FakeHoldingRepository([original])
+
+    class ConcurrentPriceProvider(FakeSecurityDetailsProvider):
+        def get_details(self, security):
+            repository.update_for_user("user-123", original.id, replace(original, security=replace(original.security, price=999)))
+            return super().get_details(security)
+
+    if bulk:
+        result = RefreshHeldSecurityDetails(repository, ConcurrentPriceProvider()).execute("user-123")
+        assert result.failed_symbols == [original.security.symbol]
+    else:
+        with pytest.raises(ResearchConflictError):
+            RefreshHoldingSecurityDetails(repository, ConcurrentPriceProvider()).execute("user-123", original.id)
+    assert repository.holdings[0].security.price == 999
+
+
+def test_refresh_cannot_recreate_a_holding_deleted_during_research():
+    original = holding("holding-1")
+    repository = FakeHoldingRepository([original])
+
+    class ConcurrentDeletionProvider(FakeSecurityDetailsProvider):
+        def get_details(self, security):
+            repository.holdings = []
+            return super().get_details(security)
+
+    with pytest.raises(NotFoundError):
+        RefreshHoldingSecurityDetails(repository, ConcurrentDeletionProvider()).execute("user-123", original.id)
+    assert repository.holdings == []

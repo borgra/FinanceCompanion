@@ -43,7 +43,7 @@ def _investment_allocation_records(monthly_amounts: list[float]):
 SEED_USERS = [
     {
         "id": "user-steve",
-        "email": "steveborgra@gmail.com",
+        "email": "user@example.test",
         "displayName": "Steve Borgra",
         "identitySubject": None,
         "identityObjectId": None,

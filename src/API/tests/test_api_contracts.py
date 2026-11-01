@@ -33,7 +33,7 @@ class FakeVerifier:
             subject="entra-subject-1",
             object_id="entra-object-1",
             tenant_id="entra-tenant-1",
-            email="steveborgra@gmail.com",
+            email="user@example.test",
             display_name="Steve Borgra",
         )
 
@@ -95,7 +95,7 @@ class FakeSecurityDetailsProvider:
 
 def build_test_client() -> TestClient:
     settings = Settings(
-        allowed_email="steveborgra@gmail.com",
+        allowed_email="user@example.test",
         session_secret=TEST_SESSION_SECRET,
         cors_origins=["http://localhost:5173"],
         entra_client_id="entra-client-id",
@@ -124,7 +124,7 @@ def authenticate(client: TestClient) -> str:
     assert response.status_code == 200
     assert "finance_companion_session" in response.cookies
     payload = response.json()
-    assert payload["user"]["email"] == "steveborgra@gmail.com"
+    assert payload["user"]["email"] == "user@example.test"
     return response.cookies["finance_companion_session"]
 
 
@@ -138,7 +138,7 @@ def test_budget_and_accounts_are_protected():
 
 def test_local_development_auth_bypass_allows_the_seeded_user_without_a_session():
     settings = Settings(
-        allowed_email="steveborgra@gmail.com",
+        allowed_email="user@example.test",
         disable_auth_for_local_development=True,
         session_secret=TEST_SESSION_SECRET,
         cors_origins=["http://localhost:5173"],
@@ -151,7 +151,7 @@ def test_local_development_auth_bypass_allows_the_seeded_user_without_a_session(
     budget_response = client.get("/api/v1/budget/categories")
 
     assert session_response.status_code == 200
-    assert session_response.json()["email"] == "steveborgra@gmail.com"
+    assert session_response.json()["email"] == "user@example.test"
     assert budget_response.status_code == 200
 
 
@@ -217,7 +217,7 @@ def test_seeded_contracts_are_served_after_authentication():
         taxable_account["monthlyRecords"][0]["invest"]
         + ira_account["monthlyRecords"][0]["invest"]
     ) == account_payload[0]["monthlyRecords"][0]["invest"]
-    assert session_response.json()["email"] == "steveborgra@gmail.com"
+    assert session_response.json()["email"] == "user@example.test"
 
 
 def test_pension_employer_round_trips_and_holdings_fields_are_forced_off():

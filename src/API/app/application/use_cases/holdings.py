@@ -2,10 +2,27 @@ from dataclasses import replace
 
 from app.application.dividend_payouts import merge_dividend_payouts
 from app.domain.exceptions import NotFoundError, ValidationError
-from app.domain.models import Holding, HoldingAccountPosition, SecurityPayoutDetails
+from app.domain.models import Holding, HoldingAccountPosition, SecurityMetadata, SecurityPayoutDetails
 from app.domain.models.security_metadata import is_cash_security, normalize_security_metadata
 from app.domain.protocols import HoldingRepository
 from app.infrastructure.in_memory_repositories import now_iso
+
+
+def _security_from_client(incoming: SecurityMetadata, current: SecurityMetadata | None = None) -> SecurityMetadata:
+    """Only the research refresh path may assert a quote's origin and freshness."""
+    incoming = normalize_security_metadata(incoming)
+    same_quote = current is not None and incoming.price == current.price and all(
+        getattr(incoming, field).strip().casefold() == getattr(current, field).strip().casefold()
+        for field in ("symbol", "exchange", "asset_type", "currency")
+    )
+    return replace(
+        incoming,
+        price_as_of=current.price_as_of if same_quote else None,
+        price_source_url=current.price_source_url if same_quote else None,
+        price_basis=current.price_basis if same_quote else None,
+        details_updated_at=current.details_updated_at if same_quote else None,
+        details_status=current.details_status if same_quote else ("manual" if incoming.price is not None else None),
+    )
 
 
 class ListHoldings:
@@ -21,7 +38,7 @@ class CreateHolding:
         self._repository = repository
 
     def execute(self, user_id: str, holding: Holding) -> Holding:
-        holding = replace(holding, security=normalize_security_metadata(holding.security))
+        holding = replace(holding, security=_security_from_client(holding.security))
         existing = next(
             (
                 item
@@ -55,7 +72,10 @@ class UpdateHolding:
         self._repository = repository
 
     def execute(self, user_id: str, holding_id: str, holding: Holding) -> Holding:
-        holding = replace(holding, security=normalize_security_metadata(holding.security))
+        existing = next((item for item in self._repository.list_for_user(user_id) if item.id == holding_id), None)
+        if existing is None:
+            raise NotFoundError("Holding not found.")
+        holding = replace(holding, security=_security_from_client(holding.security, existing.security))
         return self._repository.update_for_user(user_id, holding_id, holding)
 
 
@@ -64,18 +84,18 @@ class UpdateHoldingsBatch:
         self._repository = repository
 
     def execute(self, user_id: str, holdings: list[Holding]) -> list[Holding]:
-        holdings = [
-            replace(holding, security=normalize_security_metadata(holding.security))
-            for holding in holdings
-        ]
         if len(holdings) > 100:
             raise ValueError("A maximum of 100 holdings can be saved at once.")
-        existing_ids = {item.id for item in self._repository.list_for_user(user_id)}
+        existing = {item.id: item for item in self._repository.list_for_user(user_id)}
         requested_ids = [item.id for item in holdings]
         if len(requested_ids) != len(set(requested_ids)):
             raise ValueError("Each holding may appear only once.")
-        if any(item_id not in existing_ids for item_id in requested_ids):
+        if any(item_id not in existing for item_id in requested_ids):
             raise NotFoundError("Holding not found.")
+        holdings = [
+            replace(holding, security=_security_from_client(holding.security, existing[holding.id].security))
+            for holding in holdings
+        ]
         return self._repository.update_batch_for_user(user_id, holdings)
 
 class ImportHoldingDetails:
@@ -137,7 +157,7 @@ class ImportHoldingDetails:
                 continue
             refreshed = replace(
                 holding,
-                security=replace(holding.security, name=name, price=price, dividend_growth_rate=dividend_growth_rate if has_dividend_growth_rate else holding.security.dividend_growth_rate, details_updated_at=timestamp, details_status="manual"),
+                security=replace(holding.security, name=name, price=price, dividend_growth_rate=dividend_growth_rate if has_dividend_growth_rate else holding.security.dividend_growth_rate, details_updated_at=timestamp, details_status="manual", price_as_of=None, price_source_url=None, price_basis=None),
                 account_positions=merged_positions,
                 updated_at=timestamp,
             )

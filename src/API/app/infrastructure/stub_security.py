@@ -19,4 +19,5 @@ class StubSecurityDetailsProvider:
         if not item:
             return replace(security, details_status='stub')
         name, exchange, asset_type, price = item
-        return replace(security, name=name, exchange=exchange, asset_type=asset_type, currency='USD', price=price, details_status='stub')
+        return replace(security, name=name, exchange=exchange, asset_type=asset_type, currency='USD', price=price,
+            price_as_of=None, price_source_url=None, price_basis=None, details_status='stub')

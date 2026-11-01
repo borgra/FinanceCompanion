@@ -25,19 +25,19 @@ def test_authenticate_identity_user_issues_session_for_allowed_user():
                 subject="entra-subject-1",
                 object_id="entra-object-1",
                 tenant_id="entra-tenant-1",
-                email="steveborgra@gmail.com",
+                email="user@example.test",
                 display_name="Steve Borgra",
             )
         ),
         users=InMemoryUserRepository(store),
         sessions=JwtSessionTokenService(TEST_SESSION_SECRET, 3600, TEST_ISSUER, TEST_AUDIENCE),
-        allowed_email="steveborgra@gmail.com",
+        allowed_email="user@example.test",
     )
 
     token, user = use_case.execute("id-token", "client-id", "tenant-id")
 
     assert token
-    assert user.email == "steveborgra@gmail.com"
+    assert user.email == "user@example.test"
     assert user.identity_subject == "entra-subject-1"
     assert user.identity_object_id == "entra-object-1"
     assert user.identity_tenant_id == "entra-tenant-1"
@@ -56,7 +56,7 @@ def test_authenticate_identity_user_rejects_unknown_email():
         ),
         users=InMemoryUserRepository(store),
         sessions=JwtSessionTokenService(TEST_SESSION_SECRET, 3600, TEST_ISSUER, TEST_AUDIENCE),
-        allowed_email="steveborgra@gmail.com",
+        allowed_email="user@example.test",
     )
 
     try:

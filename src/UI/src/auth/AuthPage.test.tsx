@@ -37,7 +37,7 @@ describe('AuthPage', () => {
     vi.mocked(verifyEntraIdToken).mockResolvedValue({
       user: {
         id: 'user-steve',
-        email: 'steveborgra@gmail.com',
+        email: 'user@example.test',
         displayName: 'Steve Borgra',
       },
     });
@@ -52,7 +52,7 @@ describe('AuthPage', () => {
     expect(onAuthenticated).toHaveBeenCalledWith(
       expect.objectContaining({
         user: expect.objectContaining({
-          email: 'steveborgra@gmail.com',
+          email: 'user@example.test',
         }),
       }),
     );

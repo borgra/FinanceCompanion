@@ -106,8 +106,26 @@ def test_deployed_environment_requires_explicit_stub_opt_in():
         environment="production",
         session_secret="a-real-production-session-secret-123456",
         dividend_research_provider="stub",
+        allowed_email="user@example.test",
     )
     opted_in.validate_security()
+
+
+def test_production_requires_explicit_allowed_email_instead_of_demo_default():
+    settings = Settings(_env_file=None, environment="production",
+        session_secret="a-real-production-session-secret-123456", dividend_research_provider="stub")
+    with pytest.raises(ValueError, match="explicitly configured"):
+        settings.validate_security()
+
+
+def test_demo_email_is_public_safe_and_environment_config_can_authorize_production(monkeypatch):
+    monkeypatch.delenv("FINANCE_COMPANION_ALLOWED_EMAIL", raising=False)
+    assert Settings(_env_file=None).allowed_email == "user@example.test"
+    monkeypatch.setenv("FINANCE_COMPANION_ALLOWED_EMAIL", "configured@example.test")
+    settings = Settings(_env_file=None, environment="production",
+        session_secret="a-real-production-session-secret-123456", dividend_research_provider="stub")
+    settings.validate_security()
+    assert settings.allowed_email == "configured@example.test"
 
 
 def test_cosmos_connection_string_is_redacted_in_repr():

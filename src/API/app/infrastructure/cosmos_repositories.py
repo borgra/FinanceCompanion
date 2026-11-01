@@ -334,6 +334,9 @@ def _security_metadata_from_dict(data: dict) -> SecurityMetadata:
         sma200=_optional_float(data.get("sma200")),
         details_updated_at=data.get("detailsUpdatedAt"),
         details_status=data.get("detailsStatus"),
+        price_as_of=data.get("priceAsOf"),
+        price_source_url=data.get("priceSourceUrl"),
+        price_basis=data.get("priceBasis"),
         payout_details=merge_dividend_payouts(source_payout_details, manual_payout_details),
         source_payout_details=source_payout_details,
         manual_payout_details=manual_payout_details,
@@ -387,6 +390,9 @@ def _security_metadata_to_dict(security: SecurityMetadata) -> dict:
         "sma200": security.sma200,
         "detailsUpdatedAt": security.details_updated_at,
         "detailsStatus": security.details_status,
+        "priceAsOf": security.price_as_of,
+        "priceSourceUrl": security.price_source_url,
+        "priceBasis": security.price_basis,
     }
 
 
@@ -479,6 +485,9 @@ def _security_details_to_dict(security: SecurityMetadata) -> dict:
         "sma200": security.sma200,
         "detailsUpdatedAt": security.details_updated_at,
         "detailsStatus": security.details_status,
+        "priceAsOf": security.price_as_of,
+        "priceSourceUrl": security.price_source_url,
+        "priceBasis": security.price_basis,
     }
 
 

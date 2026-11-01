@@ -551,9 +551,3 @@ class FoundrySecuritySearchProvider:
 
     def search(self, query: str) -> list[SecurityMetadata]:
         return self._research.search_securities(query)
-
-
-class UnavailableMarketDetailsProvider:
-    def get_details(self, security: SecurityMetadata) -> SecurityMetadata:
-        from app.infrastructure.alpha_vantage_security_details import SecurityDetailsUnavailableError
-        raise SecurityDetailsUnavailableError("Live market-price details are unavailable in AI distribution research mode. Saved prices and distribution records are preserved.")

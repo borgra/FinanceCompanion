@@ -51,7 +51,7 @@
     },
     "allowedEmail": {
       "type": "string",
-      "defaultValue": "steveborgra@gmail.com",
+      "defaultValue": "user@example.test",
       "metadata": {
         "description": "The primary user email allowed to access this workspace."
       }
@@ -214,7 +214,7 @@
             },
             "allowedEmail": {
               "type": "string",
-              "defaultValue": "steveborgra@gmail.com",
+              "defaultValue": "user@example.test",
               "metadata": {
                 "description": "The primary user email allowed to access this workspace."
               }

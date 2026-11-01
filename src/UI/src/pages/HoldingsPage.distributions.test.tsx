@@ -6,6 +6,7 @@ import { createMockAccountRepository } from '../domain/accountRepository';
 import type { Holding, SecurityPayoutDetails } from '../domain/holding';
 import { createMockHoldingRepository } from '../domain/holdingRepository';
 import { HoldingsPage } from './HoldingsPage';
+import { ApiError } from '../api/httpClient';
 
 const account: Account = {
   id: 'account', name: 'Brokerage', type: 'Investment', startingBalance: 0,
@@ -15,6 +16,20 @@ const account: Account = {
 };
 
 describe('HoldingsPage dividend management', () => {
+  it('shows a server research cooldown while keeping the saved price', async () => {
+    const user = userEvent.setup();
+    const repository = createMockHoldingRepository();
+    await repository.createHolding({
+      security: { symbol: 'VTI', name: 'VTI', exchange: 'NYSE', assetType: 'ETF', currency: 'USD', price: 100 },
+      accountPositions: [{ accountId: account.id, quantity: 10 }],
+    });
+    vi.spyOn(repository, 'refreshHoldingSecurityDetails').mockRejectedValue(new ApiError('Price research is temporarily limited. Retry in 60 seconds; saved data was preserved.', 429));
+    render(<HoldingsPage accountRepository={createMockAccountRepository({ initialAccounts: [account] })} holdingRepository={repository} />);
+    await user.click(await screen.findByRole('button', { name: 'Update VTI holding' }));
+    expect(await screen.findByText(/Retry in 60 seconds/)).toBeInTheDocument();
+    expect(screen.getByLabelText('VTI price')).toHaveValue('$100.00');
+    expect(screen.getByRole('button', { name: 'Update VTI holding' })).toBeEnabled();
+  });
   it('serializes settings and table saves across modal close without losing drafts or opt-outs', async () => {
     const user = userEvent.setup();
     const repository = createMockHoldingRepository();

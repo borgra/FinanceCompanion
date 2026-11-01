@@ -281,6 +281,9 @@ class SecurityMetadataPayload(CamelModel):
     sma200: float | None = None
     details_updated_at: str | None = Field(default=None, serialization_alias="detailsUpdatedAt")
     details_status: str | None = Field(default=None, serialization_alias="detailsStatus")
+    price_as_of: str | None = Field(default=None, serialization_alias="priceAsOf")
+    price_source_url: str | None = Field(default=None, serialization_alias="priceSourceUrl")
+    price_basis: str | None = Field(default=None, serialization_alias="priceBasis")
     payout_details: list[SecurityPayoutDetailsPayload] = Field(
         default_factory=list,
         serialization_alias="payoutDetails",
@@ -350,11 +353,27 @@ class SecurityMetadataWritePayload(SecurityMetadataPayload):
     exchange: str = Field(min_length=1, max_length=64)
     asset_type: str = Field(min_length=1, max_length=64, serialization_alias="assetType")
     currency: str = Field(min_length=1, max_length=16)
+    price_as_of: str | None = Field(default=None, max_length=10, serialization_alias="priceAsOf", json_schema_extra={"readOnly": True})
+    price_source_url: str | None = Field(default=None, max_length=2048, serialization_alias="priceSourceUrl", json_schema_extra={"readOnly": True})
+    price_basis: Literal["latest_close", "delayed_quote"] | None = Field(default=None, serialization_alias="priceBasis", json_schema_extra={"readOnly": True})
     payout_details: list[SecurityPayoutDetailsPayload] = Field(default_factory=list, max_length=1000, serialization_alias="payoutDetails")
     source_payout_details: list[SecurityPayoutDetailsPayload] = Field(default_factory=list, max_length=1000, serialization_alias="sourcePayoutDetails")
     manual_payout_details: list[SecurityPayoutDetailsPayload] = Field(default_factory=list, max_length=1000, serialization_alias="manualPayoutDetails")
     payout_audit_details: list[SecurityPayoutDetailsPayload] = Field(default_factory=list, max_length=1000)
     dividend_research_warnings: list[str] = Field(default_factory=list, max_length=100, serialization_alias="dividendResearchWarnings")
+
+    @model_validator(mode="before")
+    @classmethod
+    def ignore_client_quote_provenance(cls, value):
+        # Older clients send the entire GET response back. Ignore their assertions
+        # instead of treating those values as provider-verified facts or freshness.
+        if isinstance(value, dict):
+            value = dict(value)
+            for key in ("price_as_of", "priceAsOf", "price_source_url", "priceSourceUrl",
+                        "price_basis", "priceBasis", "details_status", "detailsStatus",
+                        "details_updated_at", "detailsUpdatedAt"):
+                value.pop(key, None)
+        return value
 
     @model_validator(mode="after")
     def validate_snapshot_size(self) -> "SecurityMetadataWritePayload":
