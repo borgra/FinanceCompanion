@@ -23,6 +23,7 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER=azure_foundry
 FINANCE_COMPANION_AZURE_FOUNDRY_ENDPOINT=YOUR_FOUNDRY_ENDPOINT
 FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT=YOUR_DEPLOYMENT_NAME
+FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME=stock-details-agent
 FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT=low
 FINANCE_COMPANION_AZURE_FOUNDRY_AUTH_MODE=entra
 FINANCE_COMPANION_AZURE_FOUNDRY_API_VERSION=
@@ -36,7 +37,9 @@ Use a project endpoint such as `https://RESOURCE.services.ai.azure.com/api/proje
 6. Run `./start-local.ps1`. It installs/updates dependencies in the repository's Python virtual environment and UI `node_modules`, starts both servers in the background, and waits for readiness. The normal credential-free Docker stack remains available for offline demonstration; it does not read these live settings.
 7. Open [the local app](http://localhost:5173), choose **Investing → Passive Income**, then **Refresh JEPQ distributions** under **Research status and sources**. The general **Refresh distribution data** button refreshes all held securities. Add JEPQ and a positive share quantity under Holdings first if it is not in your test data.
 
-Security search also uses Foundry web research, so adding JEPQ or another supported security needs no market-data account. Search does not invent a market price or payout history; distribution import occurs through the refresh action. Live market-price/technical-indicator refresh is unavailable in AI distribution mode, and saved prices are preserved. `stub` is explicitly demonstration-only.
+Security search also uses Foundry web research, so adding JEPQ or another supported security needs no market-data account. Search does not invent a market price or payout history; distribution import occurs through its separate refresh action. Stock price/details refresh invokes your existing `stock-details-agent` in the configured Foundry project and sends only the ticker as task input. Its saved Azure instructions, tools, model, and output schema control the research. The API validates its returned facts and preserves saved data on failure. Stock refresh needs a project endpoint with Entra access; a direct model-resource endpoint cannot select a named agent. The API's cooldown, shared usage budgets, server-owned quote provenance, and ownership checks still apply. `stub` is explicitly demonstration-only.
+
+Use `./src/API/.venv/Scripts/python.exe ./scripts/test-live-security-details.py --symbol JEPQ --exchange NASDAQ --asset-type ETF` from the repository root for an opt-in live agent check that does not alter holdings. It uses the configured project and agent name; model/search charges apply. Never commit real local credentials or portfolio data.
 
 ## Verify retrieval and persistence
 

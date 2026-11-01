@@ -146,9 +146,10 @@ Or split client IDs for stronger least-privilege separation:
 See [SECURITY.md](SECURITY.md) for the recommended OIDC and RBAC setup.
 
 For live distribution retrieval and API-to-Foundry managed identity access, see
-[Foundry Entra RBAC](../Docs/Foundry%20Entra%20RBAC.md). `DIVIDEND_RESEARCH_PROVIDER`
-in the GitHub Environment `deployment` selects `stub` (default) or
-`azure_foundry` in both Backend Deploy and Infra Up. When `azure_foundry` is selected and no endpoint is configured, Infra Up creates the dedicated Foundry tranche and authorizes the API identity. Backend Deploy discovers its endpoint/deployment from the persisted `${APP_NAME}-foundry` ARM deployment outputs. Supplying an existing endpoint/deployment bypasses creation; use `scripts/configure-foundry-access.ps1` to grant access to that existing project.
+[Foundry Entra RBAC](../Docs/Foundry%20Entra%20RBAC.md). Set `DIVIDEND_RESEARCH_PROVIDER`
+to `stub` (default) or `azure_foundry` as a repository variable, or configure it
+consistently in both GitHub Environments: `deployment` for Backend Deploy and
+`infrastructure` for Infra Up. Environment values override repository values. When `azure_foundry` is selected and no endpoint is configured, Infra Up creates the dedicated Foundry tranche and authorizes the API identity. Backend Deploy discovers its endpoint/deployment from the persisted `${APP_NAME}-foundry` ARM deployment outputs. Supplying an existing endpoint/deployment bypasses creation; use `scripts/configure-foundry-access.ps1` to grant access to that existing project.
 
 The Infra Up identity needs resource creation, scoped role-assignment permissions for the Foundry tranche, and Foundry User to register the project agent. Infra Up registers the agent for project endpoints; direct Azure OpenAI resource endpoints use the bundled single-pass definition without project registration. Backend Deploy still needs no permission to grant inference roles. `AZURE_FOUNDRY_CAPACITY` defaults to `100` in Infra Up. Model availability, quota and tool policy are validated by Azure; unsupported regions or exhausted quota fail explicitly.
 
@@ -164,9 +165,12 @@ For the runtime API tranche, set these repository values:
 | `AZURE_API_ENVIRONMENT` | Variable | API environment string, typically `production`. |
 | `AZURE_API_SESSION_SECRET` | Secret | Session signing secret for the API cookie/JWT. |
 | `AZURE_FOUNDRY_AGENT_NAME` | Optional variable | Named dividend history agent; defaults to `dividend-history-agent` in both workflows. |
+| `AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME` | Optional variable | Existing stock-details agent to invoke; defaults to `stock-details-agent`. Its Azure definition owns its model and tools. Deployment does not create or update it. |
 | `ALPHA_VANTAGE_API_KEY` | Optional secret | Legacy market-data adapter only; not needed for Foundry web research or security search. |
 
 ### Workflow Defaults
+
+Stock price/details refresh requires `AZURE_FOUNDRY_ENDPOINT` to identify the project containing the existing stock-details agent, with Entra inference access for the API managed identity. The runtime sends only the ticker to that agent. The generic `AZURE_FOUNDRY_DEPLOYMENT` setting remains the model selection for the separate search/distribution workflows; it does not override the model saved on the stock-details agent. If Infra Up provisions a new Foundry project, configure the stock-details agent there before using stock refresh, or supply the endpoint of the project where it already exists.
 
 These values are set inside the workflow files:
 

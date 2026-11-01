@@ -15,6 +15,19 @@ def test_foundry_agent_configuration_defaults_and_environment_override(monkeypat
     assert Settings(_env_file=None).azure_foundry_agent_name == "income-history-agent"
 
 
+def test_stock_details_agent_configuration_defaults_and_environment_override(monkeypatch):
+    monkeypatch.delenv("FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME", raising=False)
+    assert Settings(_env_file=None).azure_foundry_stock_details_agent_name == "stock-details-agent"
+    monkeypatch.setenv("FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME", "custom-stock-agent")
+    assert Settings(_env_file=None).azure_foundry_stock_details_agent_name == "custom-stock-agent"
+
+
+@pytest.mark.parametrize("name", ["", "../other-agent", "agent?key=private", "agent name", "a" * 129])
+def test_stock_details_agent_name_rejects_invalid_configuration(name):
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, azure_foundry_stock_details_agent_name=name)
+
+
 def test_foundry_reasoning_configuration_remains_optional():
     assert Settings(_env_file=None, azure_foundry_reasoning_effort="").azure_foundry_reasoning_effort is None
     assert Settings(_env_file=None, azure_foundry_reasoning_effort="low").azure_foundry_reasoning_effort == "low"

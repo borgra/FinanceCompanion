@@ -30,9 +30,9 @@ def main():
         auth_mode=settings.azure_foundry_auth_mode, api_key=settings.azure_foundry_api_key,
         environment=settings.environment, managed_identity_client_id=settings.azure_foundry_managed_identity_client_id,
     )
-    print("Researching a dated price using the configured Azure deployment; model/search charges apply.", flush=True)
+    print(f"Sending {args.symbol.upper()} to the configured Foundry stock agent; model/search charges apply.", flush=True)
     try:
-        result = FoundrySecurityDetailsProvider(research).get_details(SecurityMetadata(
+        result = FoundrySecurityDetailsProvider(research, agent_name=settings.azure_foundry_stock_details_agent_name).get_details(SecurityMetadata(
             symbol=args.symbol, name=args.symbol, exchange=args.exchange, asset_type=args.asset_type, currency="USD"))
     except SecurityDetailsUnavailableError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)

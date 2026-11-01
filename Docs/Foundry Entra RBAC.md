@@ -2,6 +2,8 @@
 
 Use the API Container App's managed identity to call a dedicated or existing Foundry project. GitHub Actions uses its own OIDC identity to deploy the API. Local development uses your Azure CLI login through `DefaultAzureCredential`. These are three separate principals; giving the deployment identity permission does not authorize either the API or your local user.
 
+Stock price/details refresh invokes the existing `stock-details-agent` in that project, sending only the ticker as task input. Select a different existing name with server setting `FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME` or deployment variable `AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME`. The API uses the agent's saved model, instructions, tools, and output schema, and does not register or overwrite it. This requires a project endpoint with Entra access; direct resource endpoints remain available only to the separate search/distribution paths. The agent must exist in the selected project and return sourced, structured stock-details facts expected by the API.
+
 The default deployment remains `stub`. Select `azure_foundry` for AI web research: the model searches public issuer/regulatory sources, imports cited distribution facts, and the application validates and forecasts them. Only a supported Foundry endpoint/deployment and Entra access are needed. No Alpha Vantage account, market-data key, separate search account/key, Bing resource, source manifest, or per-security configuration is required.
 
 ## Create a new Foundry project and GPT-6 Luna deployment

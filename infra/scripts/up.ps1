@@ -17,6 +17,7 @@ param(
   [string] $AzureFoundryEndpoint = '',
   [string] $AzureFoundryDeployment = '',
   [string] $AzureFoundryAgentName = 'dividend-history-agent',
+  [string] $AzureFoundryStockDetailsAgentName = 'stock-details-agent',
   [string] $AzureFoundryReasoningEffort = '',
   [string] $AzureFoundryManagedIdentityResourceId = '',
   [switch] $EnableFoundry,
@@ -139,6 +140,7 @@ Invoke-DeploymentTranche -Name "runtime-api" -Command {
                    azureFoundryEndpoint=$AzureFoundryEndpoint `
                    azureFoundryDeployment=$AzureFoundryDeployment `
                    azureFoundryAgentName=$AzureFoundryAgentName `
+                   azureFoundryStockDetailsAgentName=$AzureFoundryStockDetailsAgentName `
                    azureFoundryReasoningEffort=$AzureFoundryReasoningEffort `
                    azureFoundryManagedIdentityResourceId=$AzureFoundryManagedIdentityResourceId `
                    azureFoundryManagedIdentityClientId=$runtimeIdentityClientId `

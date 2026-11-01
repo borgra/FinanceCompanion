@@ -32,6 +32,7 @@ BASH = find_bash()
 pytestmark = pytest.mark.skipif(not BASH, reason="Bash (Git Bash on Windows) is required")
 OPTIONAL_SETTINGS = (
     "AZURE_FOUNDRY_ENDPOINT", "AZURE_FOUNDRY_DEPLOYMENT", "AZURE_FOUNDRY_AGENT_NAME", "AZURE_FOUNDRY_REASONING_EFFORT",
+    "AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME",
     "AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID", "AZURE_FOUNDRY_MANAGED_IDENTITY_CLIENT_ID",
     "LEGACY_ALPHA_VANTAGE_API_KEY", "ALPHA_VANTAGE_SECRET_REF",
 )
@@ -220,6 +221,7 @@ def test_api_deployment_supports_optional_configuration(tmp_path, provider, empt
     assert f"FINANCE_COMPANION_DIVIDEND_RESEARCH_PROVIDER={provider}" in calls[0]
     assert "FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT=" in calls[0]
     assert "FINANCE_COMPANION_AZURE_FOUNDRY_AGENT_NAME=dividend-history-agent" in calls[0]
+    assert "FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME=stock-details-agent" in calls[0]
     if provider == "azure_foundry":
         assert "FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT=custom-model" in calls[0]
 
@@ -231,6 +233,7 @@ def test_infra_up_supports_stub_without_optional_foundry_settings_or_keys(tmp_pa
     assert len(calls) == 1 and "deployment group create" in calls[0]
     assert "dividendResearchProvider=stub" in calls[0]
     assert "azureFoundryAgentName=dividend-history-agent" in calls[0]
+    assert "azureFoundryStockDetailsAgentName=stock-details-agent" in calls[0]
     assert "azureFoundryManagedIdentityResourceId=" in calls[0]
     assert json.loads((tmp_path / "secret-params").read_text())["alphaVantageApiKey"]["value"] == ""
 
@@ -284,6 +287,16 @@ def test_foundry_provider_still_requires_endpoint_and_deployment(tmp_path, missi
 ])
 def test_agent_name_override_reaches_runtime(tmp_path, workflow, step, argument):
     result, _, calls = execute_step(tmp_path, workflow, step, {"AZURE_FOUNDRY_AGENT_NAME": "custom-agent"})
+    assert result.returncode == 0, result.stderr
+    assert argument in calls[-1]
+
+
+@pytest.mark.parametrize("workflow,step,argument", [
+    ("backend-deploy.yml", "Deploy API image", "FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME=custom-stock-agent"),
+    ("infra-up.yml", "Deploy Runtime API", "azureFoundryStockDetailsAgentName=custom-stock-agent"),
+])
+def test_stock_details_agent_override_reaches_runtime(tmp_path, workflow, step, argument):
+    result, _, calls = execute_step(tmp_path, workflow, step, {"AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME": "custom-stock-agent"})
     assert result.returncode == 0, result.stderr
     assert argument in calls[-1]
 

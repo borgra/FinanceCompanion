@@ -188,7 +188,7 @@ def build_container(
             managed_identity_client_id=settings.azure_foundry_managed_identity_client_id,
         )
         security_search = FoundrySecuritySearchProvider(dividend_research)
-        security_details = FoundrySecurityDetailsProvider(dividend_research)
+        security_details = FoundrySecurityDetailsProvider(dividend_research, agent_name=settings.azure_foundry_stock_details_agent_name)
     elif settings.dividend_research_provider == "stub":
         dividend_research = StubDividendResearchProvider()
     else:

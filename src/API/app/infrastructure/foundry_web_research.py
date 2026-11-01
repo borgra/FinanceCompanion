@@ -218,7 +218,8 @@ class FoundryWebDividendResearchProvider:
 
     def _call(self, payload: dict, deadline: float) -> dict:
         try:
-            if self._reasoning_effort:
+            named_agent = "agent_reference" in payload
+            if self._reasoning_effort and not named_agent:
                 payload = {"reasoning": {"effort": self._reasoning_effort}, **payload}
             # Foundry's project gateway requires the Responses input-item tag;
             # do not rely on OpenAI's shorthand message-shape inference.
@@ -239,7 +240,8 @@ class FoundryWebDividendResearchProvider:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise httpx.ReadTimeout("research time budget")
-            response = self._post_bounded(headers, {"model": self._deployment, "store": False, **payload}, min(55, remaining), deadline)
+            routing = {} if named_agent else {"model": self._deployment}
+            response = self._post_bounded(headers, {**routing, "store": False, **payload}, min(55, remaining), deadline)
             if response.status_code in {401, 403}:
                 raise DividendResearchProviderError("Foundry web research permission or authentication failed. Check Azure CLI login locally or the Container App managed identity roles, and whether web search is enabled.")
             if response.status_code == 429:

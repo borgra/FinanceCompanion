@@ -62,6 +62,9 @@ param azureFoundryEndpoint string = ''
 @description('Existing structured-output-capable model deployment name.')
 param azureFoundryDeployment string = ''
 
+@description('Existing Foundry stock-details agent name. Deployment does not create or update this agent.')
+param azureFoundryStockDetailsAgentName string = 'stock-details-agent'
+
 @description('Reasoning effort for reasoning models; leave empty for models without this setting.')
 @allowed(['', 'none', 'low', 'medium', 'high'])
 param azureFoundryReasoningEffort string = ''
@@ -242,6 +245,10 @@ resource apiContainerApp 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'FINANCE_COMPANION_AZURE_FOUNDRY_DEPLOYMENT'
               value: azureFoundryDeployment
+            }
+            {
+              name: 'FINANCE_COMPANION_AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME'
+              value: azureFoundryStockDetailsAgentName
             }
             {
               name: 'FINANCE_COMPANION_AZURE_FOUNDRY_REASONING_EFFORT'

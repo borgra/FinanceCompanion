@@ -31,6 +31,7 @@ jobs:
       AZURE_FOUNDRY_ENDPOINT: ${{ vars.AZURE_FOUNDRY_ENDPOINT }}
       AZURE_FOUNDRY_DEPLOYMENT: ${{ vars.AZURE_FOUNDRY_DEPLOYMENT }}
       AZURE_FOUNDRY_AGENT_NAME: ${{ vars.AZURE_FOUNDRY_AGENT_NAME || 'dividend-history-agent' }}
+      AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME: ${{ vars.AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME || 'stock-details-agent' }}
       AZURE_FOUNDRY_REASONING_EFFORT: ${{ vars.AZURE_FOUNDRY_REASONING_EFFORT }}
       AZURE_FOUNDRY_CAPACITY: ${{ vars.AZURE_FOUNDRY_CAPACITY || '100' }}
       AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID: ${{ vars.AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID }}
@@ -234,6 +235,7 @@ jobs:
                            azureFoundryEndpoint="${AZURE_FOUNDRY_ENDPOINT:-}" \
                            azureFoundryDeployment="${AZURE_FOUNDRY_DEPLOYMENT:-}" \
                            azureFoundryAgentName="${AZURE_FOUNDRY_AGENT_NAME:-dividend-history-agent}" \
+                           azureFoundryStockDetailsAgentName="${AZURE_FOUNDRY_STOCK_DETAILS_AGENT_NAME:-stock-details-agent}" \
                            azureFoundryReasoningEffort="${AZURE_FOUNDRY_REASONING_EFFORT:-}" \
                            azureFoundryManagedIdentityResourceId="${AZURE_FOUNDRY_MANAGED_IDENTITY_RESOURCE_ID:-}" \
                            azureFoundryManagedIdentityClientId="${MI_CLIENT_ID}" \
